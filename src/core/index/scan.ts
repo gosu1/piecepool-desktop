@@ -1,8 +1,9 @@
-import type { GraphData, LinkRef, NotePath, Vault } from "../../shared/types.ts";
+import type { GraphData, LinkRef, Vault } from "../../shared/types.ts";
+import type { LinkTargets } from "./links.ts";
 
 /** 파생 캐시다. 지우면 재빌드한다 — 복구 절차가 따로 없다. */
 export interface VaultIndex {
-  titles: Map<string, NotePath>;
+  targets: LinkTargets;
   links: LinkRef[];
 }
 

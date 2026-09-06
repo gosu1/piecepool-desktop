@@ -19,7 +19,11 @@ export interface Vault {
  */
 export interface Fm {
   title?: string;
-  /** ISO date 문자열. YAML 이 Date 로 역직렬화하므로 파서가 정규화한다. */
+  /**
+   * ISO date 문자열. YAML 이 Date 로 역직렬화하므로 파서가 정규화한다.
+   * `2026-09-05` 같은 날짜 표기는 그대로 보존한다 — toISOString() 을 태우면
+   * 왕복에서 사용자 원문이 `2026-09-05T00:00:00.000Z` 로 바뀐다.
+   */
   created?: string;
   updated?: string;
   /** append-only. 덮어쓰지 않는다 — core/vault/frontmatter.addSource 참조. */
@@ -35,7 +39,18 @@ export interface Note {
 
 export interface LinkRef {
   from: NotePath;
+  /** fragment(`#page=N` 등)를 제외한 대상 이름. */
   to: string;
+  /**
+   * `![[...]]` 인가.
+   * 임베드는 소스 파일 참조이므로 제목 변경 시 건드리지 않는다 —
+   * 구 레포가 retitleSync 의 `bang ? m : ...` 한 줄로 막던 것이다.
+   */
+  embed: boolean;
+  /** `[[대상|표시 텍스트]]` 의 표시 텍스트. */
+  alias?: string;
+  /** `#page=N`. 1-indexed 정수. */
+  page?: number;
   resolved: NotePath | null;
 }
 

@@ -9,5 +9,5 @@ await main(async () => {
   const v = await openVault(vaultRoot);
   const ix = await scanVault(v);
   await saveIndex(v, ix);
-  console.log(`노트 ${ix.titles.size}개, 링크 ${ix.links.length}개`);
+  console.log(`노트 ${ix.targets.titles.size}개, 링크 ${ix.links.length}개`);
 });
