@@ -167,7 +167,10 @@ interface Note {
 }
 interface LinkRef {
   from: NotePath;
-  to: string;
+  to: string; // fragment(#page=N) 제외
+  embed: boolean; // ![[...]] 인가
+  alias?: string; // [[대상|표시]]
+  page?: number; // #page=N, 1-indexed
   resolved: NotePath | null;
 }
 interface GraphData {
@@ -207,6 +210,27 @@ type Result<T> = { ok: true; value: T } | { ok: false; error: AppError };
 - **`Progress`를 객체로 만들었다.** 상위 §11.2 예시는 `(msg) => void`로 문자열이다.
   상위 §2.2가 `main/ipc.ts`에서 `webContents.send`로 흘린다고 정했으므로 7단계 UI가 `step`으로
   분기할 수 있어야 한다. **structured-clone 가능해야 하므로** `Error`나 함수 필드를 넣지 않는다
+
+### 4.1 파서 도메인 - 규범이 확정했는데 타입이 못 담던 것
+
+상위 6.1 이 링크 문법 4종을 확정했는데 `LinkRef` 는 3필드로 1종만 담았다.
+2 절의 "거짓 안정성" 과 반대 사례다 - 4~6단계에서 정보가 생겨야 정할 수 있는 것이
+아니라, 이미 확정된 규범을 타입이 못 담는 상태였다. 지금 담아야 나중에 동결을 깨지 않는다.
+
+| 무엇                           | 왜                                                                                                                              |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `LinkRef.embed`                | 임베드는 소스 파일 참조다. 제목 변경이 `![[thermo.pdf]]` 까지 고치면 원본 참조가 깨진다                                         |
+| `LinkRef.alias` `page`         | renderer 는 zone 때문에 `parseLinks` 를 못 부르고 IPC 로 `LinkRef[]` 만 받는다. 없으면 `![[x.pdf#page=12]]` 를 그릴 방법이 없다 |
+| `LinkTargets` (titles + files) | 파일 임베드는 노트가 아니다. 맵 하나에 섞으면 제목이 그 문자열인 노트와 키 공간이 충돌한다                                      |
+| `resolveLink(from, ...)`       | 옵시디언은 동명 노트에서 링크가 놓인 노트에 가까운 후보를 우선한다                                                              |
+| `normalizeTitle()`             | 맵을 만드는 `scan.ts`(비동결)와 조회하는 `resolveLink`(동결)가 다른 정규화를 쓰면 전 볼트가 깨진 링크가 되는데 타입은 못 잡는다 |
+| `ParsedNote.rest`              | 사용자가 붙인 `tags:` `aliases:` 가 "sources 한 줄 추가" 커밋에서 사라진다. 상위 4.1 이 남의 볼트를 약속했다                    |
+| `ParsedNote.eol` `bom`         | CRLF 볼트에 한 줄 추가하면 전 줄이 변경으로 커밋되어 되돌리기 UI 가 무의미해진다                                                |
+| `ParsedNote.malformed`         | 상위 5.1 이 "게이트가 아니라 관찰" 이라 했는데 `{fm, body}` 로는 throw 아니면 무소음 삼킴뿐이다                                 |
+| `retitleNote()`                | 링크 해석이 제목 매칭이므로 제목 변경이 링크를 끊는다. `renameNote` 는 경로만 바꾼다                                            |
+
+`resolveLink` 의 반환은 `NotePath | null` 로 둔다. 동명 충돌 정책이 상위 6.1 에 없으므로
+지금 객체로 넓히면 정보 없이 고정하는 것이 된다. 모호성 보고는 lint 규칙의 몫이다.
 
 ## 5. 에러 처리 — `Result`는 IPC 경계에서만
 
@@ -531,15 +555,16 @@ npm run ingest -- <볼트> x.pdf   → "unimplemented: core/vault/open.openVault
 
 되짚을 수 있도록 한곳에 모은다.
 
-| 이탈                | 상위 문서                    | 이 문서                               | 근거                                                       |
-| ------------------- | ---------------------------- | ------------------------------------- | ---------------------------------------------------------- |
-| 폴더 경계 강제 수단 | §2.3 `no-restricted-imports` | `import/no-restricted-paths` 추가     | 실측 — 동적·디렉터리 import 누락, 내부 폴더 오탐 (§6)      |
-| `Progress` 형태     | §11.2 문자열                 | `{ step, detail? }` 객체              | 7단계 UI가 `step`으로 분기 (§4)                            |
-| `ErrorKind`         | §9 5종                       | `"unknown"` 추가                      | 폴백 없으면 상위 §9의 `kind` 분기가 무너짐 (§4)            |
-| 볼트 표현           | §5 암묵적 경로 문자열        | `Vault` 인터페이스                    | 상위 §2.2 `open.ts`·상위 §4.1 쓰기 루트가 상태를 요구 (§4) |
-| 자산 함정의 원인    | §2.4 asar                    | ESM `__dirname` 부재 + 번들러 미복사  | asar은 `fs.readFile`이 패치돼 무해 (§10)                   |
-| 0단계 이식 범위     | §11.3 "12.3의 이식"          | 순수 파서 제외, `.gitattributes` 추가 | §11                                                        |
-| ADR 이식 건수       | §1.2·§12.3·§12.4 불일치      | 합집합 7건                            | §11                                                        |
-| zone 방향           | §2.3 방향만 서술             | 11개 (양방향)                         | `target: core` 만으로는 `renderer → core` 가 안 막힌다     |
-| 미사용 인자         | —                            | `args: "none"`                        | 0단계는 전부 스텁이라 미사용 인자가 필연                   |
-| CI 게이트           | §12.2 lint·typecheck·test    | + `prettier --check`                  | 없으면 포맷 드리프트를 아무도 못 잡는다                    |
+| 이탈                | 상위 문서                    | 이 문서                                        | 근거                                                       |
+| ------------------- | ---------------------------- | ---------------------------------------------- | ---------------------------------------------------------- |
+| 폴더 경계 강제 수단 | §2.3 `no-restricted-imports` | `import/no-restricted-paths` 추가              | 실측 — 동적·디렉터리 import 누락, 내부 폴더 오탐 (§6)      |
+| `Progress` 형태     | §11.2 문자열                 | `{ step, detail? }` 객체                       | 7단계 UI가 `step`으로 분기 (§4)                            |
+| `ErrorKind`         | §9 5종                       | `"unknown"` 추가                               | 폴백 없으면 상위 §9의 `kind` 분기가 무너짐 (§4)            |
+| 볼트 표현           | §5 암묵적 경로 문자열        | `Vault` 인터페이스                             | 상위 §2.2 `open.ts`·상위 §4.1 쓰기 루트가 상태를 요구 (§4) |
+| 자산 함정의 원인    | §2.4 asar                    | ESM `__dirname` 부재 + 번들러 미복사           | asar은 `fs.readFile`이 패치돼 무해 (§10)                   |
+| 0단계 이식 범위     | §11.3 "12.3의 이식"          | 순수 파서 제외, `.gitattributes` 추가          | §11                                                        |
+| ADR 이식 건수       | §1.2·§12.3·§12.4 불일치      | 합집합 7건                                     | §11                                                        |
+| zone 방향           | §2.3 방향만 서술             | 11개 (양방향)                                  | `target: core` 만으로는 `renderer → core` 가 안 막힌다     |
+| 미사용 인자         | —                            | `args: "none"`                                 | 0단계는 전부 스텁이라 미사용 인자가 필연                   |
+| CI 게이트           | §12.2 lint·typecheck·test    | + `prettier --check`                           | 없으면 포맷 드리프트를 아무도 못 잡는다                    |
+| 파서 타입           | 6.1 문법 4종 서술            | `LinkRef` 6필드 · `ParsedNote` · `retitleNote` | 규범이 확정한 것을 타입이 못 담고 있었다 (4.1절)           |
