@@ -370,16 +370,36 @@ export async function readNote(v: Vault, path: NotePath): Promise<Note> {
 
 `shared/types.ts` 전체 · §3의 경계면 5개 · `agent/tools.ts` 6종(상위 §7.2가 시그니처를
 문자 그대로 제시) · `vault/paths.ts`(상위 §9) · `vault/notes.ts`(상위 §2.2·§6.3) ·
-`vault/frontmatter.ts` · `index/links.ts`(상위 §6.1이 문법 4종을 완전히 규정) ·
+`index/links.ts`의 `parseLinks`(상위 §6.1이 문법 4종을 완전히 규정) ·
 `ingest/pdf.ts`(상위 §7.1) · `agent/tasks/*` 진입점(상위 §7.3)
 
-**가배치(provisional)** — 파일과 폴더만 만들고 인자를 쓰지 않는다.
+**가배치(provisional)** — 시그니처가 잠정이다. 인자는 있어도 되고 실제로 있다 —
+`storeSource(v, file, text)`처럼 상위 문서가 요구를 서술한 만큼은 적는다.
+바꿀 때 합의가 필요 없다는 뜻이지 비워둔다는 뜻이 아니다.
 주석 `// OWNER: <A|B> — 시그니처 미확정, N단계에서 확정`을 단다.
 
 `llm/{gemini,stream}.ts`(상위 문서에 호출 형태·스트리밍 계약·툴콜 프로토콜이 한 줄도 없다) ·
 `agent/loop.ts`(루프 종료 조건·최대 반복·중단이 없다) · `index/watch.ts`(억제 등록/해제 API 미정) ·
 `git/restore.ts`(§2 참조) · `ingest/store.ts`(명명 충돌·중복 인제스트 규칙 없음) ·
 세션 로그 스키마 · lint 리포트 타입
+
+파서 타입은 등급이 갈린다. `LinkRef` 6필드만 동결이다 —
+`shared/types.ts`에 있고 상위 §6.1이 필드를 완전히 규정하며 IPC로 renderer까지 간다.
+나머지는 가배치다.
+
+|                                  | 등급         | 왜                                                                                       |
+| -------------------------------- | ------------ | ---------------------------------------------------------------------------------------- |
+| `LinkRef` 6필드                  | **동결**     | 상위 §6.1이 문법 4종을 규정. IPC 경계를 넘는다                                           |
+| `ParsedNote` 6필드               | 가배치 1단계 | 상위 §4.1·§5.1은 요구를 규정하지 형태를 규정하지 않는다. YAML 파서를 고르면 바뀔 수 있다 |
+| `LinkTargets` · `normalizeTitle` | 가배치 2단계 | B는 `resolveLink`를 호출하지 않는다                                                      |
+| `retitleNote`                    | 가배치 5단계 | B와 무관하다                                                                             |
+
+§2가 경계한 것은 줄 수가 아니라 "0단계에서 정한 것"이라는 관성이다.
+등급을 내리면 그 관성이 사라지고 코드는 손댈 필요가 없다.
+
+**두 등급 어디에도 없는 파일**(`index/scan.ts` · `git/repo.ts` · `ingest/markdown.ts` ·
+`vault/open.ts` · `prompts/load.ts`)은 상위 문서가 규정하지 않은 내부 구현이다.
+소유자가 단독으로 바꾼다.
 
 ## 9. 트리
 

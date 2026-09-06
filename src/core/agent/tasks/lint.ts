@@ -1,4 +1,5 @@
-// OWNER: A — 리포트 구조 미확정, 5단계에서 확정
+// OWNER: A — 리포트 구조 미확정, 5단계에서 확정.
+// 상위 §7.3 이 "수정 시 1개" 커밋이므로 반환에 commitOid 가 붙는다.
 import type { NotePath, OnProgress, Vault } from "../../../shared/types.ts";
 
 export interface LintFinding {
