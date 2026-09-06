@@ -59,8 +59,15 @@ type IngestSource =
 export function run(
   v: Vault,
   src: IngestSource,
-  o: { onProgress?: OnProgress },
+  o?: {
+    onProgress?: OnProgress;
+    /** 툴이 아니라 호출부가 쓴 파일. 커밋 경로에 함께 넣는다 (§3.3). */
+    extraPaths?: NotePath[];
+  },
 ): Promise<IngestResult>;
+
+// IngestResult.written 은 이 커밋에 들어간 전체 경로다 = 툴이 쓴 것 U extraPaths.
+// 되돌리기가 이 목록을 그대로 받으므로 커밋 단위와 어긋나면 안 된다.
 ```
 
 ### 3.2 `Written`의 수명 — run 단위 객체
@@ -87,6 +94,8 @@ export class Written {
 세션 로그와 `.gitignore`는 "툴이 아니라 main이 직접 쓰므로" 경로 집합에 자동으로 들어오지 않는다.
 
 `commit(written)` 형태로 좁히면 B의 수확 커밋이 세션 로그를 담을 수 없다.
+같은 이유로 한 층 위의 `ingest.run`도 `extraPaths`를 받아야 한다 —
+`run`이 내부에서 커밋하므로 그 자리가 없으면 세션 로그가 두 번째 커밋으로 밀린다.
 
 ```ts
 // src/core/git/commit.ts
@@ -243,16 +252,16 @@ type Result<T> = { ok: true; value: T } | { ok: false; error: AppError };
 
 배선 규칙:
 
-| 대상            | 규칙                                       | 막는 것                                                  |
-| --------------- | ------------------------------------------ | -------------------------------------------------------- |
-| 전역            | `import/no-restricted-paths` (zone 6)      | `core → cli/main/preload/renderer`, `shared → core/cli`  |
-| 전역            | `import/no-unresolved`                     | 해석 실패의 침묵 (아래)                                  |
-| `src/core/**`   | `no-console`                               | 상위 §2.3 "`console.log`를 결과 전달 수단으로 쓰기" 금지 |
-| `src/core/**`   | `no-restricted-properties`                 | `process.exit` · `process.argv` (상위 §11.2)             |
-| `src/core/**`   | `@typescript-eslint/no-restricted-imports` | `electron` (bare 패키지)                                 |
-| `src/shared/**` | `no-restricted-globals`                    | `window` · `document` · `localStorage`                   |
-| `src/shared/**` | `@typescript-eslint/no-restricted-imports` | `node:*` · `electron` (`allowTypeImports: true`)         |
-| `src/cli/**`    | `no-console: off`                          | 상위 §2.2 "onProgress = console.log"                     |
+| 대상            | 규칙                                       | 막는 것                                                                                     |
+| --------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| 전역            | `import/no-restricted-paths` (zone 11)     | `core → cli/main/preload/renderer`, `shared → core/cli`, `renderer/preload → core/main/cli` |
+| 전역            | `import/no-unresolved`                     | 해석 실패의 침묵 (아래)                                                                     |
+| `src/core/**`   | `no-console`                               | 상위 §2.3 "`console.log`를 결과 전달 수단으로 쓰기" 금지                                    |
+| `src/core/**`   | `no-restricted-properties`                 | `process.exit` · `process.argv` (상위 §11.2)                                                |
+| `src/core/**`   | `@typescript-eslint/no-restricted-imports` | `electron` (bare 패키지)                                                                    |
+| `src/shared/**` | `no-restricted-globals`                    | `window` · `document` · `localStorage`                                                      |
+| `src/shared/**` | `@typescript-eslint/no-restricted-imports` | `node:*` · `electron` (`allowTypeImports: true`)                                            |
+| `src/cli/**`    | `no-console: off`                          | 상위 §2.2 "onProgress = console.log"                                                        |
 
 반드시 지켜야 할 세 가지 — 전부 실측으로 확인했다.
 
@@ -358,7 +367,8 @@ piecepool-desktop/
 ├─ tsconfig.json / tsconfig.web.json
 ├─ eslint.config.js
 ├─ vitest.config.ts
-├─ .editorconfig  .prettierrc.json  .nvmrc  .gitattributes  .gitignore  LICENSE
+├─ .editorconfig  .prettierrc.json  .prettierignore  .nvmrc
+├─ .gitattributes  .gitignore  LICENSE
 ├─ .github/workflows/ci.yml
 │
 ├─ src/
@@ -470,7 +480,11 @@ CI는 Linux다. 이식 대상인 `.editorconfig`와 `.prettierrc.json`은 **git 
 
 ## 12. CI
 
-상위 §12.2대로 최소로 시작한다. 워크플로 1개 — `npm ci` → `lint` → `typecheck` → `test`.
+상위 §12.2대로 최소로 시작한다. 워크플로 1개 —
+`npm ci` → `prettier --check` → `lint` → `typecheck` → `test`.
+
+`prettier --check`를 넣는 이유: 없으면 아무도 포맷 드리프트를 못 잡고,
+처음 `npm run format`을 돌리는 사람이 무관한 대량 diff를 만든다. 2인 병렬의 첫 충돌 지점이다.
 push와 PR 양쪽. Node는 `.nvmrc` 고정.
 
 `ssot-check` · lychee link-check · `release-please`는 가져오지 않는다.
@@ -480,7 +494,7 @@ push와 PR 양쪽. Node는 `.nvmrc` 고정.
 ## 13. 통과 조건
 
 ```
-npm ci && npm run lint && npm run typecheck && npm test        → 전부 초록
+npm ci && npx prettier --check . && npm run lint && npm run typecheck && npm test→ 전부 초록
 npm run ingest -- <볼트> x.pdf   → "unimplemented: core/vault/open.openVault" 로 죽는다
 경계 위반 코드를 일부러 넣으면 → lint 가 잡는다
 ```
@@ -525,3 +539,6 @@ npm run ingest -- <볼트> x.pdf   → "unimplemented: core/vault/open.openVault
 | 자산 함정의 원인    | §2.4 asar                    | ESM `__dirname` 부재 + 번들러 미복사  | asar은 `fs.readFile`이 패치돼 무해 (§10)                   |
 | 0단계 이식 범위     | §11.3 "12.3의 이식"          | 순수 파서 제외, `.gitattributes` 추가 | §11                                                        |
 | ADR 이식 건수       | §1.2·§12.3·§12.4 불일치      | 합집합 7건                            | §11                                                        |
+| zone 방향           | §2.3 방향만 서술             | 11개 (양방향)                         | `target: core` 만으로는 `renderer → core` 가 안 막힌다     |
+| 미사용 인자         | —                            | `args: "none"`                        | 0단계는 전부 스텁이라 미사용 인자가 필연                   |
+| CI 게이트           | §12.2 lint·typecheck·test    | + `prettier --check`                  | 없으면 포맷 드리프트를 아무도 못 잡는다                    |

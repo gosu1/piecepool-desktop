@@ -12,7 +12,13 @@ export type IngestSource =
   { kind: "file"; path: string } | { kind: "session"; id: string; log: string };
 
 export interface IngestResult {
-  /** 이번 작업이 쓴 경로. 커밋 대상이다. */
+  /**
+   * 이 커밋에 들어간 전체 경로 = 툴이 쓴 것 U extraPaths.
+   *
+   * 되돌리기(git/restore.restorePaths)가 이 목록을 그대로 받는다.
+   * 툴이 쓴 것만 담으면 수확 커밋을 되돌려도 세션 로그가 남는다 —
+   * 커밋 단위와 경로 집합이 어긋나는 형태다.
+   */
   written: NotePath[];
   commitOid: string;
 }

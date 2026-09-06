@@ -10,7 +10,7 @@
 #
 # (위 사고 기록의 경로들은 구 레포 기준이다. 이 레포에는 없다.)
 
-* text=auto
+* text=auto eol=lf
 
 *.md    text eol=lf
 *.json  text eol=lf
