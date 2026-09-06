@@ -358,7 +358,9 @@ piecepool-desktop/
 │  │  ├─ llm/{gemini,stream}.ts
 │  │  └─ prompts/{load.ts, ingest.md, inbox.md, lint.md, query.md}
 │  ├─ cli/{run,ingest,lint,inbox,query,reindex}.ts
-│  └─ main/ preload/ renderer/        # 비어 있음. 7단계에 index.ts 로 채운다
+│  ├─ main/{index,ipc,keys}.ts        # 7단계. electron 을 import 하지 않는다
+│  ├─ preload/index.ts                # 7단계
+│  └─ renderer/main.ts                # 8단계. 하위 구성은 그때 확정한다
 │
 └─ docs/
    ├─ superpowers/specs/2026-09-05-electron-rebuild-design.md   # 이식
@@ -369,10 +371,22 @@ piecepool-desktop/
 
 테스트는 대상 옆에 둔다 — `links.ts` 옆 `links.test.ts`(상위 §2.2).
 
-`main/` · `preload/` · `renderer/`는 `.gitkeep`으로 두되,
-7단계 엔트리 파일명을 **`index.ts`로 예약**한다 — electron-vite가 기본 엔트리로 찾는 이름이다.
+`main/` · `preload/` · `renderer/`도 `.gitkeep`이 아니라 스텁을 둔다.
+`.gitkeep`은 git이 빈 폴더를 추적하지 못해 쓰는 우회책이지 구조를 표현하는 수단이 아니고,
+빈 폴더로 두면 (a) `core/`는 스텁인데 여기만 다른 규칙이 되고,
+(b) `tsconfig`의 `include`가 대상 없이 헛돌며,
+(c) `core → main` lint zone을 **검증할 수 없다**. 실제로 스텁을 넣은 뒤에야 zone 3개가 발효했다.
+
+두 가지 선은 긋는다.
+
+- **`electron`을 import하지 않는다.** 설치하지 않은 패키지를 import하면
+  `import-x/no-unresolved`가 즉시 에러다. 스텁은 electron 없이 성립한다
+- **`renderer/` 하위 폴더(`app/` `features/` `ds/` `store/`)를 만들지 않는다.**
+  상위 §2.2가 구성을 "⑧에서 확정"이라 명시했다. 지금 만들면 §2의 거짓 안정성이다
+
+엔트리 파일명은 `index.ts`로 예약한다 — electron-vite가 기본 엔트리로 찾는 이름이다.
 electron-vite 기본 템플릿의 renderer는 `src/renderer/index.html` + `src/renderer/src/` 구조라
-평평한 `src/renderer/`와 다르다. 지금 비어 있으므로 비용은 없고, 7단계에 한 번 확인할 지점이다.
+평평한 `src/renderer/`와 다르다. 7단계에 한 번 확인할 지점이다.
 
 ## 10. `assets.ts` — 0단계의 유일한 실동작 코드
 
