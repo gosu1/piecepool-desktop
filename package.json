@@ -1,0 +1,32 @@
+{
+  "name": "piecepool",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "author": "gosu1",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.web.json",
+    "test": "vitest run",
+    "format": "prettier --write .",
+    "ingest": "node src/cli/ingest.ts",
+    "wiki:lint": "node src/cli/lint.ts",
+    "inbox": "node src/cli/inbox.ts",
+    "query": "node src/cli/query.ts",
+    "reindex": "node src/cli/reindex.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "eslint": "^10.10.0",
+    "eslint-plugin-import-x": "^4.17.1",
+    "prettier": "^3.6.2",
+    "tsx": "^4.23.13",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.69.0",
+    "vitest": "^5.0.0"
+  }
+}

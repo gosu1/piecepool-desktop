@@ -1,0 +1,7 @@
+node_modules/
+out/
+dist/
+
+# 근거 보존용 원문 — 이식한 그대로 둔다. 재포맷하면 원본 대조가 어려워진다.
+docs/adr/legacy/
+docs/superpowers/specs/2026-09-05-electron-rebuild-design.md
