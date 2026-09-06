@@ -11,10 +11,10 @@
 상위 문서는 새 저장소 `dev/piecepool-next`를 1인이 순차로 짓는 것을 암묵적 전제로 한다.
 실제는 다르고, 그 차이가 0단계의 임무를 바꾼다.
 
-| | 상위 문서 | 실제 |
-|---|---|---|
+|        | 상위 문서                   | 실제                                   |
+| ------ | --------------------------- | -------------------------------------- |
 | 저장소 | `dev/piecepool-next` (신규) | `dev/piecepool-desktop` (README 3커밋) |
-| 인원 | 1인 순차 | **2인 병렬** |
+| 인원   | 1인 순차                    | **2인 병렬**                           |
 
 개발자 2인의 역할:
 
@@ -53,8 +53,8 @@ A 또는 B **단독 소유**이며 상대에게 노출되지 않는다. 지금 �
 ```ts
 // src/core/agent/tasks/ingest.ts
 type IngestSource =
-  | { kind: "file"; path: string }                  // 볼트 밖 PDF/.md (상위 §1.1)
-  | { kind: "session"; id: string; log: string };   // 수확 (상위 §8.1)
+  | { kind: "file"; path: string } // 볼트 밖 PDF/.md (상위 §1.1)
+  | { kind: "session"; id: string; log: string }; // 수확 (상위 §8.1)
 
 export function run(
   v: Vault,
@@ -92,7 +92,7 @@ export class Written {
 // src/core/git/commit.ts
 export function commit(
   v: Vault,
-  paths: NotePath[],       // written.paths() ∪ 호출부가 더한 경로
+  paths: NotePath[], // written.paths() ∪ 호출부가 더한 경로
   author: Author,
   msg: string,
 ): Promise<string>;
@@ -119,7 +119,7 @@ A가 `sources`를 덮어쓰는 구현을 하면 B의 세션 출처가 조용히 
 
 ```ts
 // src/core/vault/frontmatter.ts
-export function addSource(fm: Fm, source: string): Fm;   // 중복 제거 후 append
+export function addSource(fm: Fm, source: string): Fm; // 중복 제거 후 append
 // setSources 는 만들지 않는다. 덮어쓰는 경로를 구조적으로 없앤다.
 ```
 
@@ -136,28 +136,45 @@ export function addSource(fm: Fm, source: string): Fm;   // 중복 제거 후 ap
 0단계에서 유일하게 내용이 다 차는 파일이다.
 
 ```ts
-type NotePath = string;          // 볼트 루트 기준 상대경로, POSIX 구분자 고정
+type NotePath = string; // 볼트 루트 기준 상대경로, POSIX 구분자 고정
 
-interface Vault { root: string; agentWriteRoot: string }
+interface Vault {
+  root: string;
+  agentWriteRoot: string;
+}
 
 interface Fm {
   title?: string;
-  created?: string;              // ISO date 문자열
+  created?: string; // ISO date 문자열
   updated?: string;
-  sources?: string[];            // append-only (§3.5)
+  sources?: string[]; // append-only (§3.5)
 }
 
-interface Note      { path: NotePath; title: string; frontmatter: Fm; body: string }
-interface LinkRef   { from: NotePath; to: string; resolved: NotePath | null }
-interface GraphData { nodes: { id: NotePath; title: string }[];
-                      edges: { source: NotePath; target: NotePath }[] }
+interface Note {
+  path: NotePath;
+  title: string;
+  frontmatter: Fm;
+  body: string;
+}
+interface LinkRef {
+  from: NotePath;
+  to: string;
+  resolved: NotePath | null;
+}
+interface GraphData {
+  nodes: { id: NotePath; title: string }[];
+  edges: { source: NotePath; target: NotePath }[];
+}
 
-type Progress   = { step: string; detail?: string };
+type Progress = { step: string; detail?: string };
 type OnProgress = (p: Progress) => void;
 
-type ErrorKind = "vault_not_found" | "path_escape" | "parse_failed"
-               | "llm_failed" | "git_failed" | "unknown";
-interface AppError { kind: ErrorKind; message: string }
+type ErrorKind =
+  "vault_not_found" | "path_escape" | "parse_failed" | "llm_failed" | "git_failed" | "unknown";
+interface AppError {
+  kind: ErrorKind;
+  message: string;
+}
 type Result<T> = { ok: true; value: T } | { ok: false; error: AppError };
 ```
 
@@ -195,10 +212,10 @@ type Result<T> = { ok: true; value: T } | { ok: false; error: AppError };
 `kind`를 런타임에 읽으려면 클래스가 필요한데, 클래스는 상위 §2.6의 "타입과 순수 상수만"에
 해당하지 않는다. 따라서 둘로 나눈다.
 
-| | 위치 | 내용 |
-|---|---|---|
-| 타입 | `src/shared/types.ts` | `ErrorKind` · `AppError` · `Result<T>` |
-| 클래스 | `src/core/errors.ts` | `class PiecePoolError extends Error { kind }` |
+|        | 위치                  | 내용                                          |
+| ------ | --------------------- | --------------------------------------------- |
+| 타입   | `src/shared/types.ts` | `ErrorKind` · `AppError` · `Result<T>`        |
+| 클래스 | `src/core/errors.ts`  | `class PiecePoolError extends Error { kind }` |
 
 `main/ipc.ts`가 `core/errors`를 import해 `instanceof`로 `kind`를 읽고,
 못 읽으면 `"unknown"`으로 떨어뜨린다. `main → core`는 상위 §2.3상 합법 방향이다.
@@ -212,13 +229,13 @@ type Result<T> = { ok: true; value: T } | { ok: false; error: AppError };
 상위 §2.3은 "ESLint `no-restricted-imports`로 검사한다 — 관습이 아니라 규칙이다"라고 적었다.
 **그 규칙만으로는 부족하다는 것을 실측으로 확인했다.**
 
-| 케이스 | `no-restricted-imports` | `import/no-restricted-paths` |
-|---|---|---|
-| `import "../../cli/ingest.ts"` | O | O |
-| `import "../../cli"` (디렉터리) | **놓침** | O |
-| `await import("../../cli/ingest.ts")` | **놓침** | O |
-| `src/core/main/legit.ts` (core 내부 폴더) | **오탐** | O (정상 통과) |
-| `electron` (bare 패키지) | O | 대상 아님 |
+| 케이스                                    | `no-restricted-imports` | `import/no-restricted-paths` |
+| ----------------------------------------- | ----------------------- | ---------------------------- |
+| `import "../../cli/ingest.ts"`            | O                       | O                            |
+| `import "../../cli"` (디렉터리)           | **놓침**                | O                            |
+| `await import("../../cli/ingest.ts")`     | **놓침**                | O                            |
+| `src/core/main/legit.ts` (core 내부 폴더) | **오탐**                | O (정상 통과)                |
+| `electron` (bare 패키지)                  | O                       | 대상 아님                    |
 
 원인: `no-restricted-imports`의 `patterns`는 **import 문자열 자체**를 minimatch로 비교한다.
 해석된 실제 경로가 아니다. `import/no-restricted-paths`는 파일을 해석해 zone을 판정한다.
@@ -226,16 +243,16 @@ type Result<T> = { ok: true; value: T } | { ok: false; error: AppError };
 
 배선 규칙:
 
-| 대상 | 규칙 | 막는 것 |
-|---|---|---|
-| 전역 | `import/no-restricted-paths` (zone 6) | `core → cli/main/preload/renderer`, `shared → core/cli` |
-| 전역 | `import/no-unresolved` | 해석 실패의 침묵 (아래) |
-| `src/core/**` | `no-console` | 상위 §2.3 "`console.log`를 결과 전달 수단으로 쓰기" 금지 |
-| `src/core/**` | `no-restricted-properties` | `process.exit` · `process.argv` (상위 §11.2) |
-| `src/core/**` | `@typescript-eslint/no-restricted-imports` | `electron` (bare 패키지) |
-| `src/shared/**` | `no-restricted-globals` | `window` · `document` · `localStorage` |
-| `src/shared/**` | `@typescript-eslint/no-restricted-imports` | `node:*` · `electron` (`allowTypeImports: true`) |
-| `src/cli/**` | `no-console: off` | 상위 §2.2 "onProgress = console.log" |
+| 대상            | 규칙                                       | 막는 것                                                  |
+| --------------- | ------------------------------------------ | -------------------------------------------------------- |
+| 전역            | `import/no-restricted-paths` (zone 6)      | `core → cli/main/preload/renderer`, `shared → core/cli`  |
+| 전역            | `import/no-unresolved`                     | 해석 실패의 침묵 (아래)                                  |
+| `src/core/**`   | `no-console`                               | 상위 §2.3 "`console.log`를 결과 전달 수단으로 쓰기" 금지 |
+| `src/core/**`   | `no-restricted-properties`                 | `process.exit` · `process.argv` (상위 §11.2)             |
+| `src/core/**`   | `@typescript-eslint/no-restricted-imports` | `electron` (bare 패키지)                                 |
+| `src/shared/**` | `no-restricted-globals`                    | `window` · `document` · `localStorage`                   |
+| `src/shared/**` | `@typescript-eslint/no-restricted-imports` | `node:*` · `electron` (`allowTypeImports: true`)         |
+| `src/cli/**`    | `no-console: off`                          | 상위 §2.2 "onProgress = console.log"                     |
 
 반드시 지켜야 할 세 가지 — 전부 실측으로 확인했다.
 
@@ -243,7 +260,7 @@ type Result<T> = { ok: true; value: T } | { ok: false; error: AppError };
   평범한 import만 있는 파일에서는 "동작하는 것처럼" 보이다가 첫 `import type`에서 파싱 에러가 난다
 - **`import/no-unresolved`를 함께 켠다.** `import/no-restricted-paths`는 해석에 실패한 import를
   조용히 통과시킨다. 스텁뿐인 0단계가 정확히 그 조건이다
-- **`@typescript-eslint/no-unused-vars`에 `argsIgnorePattern: "^_"`를 준다.**
+- **`@typescript-eslint/no-unused-vars`에 `args: "none"`을 준다.**
   `core/` 전체가 unimplemented 스텁이라 미사용 인자가 필연인데 기본 설정은 `_` 접두사를
   인정하지 않아 전 파일이 빨개진다. TS의 `noUnusedParameters`는 인정하므로 불일치가 혼란을 키운다
 
@@ -256,7 +273,7 @@ type Result<T> = { ok: true; value: T } | { ok: false; error: AppError };
 
 ## 7. 빌드·실행 배선
 
-**패키지** — `"type": "module"`, `name: "piecepool"`, `engines.node: ">=22.12"`, `.nvmrc` = `22`.
+**패키지** — `"type": "module"`, `name: "piecepool"`, `engines.node: ">=22.18"`, `.nvmrc` = `22`.
 `.gitignore`에 `node_modules/` · `out/` · `*.tsbuildinfo`를 넣는다 — `out/`은 7단계
 electron-vite의 기본 `outDir`이다. 지금 넣으면 공짜, 나중이면 실수로 커밋된 산출물을 지우는
 커밋이 하나 생긴다.
@@ -276,14 +293,14 @@ Node 22.18은 타입 스트리핑이 unflag 상태라 `.ts`를 그대로 실행�
 이 제약은 규율로도 작용한다 — 7단계 electron-vite 번들링과 어긋날 문법을 미리 배제한다.
 `tsx`는 devDependency로만 두어 `enum`이 필요해지면 갈아탈 여지를 남긴다.
 
-**tsconfig 3분할** — 이유는 Electron이 아니라 `lib`/`types` 격리다.
+**tsconfig 분할** — 이유는 Electron이 아니라 `lib`/`types` 격리다.
 `core/`는 DOM 없이 `types: ["node"]`여야 `window`를 쓰면 컴파일 에러가 나고,
 `renderer/`는 `types: []`여야 `process`가 새어들지 않는다. Electron 도입 전에 이미 필요하다.
 
-| 파일 | include | lib / types |
-|---|---|---|
-| `tsconfig.json` | `shared` `core` `cli` `main` `preload` | ES2023 / `["node"]` |
-| `tsconfig.web.json` | `shared` `renderer` | ES2023+DOM / `[]` |
+| 파일                | include                                | lib / types         |
+| ------------------- | -------------------------------------- | ------------------- |
+| `tsconfig.json`     | `shared` `core` `cli` `main` `preload` | ES2023 / `["node"]` |
+| `tsconfig.web.json` | `shared` `renderer`                    | ES2023+DOM / `[]`   |
 
 별도 `tsconfig.base.json` 을 두지 않는다 — 에디터가 `tsconfig.json` 을 찾으므로
 그 파일이 base 겸 node 타깃을 맡고 web 이 extends 한다. 파일 하나가 준다.
@@ -405,7 +422,7 @@ asar 아카이브를 가상 디렉터리로 취급하므로 asar 자체는 원�
 // src/core/assets.ts
 import path from "node:path";
 export function assetPath(rel: string): string {
-  return path.join(import.meta.dirname, rel);   // 0단계: 소스 트리 기준
+  return path.join(import.meta.dirname, rel); // 0단계: 소스 트리 기준
 }
 ```
 
@@ -424,13 +441,13 @@ export function assetPath(rel: string): string {
 
 상위 §12.3의 표를 대조한 결과다.
 
-| 대상 | 구 레포 경로 | 비고 |
-|---|---|---|
-| 상위 설계문서 | `docs/superpowers/specs/2026-09-05-*.md` | 그대로 |
-| **ADR 원문 7건** | `docs/adr/000{3,4,5,6,7,9}·0010` | `docs/adr/legacy/`로. 상단에 `상태: 대체됨` 배너 |
-| 에디터 설정 | `.editorconfig` · `.prettierrc.json` · `.nvmrc` | 그대로 |
-| **`.gitattributes`** | `.gitattributes` | Rust/toml 행 제외. PIE-5 주석 유지 |
-| 라이선스 | `LICENSE` | 그대로 |
+| 대상                 | 구 레포 경로                                    | 비고                                             |
+| -------------------- | ----------------------------------------------- | ------------------------------------------------ |
+| 상위 설계문서        | `docs/superpowers/specs/2026-09-05-*.md`        | 그대로                                           |
+| **ADR 원문 7건**     | `docs/adr/000{3,4,5,6,7,9}·0010`                | `docs/adr/legacy/`로. 상단에 `상태: 대체됨` 배너 |
+| 에디터 설정          | `.editorconfig` · `.prettierrc.json` · `.nvmrc` | 그대로                                           |
+| **`.gitattributes`** | `.gitattributes`                                | Rust/toml 행 제외. PIE-5 주석 유지               |
+| 라이선스             | `LICENSE`                                       | 그대로                                           |
 
 **ADR이 7건인 이유** — 상위 문서가 세 곳에서 서로 다른 ADR을 지목한다.
 상위 §1.2는 `0004·0006·0009`, 상위 §12.3은 `0003·0005·0007·0010`("3건"이라 적고 4개를 나열),
@@ -483,28 +500,28 @@ npm run ingest -- <볼트> x.pdf   → "unimplemented: core/vault/open.openVault
 
 ## 14. 하지 않는 것
 
-| | 시점 |
-|---|---|
-| `docs/contracts/` 4종 | 해당 단계에서. 상위 §2.5는 명명 규칙일 뿐 시점 규정이 아니다 |
-| `prompts/*.md` 내용 | 4~6단계. 0단계는 자리표시자만 |
-| `src/lib/` 순수 파서 이식 | 2단계 (§11) |
-| `src/ds/` 시각 언어 이식 | 8단계 (상위 §12.3이 명시) |
-| Electron 의존성 설치 | 7단계 |
-| `electron.vite.config.ts` · `electron-builder.yml` · `shared/ipc.ts` | 7단계 |
-| `e2e/` | 8단계 |
-| pdf.js CMap 배선 | 4단계 (§10) |
-| 테스트 픽스처 헬퍼 · asset manifest | 소비처가 생길 때 |
+|                                                                      | 시점                                                         |
+| -------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `docs/contracts/` 4종                                                | 해당 단계에서. 상위 §2.5는 명명 규칙일 뿐 시점 규정이 아니다 |
+| `prompts/*.md` 내용                                                  | 4~6단계. 0단계는 자리표시자만                                |
+| `src/lib/` 순수 파서 이식                                            | 2단계 (§11)                                                  |
+| `src/ds/` 시각 언어 이식                                             | 8단계 (상위 §12.3이 명시)                                    |
+| Electron 의존성 설치                                                 | 7단계                                                        |
+| `electron.vite.config.ts` · `electron-builder.yml` · `shared/ipc.ts` | 7단계                                                        |
+| `e2e/`                                                               | 8단계                                                        |
+| pdf.js CMap 배선                                                     | 4단계 (§10)                                                  |
+| 테스트 픽스처 헬퍼 · asset manifest                                  | 소비처가 생길 때                                             |
 
 ## 15. 상위 설계문서로부터의 의도적 이탈
 
 되짚을 수 있도록 한곳에 모은다.
 
-| 이탈 | 상위 문서 | 이 문서 | 근거 |
-|---|---|---|---|
-| 폴더 경계 강제 수단 | §2.3 `no-restricted-imports` | `import/no-restricted-paths` 추가 | 실측 — 동적·디렉터리 import 누락, 내부 폴더 오탐 (§6) |
-| `Progress` 형태 | §11.2 문자열 | `{ step, detail? }` 객체 | 7단계 UI가 `step`으로 분기 (§4) |
-| `ErrorKind` | §9 5종 | `"unknown"` 추가 | 폴백 없으면 상위 §9의 `kind` 분기가 무너짐 (§4) |
-| 볼트 표현 | §5 암묵적 경로 문자열 | `Vault` 인터페이스 | 상위 §2.2 `open.ts`·상위 §4.1 쓰기 루트가 상태를 요구 (§4) |
-| 자산 함정의 원인 | §2.4 asar | ESM `__dirname` 부재 + 번들러 미복사 | asar은 `fs.readFile`이 패치돼 무해 (§10) |
-| 0단계 이식 범위 | §11.3 "12.3의 이식" | 순수 파서 제외, `.gitattributes` 추가 | §11 |
-| ADR 이식 건수 | §1.2·§12.3·§12.4 불일치 | 합집합 7건 | §11 |
+| 이탈                | 상위 문서                    | 이 문서                               | 근거                                                       |
+| ------------------- | ---------------------------- | ------------------------------------- | ---------------------------------------------------------- |
+| 폴더 경계 강제 수단 | §2.3 `no-restricted-imports` | `import/no-restricted-paths` 추가     | 실측 — 동적·디렉터리 import 누락, 내부 폴더 오탐 (§6)      |
+| `Progress` 형태     | §11.2 문자열                 | `{ step, detail? }` 객체              | 7단계 UI가 `step`으로 분기 (§4)                            |
+| `ErrorKind`         | §9 5종                       | `"unknown"` 추가                      | 폴백 없으면 상위 §9의 `kind` 분기가 무너짐 (§4)            |
+| 볼트 표현           | §5 암묵적 경로 문자열        | `Vault` 인터페이스                    | 상위 §2.2 `open.ts`·상위 §4.1 쓰기 루트가 상태를 요구 (§4) |
+| 자산 함정의 원인    | §2.4 asar                    | ESM `__dirname` 부재 + 번들러 미복사  | asar은 `fs.readFile`이 패치돼 무해 (§10)                   |
+| 0단계 이식 범위     | §11.3 "12.3의 이식"          | 순수 파서 제외, `.gitattributes` 추가 | §11                                                        |
+| ADR 이식 건수       | §1.2·§12.3·§12.4 불일치      | 합집합 7건                            | §11                                                        |

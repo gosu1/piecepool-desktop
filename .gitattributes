@@ -8,7 +8,7 @@
 # - frontmatter split 이 CRLF 를 못 찾아 문서가 무소음 실종된 회귀가
 #   과거에 있었다 (lib.rs frontmatter_split_accepts_crlf 주석).
 #
-# 계약(workspace-layout.md §4)도 relations.json 에 LF 를 요구한다.
+# (위 사고 기록의 경로들은 구 레포 기준이다. 이 레포에는 없다.)
 
 * text=auto
 
@@ -19,6 +19,8 @@
 *.ts    text eol=lf
 *.tsx   text eol=lf
 *.mjs   text eol=lf
+*.js    text eol=lf
+*.cjs   text eol=lf
 
 *.pdf   binary
 *.png   binary

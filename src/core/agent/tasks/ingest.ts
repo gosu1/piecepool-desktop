@@ -9,8 +9,7 @@ import type { NotePath, OnProgress, Vault } from "../../../shared/types.ts";
  * 출처가 세션이라는 사실만 여기서 넘어와 각주가 붙는다.
  */
 export type IngestSource =
-  | { kind: "file"; path: string }
-  | { kind: "session"; id: string; log: string };
+  { kind: "file"; path: string } | { kind: "session"; id: string; log: string };
 
 export interface IngestResult {
   /** 이번 작업이 쓴 경로. 커밋 대상이다. */
@@ -21,7 +20,15 @@ export interface IngestResult {
 export async function run(
   v: Vault,
   src: IngestSource,
-  o?: { onProgress?: OnProgress },
+  o?: {
+    onProgress?: OnProgress;
+    /**
+     * 툴이 아니라 호출부가 쓴 파일. 커밋 경로에 함께 넣는다.
+     * 수확이 .piecepool/sessions/<id>.md 를 여기로 넘긴다 —
+     * 이게 없으면 세션 로그가 두 번째 커밋으로 밀려 "커밋 1개" 가 깨진다.
+     */
+    extraPaths?: NotePath[];
+  },
 ): Promise<IngestResult> {
   throw new Error("unimplemented: core/agent/tasks/ingest.run");
 }

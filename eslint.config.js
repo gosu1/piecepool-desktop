@@ -32,18 +32,26 @@ export default tseslint.config(
 
       // 0단계는 전부 unimplemented 스텁이라 미사용 인자가 필연이다.
       // 구현이 차면 args 검사를 켠다.
-      "@typescript-eslint/no-unused-vars": [
-        "error",
-        { args: "none", varsIgnorePattern: "^_" },
-      ],
+      "@typescript-eslint/no-unused-vars": ["error", { args: "none", varsIgnorePattern: "^_" }],
 
       // Node 22 의 type stripping 은 타입만 지우고 코드를 만들지 않는다.
       // 아래 셋은 코드 생성이 필요하므로 ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX 로 죽는다.
       "no-restricted-syntax": [
         "error",
-        { selector: "TSEnumDeclaration", message: "enum 은 node 가 .ts 를 직접 실행할 때 죽는다 — 유니온 타입이나 as const 를 쓴다" },
-        { selector: "TSModuleDeclaration", message: "namespace 는 node 가 .ts 를 직접 실행할 때 죽는다" },
-        { selector: "TSParameterProperty", message: "생성자 파라미터 프로퍼티는 node 가 .ts 를 직접 실행할 때 죽는다 — 필드를 따로 선언한다" },
+        {
+          selector: "TSEnumDeclaration",
+          message:
+            "enum 은 node 가 .ts 를 직접 실행할 때 죽는다 — 유니온 타입이나 as const 를 쓴다",
+        },
+        {
+          selector: "TSModuleDeclaration",
+          message: "namespace 는 node 가 .ts 를 직접 실행할 때 죽는다",
+        },
+        {
+          selector: "TSParameterProperty",
+          message:
+            "생성자 파라미터 프로퍼티는 node 가 .ts 를 직접 실행할 때 죽는다 — 필드를 따로 선언한다",
+        },
       ],
 
       "import-x/no-restricted-paths": [
@@ -56,6 +64,27 @@ export default tseslint.config(
             { target: "./src/core", from: "./src/renderer", message: "core 는 호출자를 모른다" },
             { target: "./src/shared", from: "./src/core", message: "shared 는 타입과 순수 상수만" },
             { target: "./src/shared", from: "./src/cli", message: "shared 는 타입과 순수 상수만" },
+
+            // renderer·preload 가 core 를 직접 부르는 것도 막는다.
+            // renderer 는 preload 가 화이트리스트로 열어준 것만 쓸 수 있다 —
+            // core 를 직접 import 하면 contextIsolation 이 무의미해진다.
+            {
+              target: "./src/renderer",
+              from: "./src/core",
+              message: "renderer 는 preload 를 통해서만 접근한다",
+            },
+            {
+              target: "./src/renderer",
+              from: "./src/main",
+              message: "renderer 는 preload 를 통해서만 접근한다",
+            },
+            { target: "./src/renderer", from: "./src/cli", message: "renderer 는 CLI 를 모른다" },
+            {
+              target: "./src/preload",
+              from: "./src/core",
+              message: "preload 는 화이트리스트만 — 로직은 main 에 둔다",
+            },
+            { target: "./src/preload", from: "./src/cli", message: "preload 는 CLI 를 모른다" },
           ],
         },
       ],

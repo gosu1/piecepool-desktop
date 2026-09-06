@@ -8,7 +8,7 @@ import type { QuerySession } from "./query.ts";
  *
  * 쓰기 경로는 언제나 ingest 하나뿐이므로 여기서 ingest.run 을 재호출한다.
  * 세션 로그(.piecepool/sessions/<id>.md)는 툴이 아니라 여기서 쓰므로
- * 커밋 경로에 명시적으로 더해야 한다.
+ * ingest.run 의 extraPaths 로 넘겨 같은 커밋에 넣는다.
  */
 export async function harvest(
   v: Vault,

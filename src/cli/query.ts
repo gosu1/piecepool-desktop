@@ -8,6 +8,7 @@ await main(async () => {
   if (!vaultRoot || !question) throw new Error("usage: npm run query -- <볼트경로> <질문>");
 
   const v = await openVault(vaultRoot);
-  const session = { id: new Date().toISOString(), log: "" };
+  // 콜론은 Windows 파일명에 쓸 수 없다 — 이 id 가 sessions/<id>.md 가 된다.
+  const session = { id: new Date().toISOString().replace(/[:.]/g, "-"), log: "" };
   console.log(await ask(v, session, question, { onProgress: log }));
 });

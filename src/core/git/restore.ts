@@ -7,10 +7,6 @@ import type { NotePath, Vault } from "../../shared/types.ts";
  * 커밋 이후 사용자가 고친 파일은 목록으로 보여주고 사용자가 고르게 한다.
  * 부분 복원 결과는 그 자체가 새 커밋이 된다 — 이력을 다시 쓰지 않는다.
  */
-export async function restorePaths(
-  v: Vault,
-  commitOid: string,
-  paths: NotePath[],
-): Promise<void> {
+export async function restorePaths(v: Vault, commitOid: string, paths: NotePath[]): Promise<void> {
   throw new Error("unimplemented: core/git/restore.restorePaths");
 }

@@ -6,7 +6,7 @@
   "author": "gosu1",
   "type": "module",
   "engines": {
-    "node": ">=22.12"
+    "node": ">=22.18"
   },
   "scripts": {
     "lint": "eslint .",
