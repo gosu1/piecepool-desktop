@@ -282,7 +282,7 @@ type Result<T> = { ok: true; value: T } | { ok: false; error: AppError };
 
 ## 7. 빌드·실행 배선
 
-**패키지** — `"type": "module"`, `name: "piecepool"`, `engines.node: ">=22.18"`, `.nvmrc` = `22`.
+**패키지** — `"type": "module"`, `name: "piecepool"`, `engines.node: ">=22.18"`, `.nvmrc` = `22.18`.
 `.gitignore`에 `node_modules/` · `out/` · `*.tsbuildinfo`를 넣는다 — `out/`은 7단계
 electron-vite의 기본 `outDir`이다. 지금 넣으면 공짜, 나중이면 실수로 커밋된 산출물을 지우는
 커밋이 하나 생긴다.
@@ -402,7 +402,8 @@ piecepool-desktop/
 `.gitkeep`은 git이 빈 폴더를 추적하지 못해 쓰는 우회책이지 구조를 표현하는 수단이 아니고,
 빈 폴더로 두면 (a) `core/`는 스텁인데 여기만 다른 규칙이 되고,
 (b) `tsconfig`의 `include`가 대상 없이 헛돌며,
-(c) `core → main` lint zone을 **검증할 수 없다**. 실제로 스텁을 넣은 뒤에야 zone 3개가 발효했다.
+(c) `core → main` lint zone을 **검증할 수 없다**. 실제로 스텁을 넣은 뒤에야 zone 8개가 발효했다 —
+`core → main/preload/renderer` 3개와, `renderer`·`preload`가 target 인 5개다.
 
 두 가지 선은 긋는다.
 
@@ -494,7 +495,7 @@ push와 PR 양쪽. Node는 `.nvmrc` 고정.
 ## 13. 통과 조건
 
 ```
-npm ci && npx prettier --check . && npm run lint && npm run typecheck && npm test→ 전부 초록
+npm ci && npx prettier --check . && npm run lint && npm run typecheck && npm test        → 전부 초록
 npm run ingest -- <볼트> x.pdf   → "unimplemented: core/vault/open.openVault" 로 죽는다
 경계 위반 코드를 일부러 넣으면 → lint 가 잡는다
 ```
