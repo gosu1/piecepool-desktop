@@ -269,7 +269,9 @@ Node 22.18은 타입 스트리핑이 unflag 상태라 `.ts`를 그대로 실행�
 - **모든 상대 import에 `.ts` 확장자를 명시한다.** Node는 확장자를 추론하지 않고
   TS 관행인 `.js` → `.ts` 매핑도 하지 않는다. tsconfig에 `allowImportingTsExtensions: true`가 따라온다
 - **`enum` · `namespace` · 파라미터 프로퍼티를 쓰지 않는다.**
-  strip-only 모드에서 `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`로 죽는다
+  strip-only 모드에서 `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`로 죽는다.
+  **`no-restricted-syntax`로 강제한다** — 구현 중 실제로 이 셋에 걸렸다.
+  문서에만 적어두면 지켜지지 않는다
 
 이 제약은 규율로도 작용한다 — 7단계 electron-vite 번들링과 어긋날 문법을 미리 배제한다.
 `tsx`는 devDependency로만 두어 `enum`이 필요해지면 갈아탈 여지를 남긴다.
@@ -280,14 +282,16 @@ Node 22.18은 타입 스트리핑이 unflag 상태라 `.ts`를 그대로 실행�
 
 | 파일 | include | lib / types |
 |---|---|---|
-| `tsconfig.base.json` | (없음) | 공통 옵션만 |
-| `tsconfig.node.json` | `shared` `core` `cli` `main` `preload` | ES2023 / `["node"]` |
+| `tsconfig.json` | `shared` `core` `cli` `main` `preload` | ES2023 / `["node"]` |
 | `tsconfig.web.json` | `shared` `renderer` | ES2023+DOM / `[]` |
+
+별도 `tsconfig.base.json` 을 두지 않는다 — 에디터가 `tsconfig.json` 을 찾으므로
+그 파일이 base 겸 node 타깃을 맡고 web 이 extends 한다. 파일 하나가 준다.
 
 `shared`가 **양쪽에** 들어가는 것이 의도다 — 두 lib 세트 아래에서 모두 컴파일되는지가
 "플랫폼 중립"의 진짜 정의이고, 덤으로 `renderer/`가 비어 있을 때의 TS18003을 막는다.
 
-`typecheck` = `tsc -p tsconfig.node.json && tsc -p tsconfig.web.json`.
+`typecheck` = `tsc -p tsconfig.json && tsc -p tsconfig.web.json`.
 **project references(`tsc -b`)를 쓰지 않는다** — `noEmit`이라 build 모드가 기대하는 `.js`가
 영영 생기지 않아 매번 "out of date"로 전량 재빌드한다. 캐싱 이득이 0이고
 `.tsbuildinfo` 2개를 루트에 떨군다. 단순한 쪽이 동등하게 빠르다(실측 6.9초, 차이 없음).
@@ -334,7 +338,7 @@ export async function readNote(v: Vault, path: NotePath): Promise<Note> {
 ```
 piecepool-desktop/
 ├─ package.json
-├─ tsconfig.base.json / tsconfig.node.json / tsconfig.web.json
+├─ tsconfig.json / tsconfig.web.json
 ├─ eslint.config.js
 ├─ vitest.config.ts
 ├─ .editorconfig  .prettierrc.json  .nvmrc  .gitattributes  .gitignore  LICENSE
@@ -446,7 +450,7 @@ push와 PR 양쪽. Node는 `.nvmrc` 고정.
 
 ```
 npm ci && npm run lint && npm run typecheck && npm test        → 전부 초록
-npm run ingest -- x.pdf   → "unimplemented: core/agent/tasks/ingest.run" 으로 죽는다
+npm run ingest -- <볼트> x.pdf   → "unimplemented: core/vault/open.openVault" 로 죽는다
 경계 위반 코드를 일부러 넣으면 → lint 가 잡는다
 ```
 

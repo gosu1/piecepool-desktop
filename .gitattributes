@@ -1,0 +1,27 @@
+# 줄바꿈 강제 — OS 마다 체크아웃 결과가 달라지는 것을 막는다.
+#
+# 없을 때 실제로 터졌던 것들 (PIE-5):
+# - Windows(core.autocrlf=true)에서 계약 md 가 CRLF 로 체크아웃돼
+#   gen:llm-schema 의 ```json 블록 매칭이 항상 실패했다.
+# - gen:types 실행 후 src/lib/generated/*.ts 가 내용 변화 없이
+#   줄바꿈 차이만으로 modified 로 떠서 드리프트 검사를 오염시켰다.
+# - frontmatter split 이 CRLF 를 못 찾아 문서가 무소음 실종된 회귀가
+#   과거에 있었다 (lib.rs frontmatter_split_accepts_crlf 주석).
+#
+# 계약(workspace-layout.md §4)도 relations.json 에 LF 를 요구한다.
+
+* text=auto
+
+*.md    text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.mjs   text eol=lf
+
+*.pdf   binary
+*.png   binary
+*.jpg   binary
+*.ico   binary
+*.icns  binary
