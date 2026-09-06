@@ -10,7 +10,7 @@
 
 ## 배경
 
-[ADR-0005](0005-pdf-extract-crate.md)는 PDF→텍스트를 Rust `pdf-extract` 0.10.0 **단독**으로 확정하고, 대안인 pdf.js 프론트 파싱을 _"백엔드 경계 위반"_ 으로 기각했다. 그 결정은 `pdf-extract`가 실제로 어떤 인코딩을 다루는지 측정하지 않은 상태에서 내려졌다.
+[ADR-0005](0005-pdf-extract-crate.md)는 PDF→텍스트를 Rust `pdf-extract` 0.10.0 **단독**으로 확정하고, 대안인 pdf.js 프론트 파싱을 *"백엔드 경계 위반"* 으로 기각했다. 그 결정은 `pdf-extract`가 실제로 어떤 인코딩을 다루는지 측정하지 않은 상태에서 내려졌다.
 
 측정 결과, `pdf-extract` 0.10.0(및 0.12.0)은 CID 폰트의 predefined CMap 중 **`Identity-H`/`Identity-V` 외 전부를 지원하지 않으며, `Err`가 아니라 `panic!`으로 종료**한다([lib.rs:983](https://docs.rs/crate/pdf-extract/0.10.0) `panic!("unsupported encoding {}", name)`). 한국 학술지가 흔히 쓰는 `UniKS-UTF16-H`가 여기 걸린다.
 

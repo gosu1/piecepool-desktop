@@ -10,7 +10,7 @@
 
 ## 배경
 
-[ADR-0001](0001-llm-provider-openai.md)은 LLM provider를 OpenAI 단일로 확정했다. 2026-07-07 커밋 `0eb930d`이 소스 전체를 Google Gemini로 교체했으나, 그 커밋 메시지는 스스로 _"테스트 갱신·문서(SSOT/ADR)는 후속 커밋"_ 이라 적었고 **그 후속 커밋은 오지 않았다.**
+[ADR-0001](0001-llm-provider-openai.md)은 LLM provider를 OpenAI 단일로 확정했다. 2026-07-07 커밋 `0eb930d`이 소스 전체를 Google Gemini로 교체했으나, 그 커밋 메시지는 스스로 *"테스트 갱신·문서(SSOT/ADR)는 후속 커밋"* 이라 적었고 **그 후속 커밋은 오지 않았다.**
 
 그 결과 저장소가 3일간 두 개의 진실을 말했다. 소스는 Gemini를 호출하는데 `README`·`CONTRIBUTING`·`.env.example`·`CLAUDE.md`는 `OPENAI_API_KEY`를 요구했다. 팀원이 문서대로 `.env`에 `OPENAI_API_KEY`를 채우면 앱은 그 값을 완전히 무시하고 키 없는 휴리스틱 폴백으로 조용히 내려갔다 — 되묻기 패널이 뜨지 않는 것이 유일한 증상이었다. 이 ADR은 전환을 사후 기록하고 드리프트를 닫는다.
 

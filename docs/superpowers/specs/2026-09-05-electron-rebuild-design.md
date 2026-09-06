@@ -13,13 +13,13 @@
 
 이번 재구축은 셸과 지식 모델을 **동시에** 바꾼다.
 
-| 축          | 기존                                   | 신규                                    |
-| ----------- | -------------------------------------- | --------------------------------------- |
-| 셸          | Tauri + Rust                           | Electron + Node/TS                      |
-| 지식 모델   | 타입 관계 그래프 (`RelationType` 12종) | 타입 없는 `[[]]` 링크 (카파시 LLM Wiki) |
-| LLM 쓰기    | JSON 제안 → 스키마 검증 → 앱이 반영    | **에이전트가 파일을 직접 편집**         |
-| 진실의 소재 | `relations.json` + 마크다운            | **마크다운 파일만**                     |
-| 안전망      | 저장 전 검증 게이트                    | **볼트 git 커밋 + 되돌리기**            |
+| 축 | 기존 | 신규 |
+|---|---|---|
+| 셸 | Tauri + Rust | Electron + Node/TS |
+| 지식 모델 | 타입 관계 그래프 (`RelationType` 12종) | 타입 없는 `[[]]` 링크 (카파시 LLM Wiki) |
+| LLM 쓰기 | JSON 제안 → 스키마 검증 → 앱이 반영 | **에이전트가 파일을 직접 편집** |
+| 진실의 소재 | `relations.json` + 마크다운 | **마크다운 파일만** |
+| 안전망 | 저장 전 검증 게이트 | **볼트 git 커밋 + 되돌리기** |
 
 참고한 패턴: 카파시의 LLM Wiki — "Obsidian이 IDE, LLM이 프로그래머, 위키가 코드베이스".
 자료를 색인만 하는 게 아니라 에이전트가 읽고 기존 페이지를 갱신·교차링크·중복제거한다.
@@ -49,11 +49,11 @@ UI는 그 흐름을 확인한 뒤에 붙인다(11절).
 
 둘 다 "자료를 위키로 편입"이라 보이므로 기준을 명시한다. **출처가 볼트 밖이냐 안이냐다.**
 
-|           | `ingest`                     | `processInbox`                   |
-| --------- | ---------------------------- | -------------------------------- |
-| 입력      | 볼트 **밖** 파일 (PDF·`.md`) | 볼트 **안** `inbox/`의 단편 메모 |
-| 원본 보관 | `sources/`에 남긴다          | 없음 — 사용자가 직접 쓴 글이다   |
-| 트리거    | 사용자가 파일을 넣을 때      | 사용자가 정리를 요청할 때        |
+| | `ingest` | `processInbox` |
+|---|---|---|
+| 입력 | 볼트 **밖** 파일 (PDF·`.md`) | 볼트 **안** `inbox/`의 단편 메모 |
+| 원본 보관 | `sources/`에 남긴다 | 없음 — 사용자가 직접 쓴 글이다 |
+| 트리거 | 사용자가 파일을 넣을 때 | 사용자가 정리를 요청할 때 |
 
 즉 외부 `.md`를 들여오는 것은 `ingest`다 — `sources/`에 원본이 남는다.
 사용자가 앱 안에서 끄적인 메모는 `inbox/`로 가고 `processInbox`가 다룬다.
@@ -64,16 +64,16 @@ UI는 그 흐름을 확인한 뒤에 붙인다(11절).
 새 저장소를 파므로(12절) 이들은 "지우는 작업"이 아니라 **"가져오지 않는 목록"**이다.
 기존 레포에 그대로 남아 있으므로 언제든 되짚을 수 있다.
 
-| 가져오지 않는 것                                | 이유                                                |
-| ----------------------------------------------- | --------------------------------------------------- |
-| `relation-types.md` (12 enum + 호환성 매트릭스) | 타입 없는 `[[]]` 링크로 통일                        |
-| `relations.json`                                | 링크는 본문에서 파생                                |
-| `llm-output-schema.md` (`LlmWikiResult`)        | 에이전트가 파일을 직접 편집                         |
-| ImportJob 8단계 상태머신 (`ADR-0007`)           | 인제스트가 단순해짐                                 |
-| `entities.md` 11개 엔티티                       | `Note` · `LinkRef` · `GraphData`로 축소             |
-| Rust `graph/` `priority/` `notes/` `seed/`      | 학습 기능 제외 + 그래프는 파생물                    |
-| Liner API (`LINER_API_KEY`)                     | 정보 간극 메우기·fact-check가 학습 기능과 함께 제외 |
-| `ADR-0005` · `ADR-0010` (PDF 2단계 추출)        | 7.1이 단일 추출기로 대체                            |
+| 가져오지 않는 것 | 이유 |
+|---|---|
+| `relation-types.md` (12 enum + 호환성 매트릭스) | 타입 없는 `[[]]` 링크로 통일 |
+| `relations.json` | 링크는 본문에서 파생 |
+| `llm-output-schema.md` (`LlmWikiResult`) | 에이전트가 파일을 직접 편집 |
+| ImportJob 8단계 상태머신 (`ADR-0007`) | 인제스트가 단순해짐 |
+| `entities.md` 11개 엔티티 | `Note` · `LinkRef` · `GraphData`로 축소 |
+| Rust `graph/` `priority/` `notes/` `seed/` | 학습 기능 제외 + 그래프는 파생물 |
+| Liner API (`LINER_API_KEY`) | 정보 간극 메우기·fact-check가 학습 기능과 함께 제외 |
+| `ADR-0005` · `ADR-0010` (PDF 2단계 추출) | 7.1이 단일 추출기로 대체 |
 
 **내용은 승계하되 새로 쓰는 것** — 옛 파일을 복사하지 않고 새 이름으로 다시 쓴다(2.3):
 `vault-layout.md`(← `workspace-layout.md`) · `frontmatter.md`(4필드로 축소) ·
@@ -91,14 +91,14 @@ UI는 그 흐름을 확인한 뒤에 붙인다(11절).
 
 버릴 것만큼 **가져올 것**을 명시한다. 재구축의 실패 모드는 이미 값을 치른 교훈을 다시 사는 것이다.
 
-| 계승                            | 어디서                                | 어떻게                          |
-| ------------------------------- | ------------------------------------- | ------------------------------- |
-| PDF 인코딩 실패 사례            | `ADR-0010` 실측 14개                  | 7.1의 추출기 선택 근거          |
-| OCR 방침 (스캔본·이미지·손글씨) | `ADR-0003`                            | v1은 실패 보고까지, 인식은 후속 |
-| rename 시 링크 동기화           | `src/lib/retitleSync.ts`              | 6.3의 rename 정책               |
-| 시각 언어                       | `src/ds/primitives`·`theme`·`icons`   | 그대로 이식 (⑧). 12.3 참조      |
-| 순수 파서                       | `src/lib/` (callout·math·wikilink 등) | 발췌 후 `core/`로 재배치        |
-| API 키 저장 위치 문제           | 현행 `localStorage["gemini-key"]`     | 3.1에서 `main/keys.ts`로 이전   |
+| 계승 | 어디서 | 어떻게 |
+|---|---|---|
+| PDF 인코딩 실패 사례 | `ADR-0010` 실측 14개 | 7.1의 추출기 선택 근거 |
+| OCR 방침 (스캔본·이미지·손글씨) | `ADR-0003` | v1은 실패 보고까지, 인식은 후속 |
+| rename 시 링크 동기화 | `src/lib/retitleSync.ts` | 6.3의 rename 정책 |
+| 시각 언어 | `src/ds/primitives`·`theme`·`icons` | 그대로 이식 (⑧). 12.3 참조 |
+| 순수 파서 | `src/lib/` (callout·math·wikilink 등) | 발췌 후 `core/`로 재배치 |
+| API 키 저장 위치 문제 | 현행 `localStorage["gemini-key"]` | 3.1에서 `main/keys.ts`로 이전 |
 
 ## 2. 레포 구조
 
@@ -363,14 +363,14 @@ Obsidian Git 같은 플러그인을 쓸 수도 있다. 따라서 "변경된 `.md
 `chore(vault): 사용자 편집 봉인` 커밋으로 먼저 분리한다.
 에이전트 커밋과 사용자 편집이 한 커밋에 섞이지 않게 하는 전제다.
 
-| 단계                 | 동작                                           | 사용자가 보는 것    |
-| -------------------- | ---------------------------------------------- | ------------------- |
-| 볼트 최초 열기       | `.git` 없으면 `git init`                       | 없음                |
-| 작업 시작            | 사용자 미커밋 변경이 있으면 봉인 커밋          | 없음                |
-| 에이전트 작업 1회    | **쓴 경로만** add + commit 1개                 | "자료 3건 반영됨"   |
-| 결과 불만족          | 해당 커밋의 경로만 이전 상태로 복원            | **[되돌리기]** 버튼 |
-| 에이전트 커밋 작성자 | `PiecePool Agent <agent@piecepool.local>` 고정 | —                   |
-| **봉인** 커밋 작성자 | 볼트의 `git config` 값을 따른다                | —                   |
+| 단계 | 동작 | 사용자가 보는 것 |
+|---|---|---|
+| 볼트 최초 열기 | `.git` 없으면 `git init` | 없음 |
+| 작업 시작 | 사용자 미커밋 변경이 있으면 봉인 커밋 | 없음 |
+| 에이전트 작업 1회 | **쓴 경로만** add + commit 1개 | "자료 3건 반영됨" |
+| 결과 불만족 | 해당 커밋의 경로만 이전 상태로 복원 | **[되돌리기]** 버튼 |
+| 에이전트 커밋 작성자 | `PiecePool Agent <agent@piecepool.local>` 고정 | — |
+| **봉인** 커밋 작성자 | 볼트의 `git config` 값을 따른다 | — |
 
 봉인 커밋 작성자를 나누는 이유: 그 커밋의 내용은 사용자가 옵시디언으로 쓴 것이다.
 에이전트 명의로 남기면 사용자 자신의 볼트 이력에서 자기 작업이 남의 것으로 보인다.
@@ -382,7 +382,7 @@ Obsidian Git 같은 플러그인을 쓸 수도 있다. 따라서 "변경된 `.md
 
 - 미커밋 변경이 **없으면** 봉인이 불필요하므로 그대로 진행한다
 - 미커밋 변경이 **있는데** 신원이 없으면 작업을 시작하지 않고 사용자에게 신원 설정을 요청한다 —
-  _"볼트에 git 신원이 없어 기존 변경을 분리할 수 없습니다. 이름을 설정해 주세요."_
+  *"볼트에 git 신원이 없어 기존 변경을 분리할 수 없습니다. 이름을 설정해 주세요."*
   기본값을 제안하되 사용자가 확정해야 진행한다
 
 안전망 문서이므로 "일단 진행하고 나중에 수습"이 아니라 "분리할 수 없으면 시작하지 않는다"를 택한다.
@@ -397,7 +397,7 @@ Obsidian Git 같은 플러그인을 쓸 수도 있다. 따라서 "변경된 `.md
 1. 커밋에 담긴 경로 각각에 대해, 그 커밋 이후 변경 여부를 확인한다
 2. 변경이 없는 파일은 조용히 이전 내용으로 복원한다
 3. 변경이 있는 파일은 목록으로 보여주고 사용자가 파일 단위로 고른다 —
-   _"이 파일은 그 뒤 직접 수정하셨습니다. 되돌리면 그 수정도 사라집니다."_
+   *"이 파일은 그 뒤 직접 수정하셨습니다. 되돌리면 그 수정도 사라집니다."*
 4. 사용자가 아무것도 안 고르면 그 파일은 건드리지 않는다
 
 부분 복원이 끝나면 그 자체가 새 커밋이 된다. 이력을 다시 쓰지 않으므로
@@ -410,23 +410,12 @@ Obsidian Git 같은 플러그인을 쓸 수도 있다. 따라서 "변경된 `.md
 
 ```ts
 // src/shared/types.ts
-type NotePath = string; // 볼트 루트 기준 상대경로, POSIX 구분자 고정
+type NotePath = string     // 볼트 루트 기준 상대경로, POSIX 구분자 고정
 
-interface Note {
-  path: NotePath;
-  title: string;
-  frontmatter: Fm;
-  body: string;
-}
-interface LinkRef {
-  from: NotePath;
-  to: string;
-  resolved: NotePath | null;
-}
-interface GraphData {
-  nodes: { id: NotePath; title: string }[];
-  edges: { source: NotePath; target: NotePath }[];
-}
+interface Note      { path: NotePath; title: string; frontmatter: Fm; body: string }
+interface LinkRef   { from: NotePath; to: string; resolved: NotePath | null }
+interface GraphData { nodes: { id: NotePath; title: string }[]
+                      edges: { source: NotePath; target: NotePath }[] }
 ```
 
 프론트매터는 4개로 끝낸다.
@@ -547,12 +536,12 @@ Electron에서도 같은 비용이 들고, pdf.js로 충분하다는 측정이 �
 
 ### 7.3 작업 3종 + 세션 1종
 
-| 작업           | 하는 일                                       | 커밋        |
-| -------------- | --------------------------------------------- | ----------- |
-| `ingest`       | 새 자료를 읽고 기존 페이지 갱신·생성·교차링크 | 1개         |
-| `processInbox` | `inbox/` 단편을 위키로 편입                   | 1개         |
-| `lint`         | 깨진 링크·고아·중복·모순·미검증 문단 보고     | 수정 시 1개 |
-| `query`        | 위키를 근거로 답변 — **읽기 전용 툴만 부여**  | 없음        |
+| 작업 | 하는 일 | 커밋 |
+|---|---|---|
+| `ingest` | 새 자료를 읽고 기존 페이지 갱신·생성·교차링크 | 1개 |
+| `processInbox` | `inbox/` 단편을 위키로 편입 | 1개 |
+| `lint` | 깨진 링크·고아·중복·모순·미검증 문단 보고 | 수정 시 1개 |
+| `query` | 위키를 근거로 답변 — **읽기 전용 툴만 부여** | 없음 |
 
 `query`가 위키를 못 고치는 것은 대화 *중*의 얘기다. 대화 내용은 8절의 수확 단계에서
 `ingest`를 거쳐 들어간다 — 즉 쓰기 경로는 언제나 `ingest` 하나뿐이다.
@@ -607,12 +596,10 @@ Electron IPC는 예외를 삼킨다. main에서 `throw`하면 renderer에는 스
 따라서 **IPC 핸들러는 절대 throw하지 않고 `Result` 객체를 반환한다.**
 
 ```ts
-type Result<T> = { ok: true; value: T } | { ok: false; error: AppError };
-interface AppError {
-  kind: ErrorKind;
-  message: string;
-}
-type ErrorKind = "vault_not_found" | "path_escape" | "parse_failed" | "llm_failed" | "git_failed";
+type Result<T> = { ok: true; value: T } | { ok: false; error: AppError }
+interface AppError { kind: ErrorKind; message: string }
+type ErrorKind = 'vault_not_found' | 'path_escape' | 'parse_failed'
+               | 'llm_failed' | 'git_failed'
 ```
 
 `kind`가 직렬화를 견디는 유일한 타입 정보이므로 renderer는 문자열 매칭이 아니라 `kind`로 분기한다.
@@ -641,7 +628,6 @@ type ErrorKind = "vault_not_found" | "path_escape" | "parse_failed" | "llm_faile
   실제 읽기 한 번이면 asar 함정까지 잡힌다. PDF는 여전히 필요 없다.
 
   이 스모크 테스트는 **패키징된 앱에서도 돌린다.** dev 빌드에서만 돌리면 잡으려는 것을 놓친다.
-
 - **되돌리기가 사용자 편집을 삼키지 않는다** — 에이전트 커밋 → 사용자가 같은 파일 편집 →
   [되돌리기] 시 사용자 편집이 살아남는지. 4.3의 실패 모드를 직접 겨눈다.
 
@@ -701,17 +687,17 @@ ingest(file, { onProgress: (msg) => void })
 
 각 단계는 그 자체로 실행 가능해야 하고, 앞 단계가 뒤 단계의 전제가 되도록 배열한다.
 
-| 단계 | 내용                                        | 이 단계가 끝나면                               |
-| ---- | ------------------------------------------- | ---------------------------------------------- |
-| 0    | 새 레포 초기화 — 골격, 최소 CI, 12.3의 이식 | `npm run` 으로 뭔가 돈다                       |
-| 1    | `vault/` + `paths.ts`                       | 볼트 폴더를 읽고 쓴다                          |
-| 2    | `index/` — 링크 파싱·백링크·watch           | `[[]]`에서 그래프가 파생된다                   |
-| 3    | `git/` + 경로 집합 + 되돌리기               | 되돌릴 수 있다 — **에이전트를 붙이기 전 필수** |
-| 4    | `ingest/pdf.ts` + `llm/` + `agent/`         | **PDF를 넣으면 위키가 생긴다**                 |
-| 5    | `lint` · `processInbox`                     | **위키가 스스로를 정리한다**                   |
-| 6    | 쿼리 세션 + 수확 + 출처 각주                | **답하고, 그 대화가 위키를 키운다**            |
-| 7    | Electron 셸 — 창·preload·IPC·최소 화면      | 앱에서 같은 일을 한다                          |
-| 8    | 편집 UI · 그래프 뷰                         | 사람이 위키를 직접 다룬다                      |
+| 단계 | 내용 | 이 단계가 끝나면 |
+|---|---|---|
+| 0 | 새 레포 초기화 — 골격, 최소 CI, 12.3의 이식 | `npm run` 으로 뭔가 돈다 |
+| 1 | `vault/` + `paths.ts` | 볼트 폴더를 읽고 쓴다 |
+| 2 | `index/` — 링크 파싱·백링크·watch | `[[]]`에서 그래프가 파생된다 |
+| 3 | `git/` + 경로 집합 + 되돌리기 | 되돌릴 수 있다 — **에이전트를 붙이기 전 필수** |
+| 4 | `ingest/pdf.ts` + `llm/` + `agent/` | **PDF를 넣으면 위키가 생긴다** |
+| 5 | `lint` · `processInbox` | **위키가 스스로를 정리한다** |
+| 6 | 쿼리 세션 + 수확 + 출처 각주 | **답하고, 그 대화가 위키를 키운다** |
+| 7 | Electron 셸 — 창·preload·IPC·최소 화면 | 앱에서 같은 일을 한다 |
+| 8 | 편집 UI · 그래프 뷰 | 사람이 위키를 직접 다룬다 |
 
 3단계를 4단계보다 앞에 두는 것이 중요하다. 안전망 없이 에이전트에게 쓰기 권한을 주면
 첫 실수에서 볼트를 복구할 방법이 없다.
@@ -730,12 +716,12 @@ ingest(file, { onProgress: (msg) => void })
 
 이 결정이 앞선 설계의 일부를 무효로 만든다. **기존 레포의 CI 배선은 새 레포에 존재하지 않는다.**
 
-| 제약                                             | 기존 레포         | 새 레포            |
-| ------------------------------------------------ | ----------------- | ------------------ |
-| `ssot-check.mjs`의 `docs/10-contracts/` 하드코딩 | 경로 고정 강제    | **없음**           |
-| lychee가 검사하는 계약 파일 링크 184곳           | 파일명 고정 강제  | **없음**           |
-| contracts owner 승인 + `contracts-change` 라벨   | 계약 변경 시 필수 | 폐기할 계약이 없음 |
-| `CLAUDE.md`·`docs/20-backend/` 등 갱신 의무      | 방치하면 CI 적색  | 처음부터 새로 작성 |
+| 제약 | 기존 레포 | 새 레포 |
+|---|---|---|
+| `ssot-check.mjs`의 `docs/10-contracts/` 하드코딩 | 경로 고정 강제 | **없음** |
+| lychee가 검사하는 계약 파일 링크 184곳 | 파일명 고정 강제 | **없음** |
+| contracts owner 승인 + `contracts-change` 라벨 | 계약 변경 시 필수 | 폐기할 계약이 없음 |
+| `CLAUDE.md`·`docs/20-backend/` 등 갱신 의무 | 방치하면 CI 적색 | 처음부터 새로 작성 |
 
 따라서 2.2 트리의 `docs/contracts/{vault-layout,frontmatter,wikilink,ipc}.md`처럼
 **처음부터 제대로 명명한다.** 번호 접두사(`10-contracts`)와 옛 파일명을 물려받지 않는다.
@@ -756,14 +742,14 @@ ingest(file, { onProgress: (msg) => void })
 
 복사는 파일 단위로 하고, 가져온 것은 커밋 메시지에 출처를 남긴다.
 
-| 대상         | 현재 레포 경로                                    | 비고                             |
-| ------------ | ------------------------------------------------- | -------------------------------- |
-| 이 설계문서  | `docs/superpowers/specs/2026-09-05-*.md`          | 새 레포의 첫 커밋                |
-| ADR 원문 3건 | `docs/adr/000{3,5,7}·0010`                        | 근거 보존용. 상태는 `대체됨`으로 |
-| 시각 언어    | `src/ds/primitives/` · `theme/` · `icons/`        | 그대로 이식 (8단계에서)          |
-| 순수 파서    | `src/lib/` (callout·math·wikilink·retitleSync 등) | 발췌 후 `core/`로 재배치         |
-| 에디터 설정  | `.editorconfig` · `.prettierrc.json` · `.nvmrc`   | 그대로                           |
-| 라이선스     | `LICENSE`                                         | 그대로                           |
+| 대상 | 현재 레포 경로 | 비고 |
+|---|---|---|
+| 이 설계문서 | `docs/superpowers/specs/2026-09-05-*.md` | 새 레포의 첫 커밋 |
+| ADR 원문 3건 | `docs/adr/000{3,5,7}·0010` | 근거 보존용. 상태는 `대체됨`으로 |
+| 시각 언어 | `src/ds/primitives/` · `theme/` · `icons/` | 그대로 이식 (8단계에서) |
+| 순수 파서 | `src/lib/` (callout·math·wikilink·retitleSync 등) | 발췌 후 `core/`로 재배치 |
+| 에디터 설정 | `.editorconfig` · `.prettierrc.json` · `.nvmrc` | 그대로 |
+| 라이선스 | `LICENSE` | 그대로 |
 
 가져오지 않는 것: `src-tauri/` 전체 · `docs/10-contracts/` · `scripts/ssot-check.mjs` ·
 `.github/workflows/` · `CHANGELOG.md` · `release-please-*`.
