@@ -1,3 +1,5 @@
+// FROZEN: retitleNote 를 뺀 전체 (0단계 설계 §8)
+// retitleNote 는 가배치 5단계.
 import type { Note, NotePath, Vault } from "../../shared/types.ts";
 
 export async function readNote(v: Vault, p: NotePath): Promise<Note> {

@@ -1,3 +1,4 @@
+// FROZEN: 파일 전체 (0단계 설계 §8, 상위 §7.1)
 import type { OnProgress } from "../../shared/types.ts";
 
 /**
