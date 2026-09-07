@@ -1,3 +1,4 @@
+// FROZEN: 파일 전체 — 경로 방어의 단일 지점 (0단계 설계 §8, 상위 §9)
 import type { NotePath, Vault } from "../../shared/types.ts";
 
 /**

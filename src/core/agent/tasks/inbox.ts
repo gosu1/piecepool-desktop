@@ -1,3 +1,4 @@
+// FROZEN: run() 진입점 (0단계 설계 §8)
 import type { OnProgress, Vault } from "../../../shared/types.ts";
 import type { IngestResult } from "./ingest.ts";
 

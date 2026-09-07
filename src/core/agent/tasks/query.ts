@@ -1,3 +1,4 @@
+// FROZEN: ask() 진입점만 동결. QuerySession 은 가배치 (0단계 설계 §8)
 // OWNER: B — 세션 로그 스키마 미확정, 6단계에서 확정
 import type { OnProgress, Vault } from "../../../shared/types.ts";
 
