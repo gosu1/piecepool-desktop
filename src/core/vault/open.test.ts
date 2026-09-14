@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, readdir } from "node:fs/promises";
+import { mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { openVault } from "./open.ts";
@@ -21,6 +21,14 @@ describe("openVault", () => {
     const missing = join(await tempDir(), "없는폴더");
     await expect(openVault(missing)).rejects.toBeInstanceOf(PiecePoolError);
     await expect(openVault(missing)).rejects.toMatchObject({ kind: "vault_not_found" });
+  });
+
+  it("폴더가 아닌 경로도 vault_not_found 로 던진다", async () => {
+    // 구현에 throw 지점이 둘이다. 파일을 고른 경우가 나머지 하나다.
+    const file = join(await tempDir(), "노트.md");
+    await writeFile(file, "", "utf8");
+    await expect(openVault(file)).rejects.toBeInstanceOf(PiecePoolError);
+    await expect(openVault(file)).rejects.toMatchObject({ kind: "vault_not_found" });
   });
 
   it("폴더에 아무 자국도 남기지 않는다", async () => {

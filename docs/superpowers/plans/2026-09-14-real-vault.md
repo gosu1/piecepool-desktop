@@ -235,7 +235,7 @@ export async function openVault(root: string): Promise<Vault> {
 - [ ] **Step 4: 통과를 확인한다**
 
 Run: `npm test`
-Expected: PASS — **15개(3파일)**
+Expected: PASS — **16개(3파일)**
 
 - [ ] **Step 5: 검증하고 커밋**
 
@@ -382,7 +382,7 @@ async function readDir(absDir: string, relDir: string): Promise<TreeNode[]> {
 - [ ] **Step 4: 통과를 확인한다**
 
 Run: `npm test`
-Expected: PASS — **21개(4파일)**
+Expected: PASS — **22개(4파일)**
 
 - [ ] **Step 5: 검증하고 커밋**
 
@@ -490,7 +490,7 @@ export async function writeLastVault(stateFile: string, root: string): Promise<v
 - [ ] **Step 4: 통과를 확인한다**
 
 Run: `npm test`
-Expected: PASS — **25개(5파일)**
+Expected: PASS — **26개(5파일)**
 
 - [ ] **Step 5: 검증하고 커밋**
 
@@ -607,7 +607,7 @@ import { join } from "node:path";
 - [ ] **Step 5: 정적 검사**
 
 Run: `npx prettier --write . && npm run lint && npm run typecheck && npm test`
-Expected: 넷 다 통과, 테스트 **25개** 그대로
+Expected: 넷 다 통과, 테스트 **26개** 그대로
 
 - [ ] **Step 6: 번들이 CommonJS 인지 확인**
 
@@ -733,7 +733,7 @@ createWindow();
 - [ ] **Step 3: 검증**
 
 Run: `npx prettier --write . && npm run lint && npm run typecheck && npm test`
-Expected: 넷 다 통과, 테스트 **25개** 그대로.
+Expected: 넷 다 통과, 테스트 **26개** 그대로.
 
 특히 lint 가 `main → core` import 를 막지 않는지 확인한다. zones 에 `{ target: "./src/core", from: "./src/main" }` 은 있지만 그 반대는 없다 — `main` 이 `core` 를 부르는 것이 정상 방향이다.
 
@@ -876,7 +876,7 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
 실제로 그런지 확인한다.
 
 Run: `npm test`
-Expected: PASS — **25개** 그대로. 실패하면 그 테스트가 목 데이터에 기대고 있었다는 뜻이니, 무엇이 깨졌는지 보고한다.
+Expected: PASS — **26개** 그대로. 실패하면 그 테스트가 목 데이터에 기대고 있었다는 뜻이니, 무엇이 깨졌는지 보고한다.
 
 - [ ] **Step 4: 검증하고 커밋**
 
@@ -1029,7 +1029,7 @@ export function Shell() {
 - [ ] **Step 6: 정적 검사**
 
 Run: `npx prettier --write . && npm run lint && npm run typecheck && npm test`
-Expected: 넷 다 통과, 테스트 **25개** 그대로
+Expected: 넷 다 통과, 테스트 **26개** 그대로
 
 - [ ] **Step 7: 실제로 볼트를 열어 본다**
 
@@ -1135,7 +1135,7 @@ git commit -m "docs: IPC 와 preload 가 들어온 것을 반영한다"
 ## 통과 조건 (전체)
 
 - `npx prettier --check .` · `npm run lint` · `npm run typecheck` · `npm test` 전부 통과
-- 테스트 **25개 / 5파일**
+- 테스트 **26개 / 5파일**
 - `npm start` 한 번으로 preload 빌드까지 끝난다
 - main 출력에 `Unable to load preload script` 가 없다
 - **사람이 확인할 것** — 하단 전환기를 눌러 폴더 선택 창이 뜨는지, `dev/piecepool-vault-personal` 을 고르면 `wiki/`·`inbox/`·`sources/` 가 뜨고 `.obsidian`·`.piecepool` 은 안 보이는지, 파일명에 `.md` 가 없는지, 껐다 켜면 같은 볼트가 열리는지
