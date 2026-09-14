@@ -164,8 +164,7 @@ AI 에게 받는 것:   JSON      (기계가 읽는 형태. 코드가 확실히 
       "append_to_existing": [{ "target_heading": "기존 절", "content": "덧붙일 내용" }],
       "new_records": [{ "fact": "QA 담당이다", "quote": "김대리가 QA 리뷰 결과를 발표함" }]
     }
-  ],
-  "no_changes": false
+  ]
 }
 ```
 
