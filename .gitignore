@@ -4,3 +4,6 @@ dist/
 *.tsbuildinfo
 .env
 .env.local
+
+# 픽스처의 원본 PDF — 용량과 저작권. fixtures/README.md 참조
+fixtures/vault/sources/
