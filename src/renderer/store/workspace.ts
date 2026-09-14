@@ -1,9 +1,9 @@
 import { create } from "zustand";
+import type { NotePath } from "../../shared/types.ts";
 
 export interface TreeNode {
   name: string;
-  /** 볼트 루트 기준 상대경로. POSIX 구분자로 고정한다. */
-  path: string;
+  path: NotePath;
   kind: "dir" | "file";
   children?: TreeNode[];
 }

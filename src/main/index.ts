@@ -1,5 +1,5 @@
 // OWNER: 7단계 — 빈 셸이다. IPC·메뉴·창 상태 복원은 아직 없다.
-import { app, BrowserWindow, Menu } from "electron";
+import { app, BrowserWindow, Menu, shell } from "electron";
 
 // vite dev 서버를 본다. 프로덕션 빌드 경로(out/renderer)는 패키징을 시작할 때 정한다.
 const DEV_URL = "http://localhost:5173";
@@ -39,6 +39,20 @@ function createWindow(): void {
     console.error(
       `vite dev 서버(${DEV_URL})에 연결하지 못했다 — 다른 터미널에서 npm run dev 를 먼저 켜라.`,
     );
+  });
+
+  // SPA 는 자기 origin 밖으로 내비게이트할 일이 없다.
+  // 지금은 렌더러에 링크가 없어 막을 것도 없지만, 나중에 생긴 뒤 켜면
+  // 그 사이에 붙은 링크를 하나하나 걸러내야 한다 — 지금 걸어 둔다.
+  win.webContents.on("will-navigate", (event) => {
+    event.preventDefault();
+  });
+
+  // 새 창을 띄우는 대신 OS 기본 브라우저로 넘긴다.
+  // Electron 창으로 외부 URL 을 열면 그 창은 이 webPreferences 를 안 받는다.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    void shell.openExternal(url);
+    return { action: "deny" };
   });
 
   // 기본 메뉴를 껐으므로 DevTools 단축키도 같이 사라졌다 — 손으로 다시 단다.
