@@ -1,12 +1,9 @@
 import { create } from "zustand";
 import type { NotePath } from "../../shared/types.ts";
+import type { TreeNode } from "../../shared/ipc.ts";
 
-export interface TreeNode {
-  name: string;
-  path: NotePath;
-  kind: "dir" | "file";
-  children?: TreeNode[];
-}
+// FileTree.tsx 가 스토어에서 TreeNode 를 가져다 쓴다. 그 import 를 살려 둔다.
+export type { TreeNode };
 
 export const MIN_SIDEBAR_WIDTH = 180;
 export const MAX_SIDEBAR_WIDTH = 480;
