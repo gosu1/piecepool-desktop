@@ -1,6 +1,8 @@
 // OWNER: 7단계 — 빈 셸이다. IPC·메뉴·창 상태 복원은 아직 없다.
 import { app, BrowserWindow, Menu } from "electron";
-import { join } from "node:path";
+
+// vite dev 서버를 본다. 프로덕션 빌드 경로(out/renderer)는 패키징을 시작할 때 정한다.
+const DEV_URL = "http://localhost:5173";
 
 /**
  * 부트와 윈도우 생성만 한다. 로직을 두지 않는다 —
@@ -33,7 +35,7 @@ function createWindow(): void {
     },
   });
 
-  void win.loadFile(join(import.meta.dirname, "../renderer/index.html"));
+  void win.loadURL(DEV_URL);
 }
 
 app.on("window-all-closed", () => {

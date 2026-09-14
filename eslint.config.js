@@ -20,7 +20,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
 
   {
-    files: ["src/**/*.ts"],
+    files: ["src/**/*.{ts,tsx}"],
     plugins: { "import-x": importX },
     settings: {
       "import-x/resolver": { node: { extensions: [".ts", ".tsx"] } },
