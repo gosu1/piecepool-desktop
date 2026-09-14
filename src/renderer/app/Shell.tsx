@@ -1,10 +1,18 @@
 import { useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import { Ribbon } from "./Ribbon.tsx";
 import { Sidebar } from "./Sidebar.tsx";
-import { RIBBON_WIDTH, useWorkspace } from "../store/workspace.ts";
+import {
+  MAX_SIDEBAR_WIDTH,
+  MIN_SIDEBAR_WIDTH,
+  RIBBON_WIDTH,
+  useWorkspace,
+} from "../store/workspace.ts";
+
+const SIDEBAR_WIDTH_KEY_STEP = 16;
 
 function ResizeHandle() {
+  const sidebarWidth = useWorkspace((s) => s.sidebarWidth);
   const setSidebarWidth = useWorkspace((s) => s.setSidebarWidth);
   const [dragging, setDragging] = useState(false);
 
@@ -23,14 +31,29 @@ function ResizeHandle() {
     setDragging(false);
   };
 
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      setSidebarWidth(sidebarWidth - SIDEBAR_WIDTH_KEY_STEP);
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      setSidebarWidth(sidebarWidth + SIDEBAR_WIDTH_KEY_STEP);
+    }
+  };
+
   return (
     <div
       role="separator"
       aria-orientation="vertical"
+      aria-valuenow={sidebarWidth}
+      aria-valuemin={MIN_SIDEBAR_WIDTH}
+      aria-valuemax={MAX_SIDEBAR_WIDTH}
+      tabIndex={0}
       onPointerDown={onDown}
       onPointerMove={onMove}
       onPointerUp={onUp}
-      className="w-1 shrink-0 cursor-col-resize hover:bg-primary"
+      onKeyDown={onKeyDown}
+      className="w-1 shrink-0 cursor-col-resize hover:bg-primary focus-visible:bg-primary focus-visible:outline-none"
     />
   );
 }
