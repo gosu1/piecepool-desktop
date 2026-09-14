@@ -9,8 +9,8 @@ export type Candidates = {
   related: WikiPage[];
   /** 왜 후보가 되었는지 — 로그로 설계를 확인하기 위해 남긴다. */
   why: Map<string, "글자" | "뜻">;
-  /** 덧붙일 수 있는 절 이름. 해시가 일치하는 것만. */
-  appendable: string[];
+  /** 고칠 수 있는 절 이름 — 다시 써도 되는 것. 해시가 일치하는 것만. */
+  rewritable: string[];
   /** 링크를 걸 수 있는 이름. 제목과 별칭 전부. */
   linkable: string[];
 };
@@ -74,15 +74,20 @@ export function pickCandidates(note: Note, wiki: WikiPage[], embed?: EmbedOpts):
     }
   }
 
+  // `나` 는 항상 후보다. '나' 에 관한 페이지들의 목차이므로 AI 가 그 존재를 알아야
+  // 새 페이지를 거기 링크할 수 있다. 레퍼런스의 overview.md / Home.md 와 같은 고정 허브.
+  const me = wiki.find((p) => normalizeTitle(p.name) === "나");
+  if (me && !why.has(me.name)) why.set(me.name, "글자");
+
   const related = wiki.filter((p) => why.has(p.name));
 
-  // 덧붙일 수 있는 절 — 해시가 일치하는 것만. 사용자가 고친 절은 목록에서 빠진다.
+  // 고칠 수 있는 절 — 해시가 일치하는 것만. 사용자가 고친 절은 목록에서 빠진다.
   // 페이지별로 묶어서 준다. "CNN / 핵심 개념" 처럼 한 줄로 주면 `/` 가 구분자인지
   // 절 이름의 일부인지 헷갈리고, 규칙 2 가 파일명에 `/` 를 금지하고 있어 더 혼란스럽다.
-  const appendable: string[] = [];
+  const rewritable: string[] = [];
   for (const page of related) {
     const names = page.sections.filter((x) => x.ours && x.heading !== "요약").map((x) => x.heading);
-    if (names.length) appendable.push(`${page.name}: ${names.join(", ")}`);
+    if (names.length) rewritable.push(`${page.name}: ${names.join(", ")}`);
   }
 
   // 링크 후보 — 볼트의 모든 페이지. 후보로 추려진 것만이 아니다.
@@ -92,7 +97,7 @@ export function pickCandidates(note: Note, wiki: WikiPage[], embed?: EmbedOpts):
     linkable.push(aliases.length ? `${page.name} (별칭: ${aliases.join(", ")})` : page.name);
   }
 
-  return { related, why, appendable, linkable };
+  return { related, why, rewritable, linkable };
 }
 
 /** 위키 페이지를 프롬프트에 넣을 마크다운으로. 사용자가 고친 절은 목록에서 빠지므로 표시가 필요 없다. */
@@ -136,9 +141,9 @@ export function buildUserMessage(note: Note, c: Candidates): string {
   out.push("</관련 위키>");
   out.push("");
 
-  out.push("<덧붙일 수 있는 절>");
-  out.push(c.appendable.length ? c.appendable.join("\n") : "(없습니다)");
-  out.push("</덧붙일 수 있는 절>");
+  out.push("<고칠 수 있는 절>");
+  out.push(c.rewritable.length ? c.rewritable.join("\n") : "(없습니다)");
+  out.push("</고칠 수 있는 절>");
   out.push("");
 
   out.push("<링크 후보 목록>");

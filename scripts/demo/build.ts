@@ -8,12 +8,15 @@ import type { LlmPage } from "./llm.ts";
 
 export type VerifyIssue = {
   page: string;
-  kind: "quote-없음" | "링크-해제" | "절-잠김" | "절-없음" | "이름-비었음";
+  kind:
+    "quote-없음" | "링크-해제" | "절-잠김" | "절-없음" | "절-보호" | "이름-비었음" | "나-기록-중복";
   detail: string;
 };
 
 export type VerifiedRecord = {
   fact: string;
+  /** 원문 구절. 저장하지 않고 중복 판정에만 쓴다. */
+  quote: string;
   /** 원문에서 찾은 위치. 헤딩이 있으면 그 이름, 없으면 null. */
   anchor: string | null;
 };
@@ -23,8 +26,8 @@ export type VerifiedPage = {
   aliasesToAdd: string[];
   summary: string | null;
   newSections: { heading: string; content: string }[];
-  /** 매칭과 잠금 확인을 통과한 것만. 실패한 것은 newSections 로 우회되어 있다. */
-  appends: { heading: string; content: string }[];
+  /** 절을 통째로 바꾼다. 매칭과 잠금 확인을 통과한 것만. 실패한 것은 newSections 로 우회되어 있다. */
+  replaces: { heading: string; content: string }[];
   records: VerifiedRecord[];
 };
 
@@ -63,8 +66,13 @@ function findQuote(sourceBody: string, quote: string): { found: boolean; anchor:
     }
   }
 
+  // 끝의 조사 하나("…실제 데이터" 를 "…실제 데이터는" 으로) 때문에 정확한 인용을 버리지
+  // 않는다. 12자 이상일 때만 끝 1~2자를 잘라 다시 찾는다 — 짧은 인용은 그대로 엄격하다.
+  const needles = [needle];
+  if (needle.length >= 12) needles.push(needle.slice(0, -1), needle.slice(0, -2));
   for (const seg of segments) {
-    if (normQuote(seg.text).includes(needle)) return { found: true, anchor: seg.anchor };
+    const hay = normQuote(seg.text);
+    if (needles.some((n) => hay.includes(n))) return { found: true, anchor: seg.anchor };
   }
   return { found: false, anchor: null };
 }
@@ -171,7 +179,7 @@ export function verify(input: VerifyInput): VerifyResult {
 
     const target = input.existing.get(normalizeTitle(p.name));
     const newSections: { heading: string; content: string }[] = [];
-    const appends: { heading: string; content: string }[] = [];
+    const replaces: { heading: string; content: string }[] = [];
 
     const strip = (name: string, reason: "목록밖" | "자기링크") =>
       issues.push({
@@ -181,21 +189,39 @@ export function verify(input: VerifyInput): VerifyResult {
           reason === "자기링크" ? `[[${name}]] — 자기 자신입니다` : `[[${name}]] — 목록에 없습니다`,
       });
 
+    const clean = (text: string) =>
+      demoteHeadings(autoLink(stripUnknownLinks(text, known, p.name, strip), displayNames, p.name));
+
     for (const s of p.new_sections ?? []) {
-      newSections.push({
-        heading: s.heading.trim(),
-        content: demoteHeadings(
-          autoLink(stripUnknownLinks(s.content, known, p.name, strip), displayNames, p.name),
-        ),
-      });
+      const h = normalizeTitle(s.heading);
+      if (h === "기록" || h === "요약") {
+        issues.push({
+          page: p.name,
+          kind: "절-보호",
+          detail: `"${s.heading}" 은 코드가 관리합니다 → 버립니다`,
+        });
+        continue;
+      }
+      newSections.push({ heading: s.heading.trim(), content: clean(s.content) });
     }
 
     // 매칭 → 해시 확인. 둘이 같은 자리에 있어야 한다.
-    for (const a of p.append_to_existing ?? []) {
-      const wanted = normalizeTitle(a.target_heading);
-      const content = demoteHeadings(
-        autoLink(stripUnknownLinks(a.content, known, p.name, strip), displayNames, p.name),
-      );
+    for (const e of p.replace_sections ?? []) {
+      const wanted = normalizeTitle(e.target_heading);
+
+      // `기록` 과 `요약` 은 코드가 관리한다. 본문 절이 없는 페이지에서 AI 가 `기록` 을
+      // 다시 쓰려 했고, 우회 로직이 그것을 새 절 `기록` 으로 만들어 헤딩이 둘이 됐다
+      // (3회차 실측). 우회하지 않고 버린다 — 기록은 new_records 로만 들어온다.
+      if (wanted === "기록" || wanted === "요약") {
+        issues.push({
+          page: p.name,
+          kind: "절-보호",
+          detail: `"${e.target_heading}" 은 코드가 관리합니다 → 버립니다`,
+        });
+        continue;
+      }
+
+      const content = clean(e.content);
 
       const matched = target?.sections.find(
         (s) =>
@@ -207,18 +233,20 @@ export function verify(input: VerifyInput): VerifyResult {
         issues.push({
           page: p.name,
           kind: "절-없음",
-          detail: `"${a.target_heading}" → 새 절로 우회`,
+          detail: `"${e.target_heading}" → 새 절로 우회`,
         });
-        newSections.push({ heading: a.target_heading.trim(), content });
+        newSections.push({ heading: e.target_heading.trim(), content });
       } else if (!matched.ours) {
+        // 같은 이름으로 우회하면 빌더가 잠긴 절에 합치고 지문을 새로 찍어, 다음 정리에서
+        // 사용자의 글이 통째로 덮인다 (4회차 실측). 이름을 바꿔 **별개의 절**로 둔다.
         issues.push({
           page: p.name,
           kind: "절-잠김",
-          detail: `"${matched.heading}" 은 사용자가 고쳤습니다 → 새 절로 우회`,
+          detail: `"${matched.heading}" 은 사용자가 고쳤습니다 → "${matched.heading} (추가)" 로 우회`,
         });
-        newSections.push({ heading: a.target_heading.trim(), content });
+        newSections.push({ heading: `${matched.heading} (추가)`, content });
       } else {
-        appends.push({ heading: matched.heading, content });
+        replaces.push({ heading: matched.heading, content });
       }
     }
 
@@ -233,11 +261,14 @@ export function verify(input: VerifyInput): VerifyResult {
         });
         continue;
       }
-      records.push({ fact: r.fact.trim(), anchor });
+      records.push({ fact: r.fact.trim(), quote: r.quote, anchor });
     }
 
     // 요약이 사용자 편집이면 덮지 않는다.
-    let summary = p.summary?.trim() || null;
+    // 요약에도 링크를 건다 — "CNN 은 신경망 구조다" 같은 상위 개념 언급이 요약에만 있어서
+    // 본문만 걸면 그 연결이 사라진다 (1회차: 들어오는 링크 없는 11장 중 여럿이 이 경우).
+    // 요약은 한 줄이라 헤딩 강등은 필요 없다.
+    let summary = p.summary?.trim() ? clean(p.summary.trim()).replace(/\r?\n+/g, " ") : null;
     const sumSec = target?.sections.find((s) => s.heading === "요약");
     if (sumSec && !sumSec.ours && summary) {
       issues.push({ page: p.name, kind: "절-잠김", detail: "요약은 사용자가 고쳤습니다 → 유지" });
@@ -249,9 +280,28 @@ export function verify(input: VerifyInput): VerifyResult {
       aliasesToAdd: (p.aliases_to_add ?? []).map((s) => s.trim()).filter(Boolean),
       summary,
       newSections,
-      appends,
+      replaces,
       records,
     });
+  }
+
+  // `나` 허브의 기록 — 같은 호출의 다른 페이지에 같은 구절의 기록이 있으면 중복이다.
+  // 프롬프트로는 안 막혔고(2회차: 34건), 표본은 전부 주제 페이지에도 있었다. 다른 곳에
+  // 없는 것만 남긴다 — 사실을 잃지 않으면서 허브가 일기가 되는 것을 막는다.
+  const me = pages.find((x) => normalizeTitle(x.name) === "나");
+  if (me) {
+    const elsewhere = new Set(
+      pages.filter((x) => x !== me).flatMap((x) => x.records.map((r) => normQuote(r.quote))),
+    );
+    const kept = me.records.filter((r) => !elsewhere.has(normQuote(r.quote)));
+    if (kept.length !== me.records.length) {
+      issues.push({
+        page: "나",
+        kind: "나-기록-중복",
+        detail: `${me.records.length - kept.length}건은 주제 페이지에 있어 뺐습니다`,
+      });
+      me.records = kept;
+    }
   }
 
   return { pages, issues };
@@ -282,26 +332,39 @@ export function buildMarkdown(input: BuildInput): string {
 
   const summary = page.summary ?? existing?.summary ?? "";
 
-  // 절: 기존 것을 순서대로 두고, append 를 붙이고, 새 절을 뒤에 더한다.
+  // 절: 기존 것을 순서대로 두고, 다시 쓴 것은 바꾸고, 새 절을 뒤에 더한다.
   type Sec = { heading: string; content: string; ours: boolean };
   const sections: Sec[] = [];
   for (const s of existing?.sections ?? []) {
     if (s.heading === "요약") continue;
-    const add = page.appends.filter((a) => a.heading === s.heading);
+    const rep = page.replaces.find((r) => r.heading === s.heading);
     sections.push({
       heading: s.heading,
-      content: add.length ? [s.content, ...add.map((a) => a.content)].join("\n\n") : s.content,
-      // 덧붙였으면 우리 글이 되고, 그대로면 이전 판정을 유지한다.
-      ours: add.length ? true : s.ours,
+      content: rep ? rep.content : s.content,
+      // 다시 썼으면 우리 글이 되고, 그대로면 이전 판정을 유지한다.
+      ours: rep ? true : s.ours,
     });
   }
   for (const s of page.newSections) {
     const dup = sections.find((x) => normalizeTitle(x.heading) === normalizeTitle(s.heading));
-    if (dup) {
+    if (dup && dup.ours) {
       dup.content = [dup.content, s.content].join("\n\n");
-      dup.ours = true;
+    } else if (dup) {
+      // 잠긴 절에는 합치지 않는다. 합치면 사용자의 글에 지문이 새로 찍혀 우리 글이 된다.
+      sections.push({ heading: `${s.heading} (추가)`, content: s.content, ours: true });
     } else {
       sections.push({ heading: s.heading, content: s.content, ours: true });
+    }
+  }
+
+  // `나` 허브는 절이 링크 집합이다. 다시 쓸 때 AI 가 링크를 빠뜨릴 수 있으므로
+  // **기존 링크와 합집합**을 취한다 — 허브에서 링크는 늘기만 한다. 링크가 벗겨진
+  // 이름이 글자로 남거나 같은 링크가 두 번 들어가는 것도 여기서 정리된다.
+  if (normalizeTitle(page.name) === "나") {
+    for (const s of sections) {
+      if (!s.ours) continue;
+      const before = existing?.sections.find((x) => x.heading === s.heading)?.content ?? "";
+      s.content = linkSet(before + "\n" + s.content);
     }
   }
 
@@ -311,7 +374,9 @@ export function buildMarkdown(input: BuildInput): string {
   for (const r of page.records) {
     const anchor = r.anchor ? `#${r.anchor}` : "";
     const when = date ?? "(날짜 미상)";
-    const line = `- ${when} ${r.fact} ← [[${sourceName}${anchor}]]`;
+    // AI 가 fact 앞에 노트 날짜를 또 붙이기도 한다 ("2026-10-08 2026-10-08 첫 운동으로…"). 뗀다.
+    const fact = date ? r.fact.replace(new RegExp(`^${date}\\s*`), "") : r.fact;
+    const line = `- ${when} ${fact} ← [[${sourceName}${anchor}]]`;
     if (!seen.has(normQuote(line))) {
       records.push(line);
       seen.add(normQuote(line));
@@ -368,10 +433,31 @@ export function buildMarkdown(input: BuildInput): string {
   return out.join("\n");
 }
 
-/** 출력 벽 1 — AI 가 "네, 작성하겠습니다" 한 줄만 뱉은 경우 기존 위키를 지키기 위해. */
-export function looksEmpty(markdown: string): boolean {
-  const body = markdown.replace(/^---[\s\S]*?---/, "").trim();
-  return body.length < 40 || !/^#\s/m.test(body);
+/**
+ * 검문을 통과한 뒤 페이지에 남은 것이 있는가.
+ * 없으면 새 페이지는 만들지 않고(출력 벽 1), 기존 페이지는 쓰지 않는다 — 쓰면
+ * 내용은 그대로인데 `sources` 에 노트가 하나 더 붙고 `compiledAt` 만 바뀐다.
+ *
+ * 예전 `looksEmpty` 는 "본문 40자 미만" 을 봤는데, 링크 하나만 덧붙는 `나` 허브
+ * 갱신을 빈 깡통으로 오판했다 (2026-09-15 실측). Structured Outputs 로 JSON 이
+ * 강제되고 `#` 을 코드가 찍는 지금은 글자 수를 볼 이유가 없다.
+ */
+export function hasChanges(page: VerifiedPage): boolean {
+  return (
+    page.summary !== null ||
+    page.aliasesToAdd.length > 0 ||
+    page.newSections.length > 0 ||
+    page.replaces.length > 0 ||
+    page.records.length > 0
+  );
+}
+
+/** 본문에서 `[[링크]]` 만 뽑아 중복 없이 ` · ` 로 잇는다. 링크가 아닌 글자는 버린다. */
+function linkSet(text: string): string {
+  const links = (text.match(/\[\[[^\]]+\]\]/g) ?? []).map((m) => m.slice(2, -2).split("|")[0]);
+  return unique(links)
+    .map((l) => `[[${l}]]`)
+    .join(" · ");
 }
 
 function unique(xs: string[]): string[] {

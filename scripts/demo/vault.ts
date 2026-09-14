@@ -57,6 +57,15 @@ export type WikiPage = {
   recordsOurs: boolean;
 };
 
+/**
+ * 지역 시간대의 YYYY-MM-DD. `toISOString()` 은 UTC 라서 한국 시간 자정부터 오전 9시
+ * 사이에 쓴 노트가 전날 날짜를 받는다 (2026-09-15 새벽 실측: 14일로 나옴).
+ */
+export function localDate(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 /** sha256 앞 8자리. ADR-0002 결정 5. */
 export function hash8(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex").slice(0, 8);
@@ -119,8 +128,7 @@ function pickDate(fm: Record<string, string>, fileName: string, mtime: Date): st
     const m = re.exec(fileName);
     if (m) return take(m);
   }
-  const iso = mtime.toISOString().slice(0, 10);
-  return iso || null;
+  return localDate(mtime);
 }
 
 export async function readNote(root: string, path: string): Promise<Note> {
