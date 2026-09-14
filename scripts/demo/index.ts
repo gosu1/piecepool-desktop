@@ -30,6 +30,8 @@ type Args = {
   noCache: boolean;
   threshold: number;
   topN: number;
+  /** 시스템 프롬프트 파일. 실험에서 옛 판과 비교할 때 바꾼다. */
+  prompt: string;
 };
 
 function parseArgs(argv: string[]): Args {
@@ -41,6 +43,7 @@ function parseArgs(argv: string[]): Args {
     noCache: false,
     threshold: 0.6,
     topN: 8,
+    prompt: "src/core/prompts/write.md",
   };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
@@ -51,6 +54,7 @@ function parseArgs(argv: string[]): Args {
     else if (k === "--no-cache") a.noCache = true;
     else if (k === "--threshold") a.threshold = Number(argv[++i]);
     else if (k === "--top") a.topN = Number(argv[++i]);
+    else if (k === "--prompt") a.prompt = argv[++i];
   }
   return a;
 }
@@ -153,7 +157,8 @@ async function main(): Promise<void> {
   );
   console.log("");
 
-  const systemPrompt = await readFile("src/core/prompts/write.md", "utf8");
+  const systemPrompt = await readFile(args.prompt, "utf8");
+  if (args.prompt !== "src/core/prompts/write.md") console.log(`프롬프트: ${args.prompt}`);
   const state = await readSyncState(args.vault);
 
   // 날짜순으로 처리한다. 경로순이면 `독서/` 가 `일기/` 보다 먼저 와서 시간이 뒤섞이고,
