@@ -78,10 +78,10 @@ store.pickVault()
 | `src/shared/ipc.ts`               | **신규**  | 채널명과 요청/응답 타입. `TreeNode` 가 여기로 이사 |
 | `src/core/vault/open.ts`          | 스텁 채움 | 폴더 존재 확인 후 `Vault` 반환. git 없음           |
 | `src/core/vault/tree.ts`          | **신규**  | 디스크 순회. 심볼릭 링크 폴더는 따라가지 않는다    |
-| `src/main/ipc.ts`                 | 스텁 채움 | 핸들러 3개. 기존 `wrap()` 으로 감싼다              |
+| `src/main/ipc.ts`                 | 스텁 채움 | 핸들러 2개. 기존 `wrap()` 으로 감싼다              |
 | `src/main/recent.ts`              | **신규**  | `userData` 에 마지막 볼트 경로 하나                |
 | `src/main/index.ts`               | 수정      | `preload` 경로 지정 · `registerHandlers()` 호출    |
-| `src/preload/index.ts`            | 스텁 채움 | `contextBridge` 화이트리스트 3개                   |
+| `src/preload/index.ts`            | 스텁 채움 | `contextBridge` 화이트리스트 2개                   |
 | `vite.preload.config.ts`          | **신규**  | preload 를 단일 `.cjs` 로                          |
 | `src/renderer/store/workspace.ts` | 수정      | `MOCK_TREE` 제거. 볼트 상태와 IPC 호출 추가        |
 | `src/renderer/app/Sidebar.tsx`    | 수정      | 하단 볼트 전환기 · 빈 상태                         |
@@ -123,7 +123,7 @@ export interface TreeNode {
 스토어는 이 타입을 **재수출**한다 — `FileTree.tsx` 의 import 가 그대로 동작해야 한다.
 
 `vault:pick` 과 `vault:last` 가 트리까지 함께 실어 보내는 이유: 볼트를 열면 트리는 항상 필요하다.
-두 번 왕복할 이유가 없다. `vault:tree` 는 나중에 새로고침을 붙일 자리로 남긴다.
+두 번 왕복할 이유가 없다.
 
 ## 6. 트리를 읽는 규칙
 
