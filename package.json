@@ -5,10 +5,12 @@
   "license": "UNLICENSED",
   "author": "gosu1",
   "type": "module",
+  "main": "src/main/index.ts",
   "engines": {
     "node": ">=22.18"
   },
   "scripts": {
+    "start": "electron .",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.web.json",
     "test": "vitest run",
@@ -21,6 +23,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.18.0",
+    "electron": "^44.3.0",
     "eslint": "^10.10.0",
     "eslint-plugin-import-x": "^4.17.1",
     "prettier": "^3.6.2",
