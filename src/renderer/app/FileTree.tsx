@@ -12,12 +12,16 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
       <button
         type="button"
         onClick={() => (isDir ? toggleFolder(node.path) : select(node.path))}
+        aria-expanded={isDir ? expanded : undefined}
+        aria-current={!isDir && selected ? "true" : undefined}
         style={{ paddingLeft: 8 + depth * 14 }}
         className={`flex h-6 w-full items-center gap-1 pr-2 text-left text-sm ${
           selected ? "bg-fill-subtle text-ink" : "text-ink-2 hover:bg-fill-subtle"
         }`}
       >
-        <span className="w-3 shrink-0 text-ink-faint">{isDir ? (expanded ? "▾" : "▸") : ""}</span>
+        <span aria-hidden="true" className="w-3 shrink-0 text-ink-faint">
+          {isDir ? (expanded ? "▾" : "▸") : ""}
+        </span>
         <span className="truncate">{node.name}</span>
       </button>
 

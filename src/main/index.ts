@@ -35,7 +35,19 @@ function createWindow(): void {
     },
   });
 
-  void win.loadURL(DEV_URL);
+  win.loadURL(DEV_URL).catch(() => {
+    console.error(
+      `vite dev 서버(${DEV_URL})에 연결하지 못했다 — 다른 터미널에서 npm run dev 를 먼저 켜라.`,
+    );
+  });
+
+  // 기본 메뉴를 껐으므로 DevTools 단축키도 같이 사라졌다 — 손으로 다시 단다.
+  // 지우지 말 것: UI 작업하는 사람들에게 창을 들여다볼 방법이 이것뿐이다.
+  win.webContents.on("before-input-event", (_event, input) => {
+    const isToggle =
+      input.key === "F12" || (input.control && input.shift && input.key.toLowerCase() === "i");
+    if (isToggle) win.webContents.toggleDevTools();
+  });
 }
 
 app.on("window-all-closed", () => {

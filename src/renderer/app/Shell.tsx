@@ -49,9 +49,11 @@ function ResizeHandle() {
       aria-valuemin={MIN_SIDEBAR_WIDTH}
       aria-valuemax={MAX_SIDEBAR_WIDTH}
       tabIndex={0}
+      aria-label="사이드바 너비"
       onPointerDown={onDown}
       onPointerMove={onMove}
       onPointerUp={onUp}
+      onPointerCancel={onUp}
       onKeyDown={onKeyDown}
       className="w-1 shrink-0 cursor-col-resize hover:bg-primary focus-visible:bg-primary focus-visible:outline-none"
     />

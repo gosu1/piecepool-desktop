@@ -24,6 +24,14 @@ describe("clampWidth", () => {
   it("범위 안이면 그대로 둔다", () => {
     expect(clampWidth(300)).toBe(300);
   });
+
+  it("최소값 그대로는 최소로 둔다", () => {
+    expect(clampWidth(MIN_SIDEBAR_WIDTH)).toBe(MIN_SIDEBAR_WIDTH);
+  });
+
+  it("최대값 그대로는 최대로 둔다", () => {
+    expect(clampWidth(MAX_SIDEBAR_WIDTH)).toBe(MAX_SIDEBAR_WIDTH);
+  });
 });
 
 describe("toggleFolder", () => {

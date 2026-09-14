@@ -148,8 +148,9 @@ addSource(fm, "...")       // 이렇게
 throw new Error("unimplemented: core/vault/notes.readNote");
 ```
 
-**버그가 아니다.** 0단계의 정상 상태이고 45곳이 그렇다.
-실동작하는 것은 `core/assets.ts` · `core/prompts/load.ts` · `main/ipc.ts` 의 `wrap()` 세 곳뿐이다.
+**버그가 아니다.** `core/` 는 아직 43곳이 이 상태다.
+`core/assets.ts` · `core/prompts/load.ts` · `main/ipc.ts` 의 `wrap()` 외에,
+`main/index.ts` 와 `renderer/` 전체는 이제 실동작한다 (7·8단계 진행 중).
 
 - **요청받지 않은 스텁을 채우지 마라.** 지나가다 구현하지 않는다
 - 실행이 `unimplemented` 로 죽는 것이 현재의 통과 조건이다. 성공이 아니다
