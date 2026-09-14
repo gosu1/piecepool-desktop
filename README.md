@@ -149,8 +149,16 @@ npm test
 npm run ingest -- <볼트폴더> <파일>    # unimplemented 로 죽는다 (정상)
 ```
 
-Node 22.18 이상이 필요하다 (`.nvmrc` 참조). `electron` 과 `react` 는 아직 설치하지 않았다 —
-7·8단계에서 넣는다.
+앱을 띄우려면 터미널 두 개가 필요하다 — `main` 이 `http://localhost:5173` 을 로드하므로
+vite 가 먼저 떠 있어야 한다.
+
+```bash
+npm run dev     # 터미널 1: vite 개발 서버
+npm start       # 터미널 2: electron
+```
+
+Node 22.18 이상이 필요하다 (`.nvmrc` 참조). `electron` 과 `react` 는 설치돼 있다 —
+`electron` 은 7단계, `react` 는 8단계에서 들어왔다.
 
 ---
 

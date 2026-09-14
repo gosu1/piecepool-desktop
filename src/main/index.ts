@@ -35,32 +35,50 @@ function createWindow(): void {
     },
   });
 
-  win.loadURL(DEV_URL).catch(() => {
+  win.loadURL(DEV_URL).catch((err: unknown) => {
     console.error(
       `vite dev 서버(${DEV_URL})에 연결하지 못했다 — 다른 터미널에서 npm run dev 를 먼저 켜라.`,
+      err,
     );
   });
 
   // SPA 는 자기 origin 밖으로 내비게이트할 일이 없다.
-  // 지금은 렌더러에 링크가 없어 막을 것도 없지만, 나중에 생긴 뒤 켜면
-  // 그 사이에 붙은 링크를 하나하나 걸러내야 한다 — 지금 걸어 둔다.
-  win.webContents.on("will-navigate", (event) => {
-    event.preventDefault();
+  // 단, vite HMR 클라이언트가 같은 origin 으로 location.reload() 를 거는 것까지 막으면
+  // full-reload 때마다 창이 멈춘다 — 다른 origin 으로 나가는 것만 막는다.
+  win.webContents.on("will-navigate", (event, url) => {
+    try {
+      if (new URL(url).origin !== new URL(DEV_URL).origin) event.preventDefault();
+    } catch {
+      event.preventDefault();
+    }
   });
 
   // 새 창을 띄우는 대신 OS 기본 브라우저로 넘긴다.
   // Electron 창으로 외부 URL 을 열면 그 창은 이 webPreferences 를 안 받는다.
+  // url 은 렌더러(나중엔 사용자 마크다운)에서 오므로 http(s) 만 받는다 —
+  // shell.openExternal 은 file:·smb:·ms-* 등 OS 가 등록한 아무 핸들러나 부른다.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    try {
+      const protocol = new URL(url).protocol;
+      if (protocol === "http:" || protocol === "https:") void shell.openExternal(url);
+    } catch {
+      // 파싱 실패는 그냥 버린다.
+    }
     return { action: "deny" };
   });
 
   // 기본 메뉴를 껐으므로 DevTools 단축키도 같이 사라졌다 — 손으로 다시 단다.
   // 지우지 말 것: UI 작업하는 사람들에게 창을 들여다볼 방법이 이것뿐이다.
-  win.webContents.on("before-input-event", (_event, input) => {
+  // before-input-event 는 keyDown·keyUp 둘 다에서 뜬다 — keyUp 까지 토글하면
+  // 한 번 누른 게 두 번 토글되어(열림→즉시 닫힘) 단축키가 죽는다.
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
     const isToggle =
       input.key === "F12" || (input.control && input.shift && input.key.toLowerCase() === "i");
-    if (isToggle) win.webContents.toggleDevTools();
+    if (isToggle) {
+      event.preventDefault();
+      win.webContents.toggleDevTools();
+    }
   });
 }
 

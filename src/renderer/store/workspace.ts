@@ -65,12 +65,12 @@ const MOCK_TREE: TreeNode[] = [
 
 interface WorkspaceState {
   tree: TreeNode[];
-  expanded: Set<string>;
-  selected: string | null;
+  expanded: Set<NotePath>;
+  selected: NotePath | null;
   sidebarOpen: boolean;
   sidebarWidth: number;
-  toggleFolder: (path: string) => void;
-  select: (path: string) => void;
+  toggleFolder: (path: NotePath) => void;
+  select: (path: NotePath) => void;
   toggleSidebar: () => void;
   setSidebarWidth: (px: number) => void;
 }

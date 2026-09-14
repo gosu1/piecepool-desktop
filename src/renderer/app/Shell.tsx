@@ -27,8 +27,13 @@ function ResizeHandle() {
   };
 
   const onUp = (e: ReactPointerEvent<HTMLDivElement>) => {
-    e.currentTarget.releasePointerCapture(e.pointerId);
+    // 먼저 풀어야 한다: releasePointerCapture 는 pointerCancel 이 만드는
+    // 상황(더 이상 활성 포인터가 아님)에서 NotFoundError 를 던질 수 있는데,
+    // 뒤에 두면 그때 setDragging(false) 가 실행되지 않아 핸들이 계속 무장 상태로 남는다.
     setDragging(false);
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
   };
 
   const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
