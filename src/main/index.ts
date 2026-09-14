@@ -59,8 +59,10 @@ function createWindow(): void {
   // shell.openExternal 은 file:·smb:·ms-* 등 OS 가 등록한 아무 핸들러나 부른다.
   win.webContents.setWindowOpenHandler(({ url }) => {
     try {
-      const protocol = new URL(url).protocol;
-      if (protocol === "http:" || protocol === "https:") void shell.openExternal(url);
+      const parsed = new URL(url);
+      // 검증한 값(href)을 넘긴다 — 원본 url 은 앞뒤 공백 같은 게 붙어 있을 수 있다.
+      if (parsed.protocol === "http:" || parsed.protocol === "https:")
+        void shell.openExternal(parsed.href);
     } catch {
       // 파싱 실패는 그냥 버린다.
     }
@@ -72,7 +74,7 @@ function createWindow(): void {
   // before-input-event 는 keyDown·keyUp 둘 다에서 뜬다 — keyUp 까지 토글하면
   // 한 번 누른 게 두 번 토글되어(열림→즉시 닫힘) 단축키가 죽는다.
   win.webContents.on("before-input-event", (event, input) => {
-    if (input.type !== "keyDown") return;
+    if (input.type !== "keyDown" || input.isAutoRepeat) return;
     const isToggle =
       input.key === "F12" || (input.control && input.shift && input.key.toLowerCase() === "i");
     if (isToggle) {
