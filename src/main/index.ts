@@ -6,6 +6,10 @@ import { registerHandlers } from "./ipc.ts";
 // vite dev 서버를 본다. 프로덕션 빌드 경로(out/renderer)는 패키징을 시작할 때 정한다.
 const DEV_URL = "http://localhost:5173";
 
+// 창 조작 관례가 정반대다 — Windows 는 오른쪽 위 세 버튼, macOS 는 왼쪽 위 신호등.
+// macOS 에서 frame:false 를 쓰면 그 신호등까지 사라진다.
+const IS_MAC = process.platform === "darwin";
+
 /**
  * 부트와 윈도우 생성만 한다. 로직을 두지 않는다 —
  * 볼트 I/O·인덱스·인제스트·에이전트·LLM·git 은 전부 core/ 에 있다.
@@ -32,6 +36,8 @@ function createWindow(): void {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
+    // 타이틀바를 없앤다. macOS 만 hidden 으로 — 바만 숨기고 신호등은 남긴다.
+    ...(IS_MAC ? { titleBarStyle: "hidden" as const } : { frame: false }),
     webPreferences: {
       // "preload 화이트리스트가 공격 표면 전체" 라는 전제가 이 둘에 걸려 있다.
       // 껍데기 단계부터 켜 둔다 — 나중에 켜면 그 사이에 만든 UI 가 깨진다.

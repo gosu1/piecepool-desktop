@@ -78,6 +78,8 @@ export function Shell() {
 
   return (
     <div className="relative flex h-full bg-canvas text-ink">
+      {/* 창을 끌 수 있는 유일한 자리. 위에 얹히는 클릭 대상은 app-no-drag 로 되돌린다. */}
+      <div className="app-drag absolute inset-x-0 top-0 z-0 h-8" />
       <WindowControls />
       <Ribbon />
       {sidebarOpen && (
