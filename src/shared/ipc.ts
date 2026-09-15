@@ -7,6 +7,9 @@ import type { NotePath, Result } from "./types.ts";
 export const CHANNEL = {
   vaultPick: "vault:pick",
   vaultLast: "vault:last",
+  windowMinimize: "window:minimize",
+  windowToggleMaximize: "window:toggleMaximize",
+  windowClose: "window:close",
 } as const;
 
 /** 트리 한 칸. main 이 만들어 renderer 로 보낸다. */
@@ -35,4 +38,10 @@ export interface VaultPayload {
 export interface PiecePoolApi {
   pickVault: () => Promise<Result<VaultPayload | null>>;
   lastVault: () => Promise<Result<VaultPayload | null>>;
+  /** 창 조작. 돌려줄 값이 없어 단방향이다 — Result 로 감싸지 않는다. */
+  minimizeWindow: () => void;
+  toggleMaximizeWindow: () => void;
+  closeWindow: () => void;
+  /** macOS 는 창 조작 버튼을 OS 가 그린다. 우리 버튼을 그리면 둘 다 뜬다. */
+  isMac: boolean;
 }

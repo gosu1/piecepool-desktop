@@ -1,5 +1,6 @@
 // OWNER: 7단계 — 채널명과 요청/응답 타입은 shared/ipc.ts 에 둔다.
-import { app, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import type { IpcMainEvent } from "electron";
 import { basename, join } from "node:path";
 import type { AppError, ErrorKind, Result } from "../shared/types.ts";
 import type { VaultPayload } from "../shared/ipc.ts";
@@ -45,7 +46,15 @@ async function open(root: string): Promise<VaultPayload> {
   return payload;
 }
 
-/** vault:pick·vault:last 두 채널을 등록한다. 둘 다 열면 트리까지 실어 보낸다. */
+/**
+ * 요청을 보낸 창을 이벤트에서 찾는다.
+ * 모듈 변수로 쥐면 창이 여럿이 될 때 엉뚱한 창을 닫는다 — 조용히 틀리는 자리다.
+ */
+function senderWindow(e: IpcMainEvent): BrowserWindow | null {
+  return BrowserWindow.fromWebContents(e.sender);
+}
+
+/** vault 둘과 창 조작 셋을 등록한다. 창 조작은 돌려줄 값이 없어 단방향이다. */
 export function registerHandlers(): void {
   ipcMain.handle(CHANNEL.vaultPick, () =>
     wrap(async () => {
@@ -68,4 +77,16 @@ export function registerHandlers(): void {
       }
     }),
   );
+
+  // invoke 가 아니라 on 이다 — 돌려줄 값이 없다는 것을 API 선택으로 드러낸다.
+  ipcMain.on(CHANNEL.windowMinimize, (e) => senderWindow(e)?.minimize());
+
+  ipcMain.on(CHANNEL.windowToggleMaximize, (e) => {
+    const win = senderWindow(e);
+    if (win === null) return;
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+  });
+
+  ipcMain.on(CHANNEL.windowClose, (e) => senderWindow(e)?.close());
 }
