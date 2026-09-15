@@ -20,7 +20,7 @@ import {
 } from "./vault.ts";
 import { buildUserMessage, pageEmbedText, pickCandidates } from "./prompt.ts";
 import { MODELS, embed, embedStats, writeWiki } from "./llm.ts";
-import { buildMarkdown, hasChanges, nameIndex, safeFileName, verify } from "./build.ts";
+import { buildMarkdown, hasChanges, nameIndex, retroLink, safeFileName, verify } from "./build.ts";
 import {
   buildSourcePage,
   extract,
@@ -44,6 +44,8 @@ type Args = {
   prompt: string;
   /** 이 글자 수까지는 통째로 한 번에 넘긴다. 넘으면 헤딩 경계로 나눠 청크마다 부른다. */
   maxChars: number;
+  /** 정리 없이 소급 링크만 — 기존 위키 전체에 대해 한 번. */
+  relink: boolean;
 };
 
 function parseArgs(argv: string[]): Args {
@@ -59,6 +61,7 @@ function parseArgs(argv: string[]): Args {
     topN: 5,
     prompt: "src/core/prompts/write.md",
     maxChars: 200_000,
+    relink: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
@@ -71,6 +74,7 @@ function parseArgs(argv: string[]): Args {
     else if (k === "--top") a.topN = Number(argv[++i]);
     else if (k === "--prompt") a.prompt = argv[++i];
     else if (k === "--max-chars") a.maxChars = Number(argv[++i]);
+    else if (k === "--relink") a.relink = true;
   }
   return a;
 }
@@ -242,6 +246,38 @@ async function markDeletedSources(vault: string, state: SyncState, today: string
   await writeSyncState(vault, state);
 }
 
+/** 새 페이지 이름들을 기존 페이지 본문에 소급해서 링크한다. 바뀐 파일 수를 돌려준다. */
+async function applyRetroLinks(
+  vault: string,
+  wiki: Map<string, WikiPage>,
+  newNames: string[],
+  skip: Set<string>,
+  today: string,
+): Promise<number> {
+  const targets = [...wiki.values()].filter((p) => !skip.has(normalizeTitle(p.name)));
+  const hits = retroLink(targets, newNames);
+  const writes: FileWrite[] = hits.map(({ page, content, summary }) => ({
+    path: wikiPath(vault, page.name),
+    content: buildMarkdown({
+      page: {
+        name: page.name,
+        aliasesToAdd: [],
+        summary,
+        newSections: [],
+        replaces: [...content].map(([heading, c]) => ({ heading, content: c })),
+        records: [],
+      },
+      existing: page,
+      sourceName: null,
+      date: null,
+      today,
+    }),
+    mustExist: true,
+  }));
+  await commitFiles(writes);
+  return writes.length;
+}
+
 /** 정리할 항목 하나 — 볼트 노트이거나 `sources/` 의 원본이다. */
 type Item = {
   /** sync_state 의 키. 볼트 기준 상대경로. */
@@ -349,6 +385,15 @@ async function main(): Promise<void> {
   const systemPrompt = await readFile(args.prompt, "utf8");
   if (args.prompt !== "src/core/prompts/write.md") console.log(`프롬프트: ${args.prompt}`);
   const state = await readSyncState(args.vault);
+
+  // 소급 링크만 — 기존 볼트에 한 번 돌린다. 정리는 하지 않는다.
+  if (args.relink) {
+    const wiki = await loadWiki(args.vault);
+    const names = [...wiki.values()].map((p) => p.name);
+    const n = await applyRetroLinks(args.vault, wiki, names, new Set(), today);
+    console.log(`소급 링크: ${n}장 갱신`);
+    return;
+  }
 
   // 출처가 사라졌으면 기록에 표시한다. 돌아왔으면 뗀다.
   if (!args.dry) await markDeletedSources(args.vault, state, today);
@@ -579,6 +624,16 @@ async function main(): Promise<void> {
 
         await commitFiles(writes);
         for (const l of logs) console.log(l);
+
+        // 이번 호출에서 새로 생긴 페이지 — 이미 쓰인 페이지 본문에 글자로 있으면 링크로 바꾼다.
+        const created = verified.pages
+          .filter((pg) => !wiki.has(normalizeTitle(pg.name)) && hasChanges(pg))
+          .map((pg) => pg.name);
+        if (created.length) {
+          const written = new Set(verified.pages.map((pg) => normalizeTitle(pg.name)));
+          const n = await applyRetroLinks(args.vault, wiki, created, written, today);
+          if (n) console.log(`   소급 링크 ${n}장 (${created.join(", ")})`);
+        }
         break;
       }
     }

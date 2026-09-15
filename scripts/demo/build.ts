@@ -540,6 +540,40 @@ export function buildMarkdown(input: BuildInput): string {
  * 갱신을 빈 깡통으로 오판했다 (2026-09-15 실측). Structured Outputs 로 JSON 이
  * 강제되고 `#` 을 코드가 찍는 지금은 글자 수를 볼 이유가 없다.
  */
+/**
+ * 소급 링크 — 페이지가 새로 생겼을 때, **이미 쓰인** 페이지 본문에 그 이름이 글자로 있는 자리를
+ * 링크로 바꾼다. `exp-007` 이 만들어질 때 `환각` 은 아직 절이어서 링크할 대상이 없었고, 나중에
+ * `환각` 이 페이지가 되어도 exp-007 은 다시 쓰이지 않는다 (연구자 볼트 실측). AI 없이 코드가
+ * 흡수한다. 우리 글인 절만 건드리고, 요약도 포함한다. 바뀐 페이지만 돌려준다.
+ */
+export function retroLink(
+  pages: Iterable<WikiPage>,
+  newNames: string[],
+): { page: WikiPage; content: Map<string, string>; summary: string | null }[] {
+  const targets = newNames.filter((n) => n.trim().length >= 2);
+  if (!targets.length) return [];
+  const out: { page: WikiPage; content: Map<string, string>; summary: string | null }[] = [];
+  for (const page of pages) {
+    const mine = normalizeTitle(page.name);
+    const names = targets.filter((n) => normalizeTitle(n) !== mine);
+    if (!names.length) continue;
+    const changed = new Map<string, string>();
+    let summary: string | null = null;
+    for (const s of page.sections) {
+      if (!s.ours) continue;
+      // 이 절에 이미 그 링크가 있으면 또 걸지 않는다.
+      const fresh = names.filter((n) => !s.content.toLowerCase().includes(`[[${n.toLowerCase()}`));
+      if (!fresh.length) continue;
+      const next = autoLink(s.content, fresh, page.name);
+      if (next === s.content) continue;
+      if (s.heading === "요약") summary = next;
+      else changed.set(s.heading, next);
+    }
+    if (changed.size || summary !== null) out.push({ page, content: changed, summary });
+  }
+  return out;
+}
+
 export function hasChanges(page: VerifiedPage): boolean {
   return (
     page.summary !== null ||
