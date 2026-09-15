@@ -2,6 +2,8 @@ import { useWorkspace, type TreeNode } from "../store/workspace.ts";
 
 function Row({ node, depth }: { node: TreeNode; depth: number }) {
   const isDir = node.kind === "dir";
+  // .md 만 보여주므로 확장자가 정보를 주지 않는다. path 는 .md 를 유지한다.
+  const label = isDir ? node.name : node.name.replace(/\.md$/i, "");
   const expanded = useWorkspace((s) => s.expanded.has(node.path));
   const selected = useWorkspace((s) => s.selected === node.path);
   const toggleFolder = useWorkspace((s) => s.toggleFolder);
@@ -22,7 +24,7 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
         <span aria-hidden="true" className="w-3 shrink-0 text-ink-faint">
           {isDir ? (expanded ? "▾" : "▸") : ""}
         </span>
-        <span className="truncate">{node.name}</span>
+        <span className="truncate">{label}</span>
       </button>
 
       {isDir &&

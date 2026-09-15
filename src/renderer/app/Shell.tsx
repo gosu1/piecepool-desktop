@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import { Ribbon } from "./Ribbon.tsx";
 import { Sidebar } from "./Sidebar.tsx";
@@ -68,6 +68,12 @@ function ResizeHandle() {
 export function Shell() {
   const selected = useWorkspace((s) => s.selected);
   const sidebarOpen = useWorkspace((s) => s.sidebarOpen);
+
+  // 마지막으로 연 볼트를 되살린다. StrictMode 가 개발 중 두 번 부르지만
+  // 읽기만 하므로 결과가 같다.
+  useEffect(() => {
+    void useWorkspace.getState().loadLastVault();
+  }, []);
 
   return (
     <div className="flex h-full bg-canvas text-ink">

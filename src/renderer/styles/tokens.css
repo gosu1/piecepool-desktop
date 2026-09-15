@@ -26,6 +26,7 @@
   --color-fill: var(--ds-fill);
   --color-on-fill: var(--ds-on-fill);
   --color-fill-subtle: var(--ds-fill-subtle);
+  --color-danger: var(--ds-danger);
 }
 
 :root {
@@ -48,6 +49,7 @@
   --ds-fill: #141414;
   --ds-on-fill: #dadada;
   --ds-fill-subtle: rgba(255, 255, 255, 0.07);
+  --ds-danger: #eb6f6b;
 
   color-scheme: dark;
 }
