@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { clampWidth, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, useWorkspace } from "./workspace.ts";
+import {
+  applied,
+  clampWidth,
+  MAX_SIDEBAR_WIDTH,
+  MIN_SIDEBAR_WIDTH,
+  useWorkspace,
+} from "./workspace.ts";
+import type { VaultPayload } from "../../shared/ipc.ts";
 
 const initial = useWorkspace.getState();
 
@@ -70,5 +77,34 @@ describe("setSidebarWidth", () => {
   it("클램프를 거쳐 들어간다", () => {
     useWorkspace.getState().setSidebarWidth(10_000);
     expect(useWorkspace.getState().sidebarWidth).toBe(MAX_SIDEBAR_WIDTH);
+  });
+});
+
+describe("applied", () => {
+  it("실패면 error 에 메시지를 담고 loading 을 내린다", () => {
+    const result = applied({ ok: false, error: { kind: "unknown", message: "권한 없음" } });
+    expect(result).toEqual({ error: "권한 없음", loading: false });
+  });
+
+  it("value 가 null 이면 loading 만 내리고 vault 는 건드리지 않는다", () => {
+    const result = applied({ ok: true, value: null });
+    expect(result).toEqual({ loading: false });
+  });
+
+  it("값이 있으면 vault·tree 를 싣고 expanded·selected 를 새 볼트 기준으로 되돌린다", () => {
+    const payload: VaultPayload = {
+      root: "/vault",
+      name: "vault",
+      tree: [{ name: "a.md", path: "a.md", kind: "file" }],
+    };
+    const result = applied({ ok: true, value: payload });
+    expect(result).toEqual({
+      vault: payload,
+      tree: payload.tree,
+      expanded: new Set(),
+      selected: null,
+      error: null,
+      loading: false,
+    });
   });
 });

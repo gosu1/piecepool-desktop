@@ -24,6 +24,11 @@ describe("readTree", () => {
     expect((await readTree(v)).map((n) => n.name)).toEqual(["a.md"]);
   });
 
+  it("확장자 대소문자를 가리지 않는다 — FileTree.tsx 의 /\\.md$/i 와 짝이다", async () => {
+    const v = await fixture([], ["README.MD"]);
+    expect((await readTree(v)).map((n) => n.name)).toEqual(["README.MD"]);
+  });
+
   it("폴더를 파일보다 먼저 두고 각각 이름순으로 정렬한다", async () => {
     const v = await fixture(["zeta", "alpha"], ["z.md", "a.md"]);
     expect((await readTree(v)).map((n) => n.name)).toEqual(["alpha", "zeta", "a.md", "z.md"]);

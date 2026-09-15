@@ -33,7 +33,7 @@ interface WorkspaceState {
 }
 
 /** 두 액션이 같은 응답 모양을 받는다. 해석을 한 곳에 둔다. */
-function applied(r: Result<VaultPayload | null>): Partial<WorkspaceState> {
+export function applied(r: Result<VaultPayload | null>): Partial<WorkspaceState> {
   if (!r.ok) return { error: r.error.message, loading: false };
   // null 은 취소이거나 기억된 볼트가 없는 것이다 — 둘 다 아무 일도 일어나지 않는다.
   if (r.value === null) return { loading: false };
