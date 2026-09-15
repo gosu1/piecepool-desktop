@@ -2,12 +2,13 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import type { IpcMainEvent } from "electron";
 import { basename, join } from "node:path";
-import type { AppError, ErrorKind, Result } from "../shared/types.ts";
+import type { AppError, ErrorKind, Result, Vault } from "../shared/types.ts";
 import type { VaultPayload } from "../shared/ipc.ts";
 import { CHANNEL } from "../shared/ipc.ts";
 import { PiecePoolError } from "../core/errors.ts";
 import { openVault } from "../core/vault/open.ts";
 import { readTree } from "../core/vault/tree.ts";
+import { readRaw } from "../core/vault/notes.ts";
 import { readLastVault, writeLastVault } from "./recent.ts";
 
 /**
@@ -33,6 +34,12 @@ export function toAppError(e: unknown): AppError {
   return { kind, message: e instanceof Error ? e.message : String(e) };
 }
 
+/**
+ * 지금 열려 있는 볼트. note:read 가 resolveInVault 에 넘길 v 다.
+ * renderer 가 보낸 경로를 이것 없이 검증할 방법이 없다 — 재구축 설계 §3 이 지시한 자리다.
+ */
+let opened: Vault | null = null;
+
 /** 앱이 디스크에 남기는 유일한 상태. */
 function stateFile(): string {
   return join(app.getPath("userData"), "state.json");
@@ -43,6 +50,7 @@ async function open(root: string): Promise<VaultPayload> {
   const v = await openVault(root);
   const payload = { root: v.root, name: basename(v.root), tree: await readTree(v) };
   await writeLastVault(stateFile(), v.root);
+  opened = v;
   return payload;
 }
 
@@ -75,6 +83,19 @@ export function registerHandlers(): void {
         if (e instanceof PiecePoolError && e.kind === "vault_not_found") return null;
         throw e; // wrap() 이 Result 실패로 만든다
       }
+    }),
+  );
+
+  ipcMain.handle(CHANNEL.noteRead, (_e, path: unknown) =>
+    wrap(async () => {
+      // renderer 가 보낸 값이다. 타입은 경계를 못 건너오므로 여기서 직접 본다.
+      if (typeof path !== "string") {
+        throw new PiecePoolError("path_escape", "경로가 문자열이 아니다");
+      }
+      if (opened === null) {
+        throw new PiecePoolError("vault_not_found", "볼트가 열려 있지 않다");
+      }
+      return await readRaw(opened, path);
     }),
   );
 

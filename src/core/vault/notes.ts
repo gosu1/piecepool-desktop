@@ -1,6 +1,19 @@
 // FROZEN: retitleNote 를 뺀 전체 (0단계 설계 §8)
 // retitleNote 는 가배치 5단계.
+import { readFile } from "node:fs/promises";
 import type { Note, NotePath, Vault } from "../../shared/types.ts";
+import { resolveInVault } from "./paths.ts";
+
+/**
+ * 마크다운 원문을 글자 그대로 읽는다. 파싱하지 않는다.
+ *
+ * 화면과 에디터는 구조가 아니라 글자를 다룬다 — `readNote` 와 목적이 다르다.
+ * 이 함수의 본체는 사실 `readFile` 이 아니라 `resolveInVault` 다.
+ * 볼트 파일을 읽는 길이 이 문 하나만 남게 하는 것이 요점이다.
+ */
+export async function readRaw(v: Vault, p: NotePath): Promise<string> {
+  return readFile(await resolveInVault(v, p), "utf8");
+}
 
 export async function readNote(v: Vault, p: NotePath): Promise<Note> {
   throw new Error("unimplemented: core/vault/notes.readNote");

@@ -7,6 +7,7 @@ import type { NotePath, Result } from "./types.ts";
 export const CHANNEL = {
   vaultPick: "vault:pick",
   vaultLast: "vault:last",
+  noteRead: "note:read",
   windowMinimize: "window:minimize",
   windowToggleMaximize: "window:toggleMaximize",
   windowClose: "window:close",
@@ -38,6 +39,12 @@ export interface VaultPayload {
 export interface PiecePoolApi {
   pickVault: () => Promise<Result<VaultPayload | null>>;
   lastVault: () => Promise<Result<VaultPayload | null>>;
+  /**
+   * 노트 원문. **renderer 가 경로를 보내는 유일한 자리다** —
+   * main 이 resolveInVault 로 검증한다. 이름이 core 의 readNote 와 다른 이유는
+   * 돌려주는 것이 Note 가 아니라 문자열이기 때문이다.
+   */
+  readRaw: (path: NotePath) => Promise<Result<string>>;
   /** 창 조작. 돌려줄 값이 없어 단방향이다 — Result 로 감싸지 않는다. */
   minimizeWindow: () => void;
   toggleMaximizeWindow: () => void;
