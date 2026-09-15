@@ -13,6 +13,39 @@ export function clampWidth(px: number): number {
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, px));
 }
 
+/**
+ * 상단 프론트매터 블록을 잘라낸다. YAML 을 이해하지 않는다 —
+ * 첫 줄이 `---` 일 때 다음 `---` 줄까지만 버린다.
+ *
+ * hashes 같은 필드는 사용자가 쓴 글이 아니라 도구가 남긴 것이라 읽는 데 방해가 된다.
+ * 닫히는 `---` 가 없으면 프론트매터가 아니므로 원문을 그대로 돌려준다.
+ */
+export function stripFrontmatter(raw: string): string {
+  // CRLF 로 저장된 파일은 각 줄 끝에 \r 가 남는다 — 구분선 비교에서 그것을 떼지 않으면
+  // "---\r" !== "---" 이라 Windows 에서 만든 노트는 프론트매터가 통째로 그대로 보인다.
+  const lines = raw.split("\n");
+  if (lines[0]?.trimEnd() !== "---") return raw;
+  const end = lines.findIndex((l, i) => i > 0 && l.trimEnd() === "---");
+  if (end === -1) return raw;
+  // 닫는 --- 다음의 빈 줄들도 함께 버린다.
+  let i = end + 1;
+  while (lines[i]?.trimEnd() === "") i++;
+  return lines.slice(i).join("\n");
+}
+
+/** 열린 탭 하나. 읽는 중에는 body·error 가 둘 다 null 이다. */
+export interface Tab {
+  path: NotePath;
+  title: string;
+  body: string | null;
+  error: string | null;
+  /** 이 탭을 연 요청의 세대. 응답이 자기 세대의 탭에만 담기게 한다. */
+  seq: number;
+}
+
+/** 탭 요청 세대. 닫았다가 곧바로 다시 연 탭에 옛 응답이 덮어쓰는 것을 막는다. */
+let tabSeq = 0;
+
 interface WorkspaceState {
   /** 열린 볼트. 없으면 아직 폴더를 고르지 않은 것이다. */
   vault: VaultPayload | null;
@@ -30,6 +63,10 @@ interface WorkspaceState {
   setSidebarWidth: (px: number) => void;
   pickVault: () => Promise<void>;
   loadLastVault: () => Promise<void>;
+  tabs: Tab[];
+  activeTab: NotePath | null;
+  openTab: (path: NotePath, title: string) => Promise<void>;
+  closeTab: (path: NotePath) => void;
 }
 
 /** 두 액션이 같은 응답 모양을 받는다. 해석을 한 곳에 둔다. */
@@ -58,7 +95,7 @@ async function call(
   }
 }
 
-export const useWorkspace = create<WorkspaceState>((set) => ({
+export const useWorkspace = create<WorkspaceState>((set, get) => ({
   vault: null,
   tree: [],
   error: null,
@@ -67,6 +104,8 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   selected: null,
   sidebarOpen: true,
   sidebarWidth: 240,
+  tabs: [],
+  activeTab: null,
 
   toggleFolder: (path) =>
     set((s) => {
@@ -89,4 +128,47 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
     set({ loading: true, error: null });
     set(await call(() => window.piecepool.lastVault()));
   },
+
+  openTab: async (path, title) => {
+    // 이미 열려 있으면 다시 읽지 않는다. 파일 감시가 없어 다시 읽어도
+    // 최신이라는 보장이 없고, 보던 글이 갑자기 바뀌는 쪽이 더 나쁘다.
+    if (get().tabs.some((t) => t.path === path)) {
+      set({ activeTab: path, selected: path });
+      return;
+    }
+
+    const seq = ++tabSeq;
+    set((s) => ({
+      tabs: [...s.tabs, { path, title, body: null, error: null, seq }],
+      activeTab: path,
+      selected: path,
+    }));
+
+    let body: string | null = null;
+    let error: string | null = null;
+    try {
+      const r = await window.piecepool.readRaw(path);
+      if (r.ok) body = stripFrontmatter(r.value);
+      else error = r.error.message;
+    } catch (e) {
+      // preload 가 없으면 여기로 온다. 탭은 열린 채 이유를 보여 준다.
+      error = `앱 내부 연결이 끊겼다: ${String(e)}`;
+    }
+
+    // 세대까지 같아야 담는다. 그 사이에 닫혔거나 다시 열렸으면 이 응답은 낡은 것이다.
+    set((s) => ({
+      tabs: s.tabs.map((t) => (t.path === path && t.seq === seq ? { ...t, body, error } : t)),
+    }));
+  },
+
+  closeTab: (path) =>
+    set((s) => {
+      const idx = s.tabs.findIndex((t) => t.path === path);
+      if (idx === -1) return {};
+      const tabs = s.tabs.filter((t) => t.path !== path);
+      // 닫은 탭이 활성이었을 때만 옮긴다. 오른쪽 이웃, 없으면 왼쪽.
+      const activeTab =
+        s.activeTab === path ? (tabs[idx]?.path ?? tabs[idx - 1]?.path ?? null) : s.activeTab;
+      return { tabs, activeTab };
+    }),
 }));

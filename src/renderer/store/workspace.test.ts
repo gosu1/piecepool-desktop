@@ -4,9 +4,11 @@ import {
   clampWidth,
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
+  stripFrontmatter,
   useWorkspace,
 } from "./workspace.ts";
 import type { VaultPayload } from "../../shared/ipc.ts";
+import type { Result } from "../../shared/types.ts";
 
 const initial = useWorkspace.getState();
 
@@ -16,6 +18,8 @@ beforeEach(() => {
     selected: null,
     sidebarOpen: true,
     sidebarWidth: 240,
+    tabs: [],
+    activeTab: null,
   });
 });
 
@@ -106,5 +110,109 @@ describe("applied", () => {
       error: null,
       loading: false,
     });
+  });
+});
+
+describe("stripFrontmatter", () => {
+  it("상단 --- 블록을 잘라낸다", () => {
+    const raw = "---\ncreated: 2025-10-03\n---\n\n# 러닝\n";
+    expect(stripFrontmatter(raw)).toBe("# 러닝\n");
+  });
+
+  it("--- 가 없으면 그대로 둔다", () => {
+    expect(stripFrontmatter("# 러닝\n본문")).toBe("# 러닝\n본문");
+  });
+
+  it("첫 줄이 아닌 --- 는 건드리지 않는다", () => {
+    const raw = "# 러닝\n\n---\n\n본문";
+    expect(stripFrontmatter(raw)).toBe(raw);
+  });
+
+  it("닫히지 않은 --- 는 그대로 둔다", () => {
+    const raw = "---\ncreated: 2025-10-03\n\n# 러닝";
+    expect(stripFrontmatter(raw)).toBe(raw);
+  });
+
+  it("CRLF 로 저장된 파일도 잘라낸다", () => {
+    const raw = "---\r\ncreated: 2025-10-03\r\n---\r\n\r\n# 러닝\r\n";
+    expect(stripFrontmatter(raw)).toBe("# 러닝\r\n");
+  });
+
+  it("빈 프론트매터도 잘라낸다", () => {
+    expect(stripFrontmatter("---\n---\n\n# 러닝\n")).toBe("# 러닝\n");
+  });
+});
+
+describe("탭", () => {
+  it("같은 경로를 두 번 열어도 탭이 하나다", () => {
+    const { openTab } = useWorkspace.getState();
+    openTab("wiki/a.md", "a");
+    openTab("wiki/a.md", "a");
+    const s = useWorkspace.getState();
+    expect(s.tabs).toHaveLength(1);
+    expect(s.activeTab).toBe("wiki/a.md");
+  });
+
+  it("활성인 가운데 탭을 닫으면 오른쪽 이웃이 활성이 된다", () => {
+    const { openTab, closeTab } = useWorkspace.getState();
+    openTab("wiki/a.md", "a");
+    openTab("wiki/b.md", "b");
+    openTab("wiki/c.md", "c");
+    // b 를 다시 열어 활성으로 만든다. 활성 탭을 닫아야 이웃 이동이 일어난다.
+    openTab("wiki/b.md", "b");
+    closeTab("wiki/b.md");
+    const s = useWorkspace.getState();
+    expect(s.tabs.map((t) => t.path)).toEqual(["wiki/a.md", "wiki/c.md"]);
+    expect(s.activeTab).toBe("wiki/c.md");
+  });
+
+  it("활성이 아닌 탭을 닫으면 활성이 그대로다", () => {
+    const { openTab, closeTab } = useWorkspace.getState();
+    openTab("wiki/a.md", "a");
+    openTab("wiki/b.md", "b");
+    closeTab("wiki/a.md");
+    expect(useWorkspace.getState().activeTab).toBe("wiki/b.md");
+  });
+
+  it("마지막 탭을 닫으면 activeTab 이 null 이다", () => {
+    const { openTab, closeTab } = useWorkspace.getState();
+    openTab("wiki/a.md", "a");
+    closeTab("wiki/a.md");
+    const s = useWorkspace.getState();
+    expect(s.tabs).toHaveLength(0);
+    expect(s.activeTab).toBeNull();
+  });
+
+  it("닫았다가 다시 연 탭에 옛 응답이 덮어쓰지 않는다", async () => {
+    // node 환경에는 window 가 없어 readRaw 호출이 즉시(동기로) throw 하므로,
+    // 실제 경쟁을 재현하려면 IPC 경계를 직접 흉내내 응답 순서를 뒤집어야 한다 —
+    // 그러지 않으면 첫 요청과 두 번째 요청이 끼어들 틈 없이 순서대로 끝나 세대 검사를
+    // 지우고 돌려도 테스트가 초록으로 남는다(실제로 확인함, 보고 참조).
+    const resolvers: Array<(r: Result<string>) => void> = [];
+    (globalThis as { window?: Window }).window = {
+      piecepool: {
+        readRaw: () => new Promise<Result<string>>((resolve) => resolvers.push(resolve)),
+      },
+    } as unknown as Window;
+
+    // finally 로 지운다 — 단언이 실패하면 스텁이 다음 테스트로 새서,
+    // 진짜 원인 하나가 엉뚱한 실패 여럿으로 번진다.
+    try {
+      const { openTab, closeTab } = useWorkspace.getState();
+      const first = openTab("wiki/a.md", "a");
+      closeTab("wiki/a.md");
+      const second = openTab("wiki/a.md", "a");
+
+      // 낡은(첫) 요청의 응답이 새(두 번째) 요청보다 늦게 도착한다.
+      resolvers[1]({ ok: true, value: "새 본문" });
+      resolvers[0]({ ok: true, value: "옛 본문" });
+      await Promise.all([first, second]);
+
+      const tabs = useWorkspace.getState().tabs;
+      expect(tabs).toHaveLength(1);
+      expect(tabs[0].body).toBe("새 본문");
+    } finally {
+      delete (globalThis as { window?: Window }).window;
+    }
   });
 });
