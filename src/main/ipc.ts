@@ -1,6 +1,13 @@
-// OWNER: 7단계 — 채널명과 요청/응답 타입은 shared/ipc.ts 에 둔다(아직 없음).
+// OWNER: 7단계 — 채널명과 요청/응답 타입은 shared/ipc.ts 에 둔다.
+import { app, dialog, ipcMain } from "electron";
+import { basename, join } from "node:path";
 import type { AppError, ErrorKind, Result } from "../shared/types.ts";
+import type { VaultPayload } from "../shared/ipc.ts";
+import { CHANNEL } from "../shared/ipc.ts";
 import { PiecePoolError } from "../core/errors.ts";
+import { openVault } from "../core/vault/open.ts";
+import { readTree } from "../core/vault/tree.ts";
+import { readLastVault, writeLastVault } from "./recent.ts";
 
 /**
  * IPC 핸들러는 절대 throw 하지 않는다.
@@ -25,7 +32,39 @@ export function toAppError(e: unknown): AppError {
   return { kind, message: e instanceof Error ? e.message : String(e) };
 }
 
+/** 앱이 디스크에 남기는 유일한 상태. */
+function stateFile(): string {
+  return join(app.getPath("userData"), "state.json");
+}
+
+/** 볼트를 열고 트리까지 실어 보낸다. 열면 트리는 항상 필요하다. */
+async function open(root: string): Promise<VaultPayload> {
+  const v = await openVault(root);
+  await writeLastVault(stateFile(), v.root);
+  return { root: v.root, name: basename(v.root), tree: await readTree(v) };
+}
+
 /** onProgress = webContents.send. CLI 가 console.log 를 넘기던 자리다. */
 export function registerHandlers(): void {
-  throw new Error("unimplemented: main/ipc.registerHandlers");
+  ipcMain.handle(CHANNEL.vaultPick, () =>
+    wrap(async () => {
+      const picked = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+      if (picked.canceled || picked.filePaths.length === 0) return null;
+      return await open(picked.filePaths[0]);
+    }),
+  );
+
+  ipcMain.handle(CHANNEL.vaultLast, () =>
+    wrap(async () => {
+      const last = await readLastVault(stateFile());
+      if (last === null) return null;
+      try {
+        return await open(last);
+      } catch {
+        // 기억한 폴더가 사라졌으면 조용히 "볼트 없음" 으로 떨어진다.
+        // 사용자가 지운 폴더를 에러로 들이밀 이유가 없다.
+        return null;
+      }
+    }),
+  );
 }

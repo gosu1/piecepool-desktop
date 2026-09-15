@@ -1,6 +1,7 @@
 // OWNER: 7단계 — 빈 셸이다. IPC·메뉴·창 상태 복원은 아직 없다.
 import { app, BrowserWindow, Menu, shell } from "electron";
 import { join } from "node:path";
+import { registerHandlers } from "./ipc.ts";
 
 // vite dev 서버를 본다. 프로덕션 빌드 경로(out/renderer)는 패키징을 시작할 때 정한다.
 const DEV_URL = "http://localhost:5173";
@@ -15,6 +16,9 @@ export async function bootstrap(): Promise<void> {
   // Electron 기본 메뉴(File·Edit·View·Window·Help)를 쓰지 않는다.
   // DevTools 단축키도 저 기본 메뉴가 달아 주던 것이라 함께 사라진다.
   Menu.setApplicationMenu(null);
+
+  // 창이 뜨기 전에 등록한다 — 렌더러가 곧바로 lastVault 를 부른다.
+  registerHandlers();
 
   createWindow();
 
