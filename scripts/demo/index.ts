@@ -53,8 +53,10 @@ function parseArgs(argv: string[]): Args {
     useEmbed: false,
     only: null,
     noCache: false,
-    threshold: 0.6,
-    topN: 8,
+    // 0.65 · 5 — 캐시된 임베딩으로 오프라인 계산(2026-09-15): 0.65 에서 재현율 86% · 정밀도 34%,
+    // 0.70 에서 62% · 67%. "러닝머신·헬스장 → 달리기" 가 0.67~0.76 에 있어 0.70 이면 하나를 놓친다.
+    threshold: 0.65,
+    topN: 5,
     prompt: "src/core/prompts/write.md",
     maxChars: 200_000,
   };
@@ -453,7 +455,10 @@ async function main(): Promise<void> {
         if (attempt === 0) {
           if (cands.related.length) {
             const detail = cands.related
-              .map((p) => `${p.name}(${cands.why.get(p.name)})`)
+              .map((p) => {
+                const sc = cands.score.get(p.name);
+                return `${p.name}(${cands.why.get(p.name)}${sc === undefined ? "" : ` ${sc.toFixed(2)}`})`;
+              })
               .join(", ");
             console.log(`   후보 ${cands.related.length}장: ${detail}`);
           } else {

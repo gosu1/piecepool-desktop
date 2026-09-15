@@ -271,9 +271,7 @@ describe("나 허브", () => {
         name: "나",
         fm: { hashes: {} },
         summary: "",
-        sections: [
-          { heading: "공부", content: "[[DETR]] · [[CNN]]", hash: "", ours: true },
-        ],
+        sections: [{ heading: "공부", content: "[[DETR]] · [[CNN]]", hash: "", ours: true }],
         records: [],
         recordsOurs: true,
       },

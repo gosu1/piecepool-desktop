@@ -9,6 +9,8 @@ export type Candidates = {
   related: WikiPage[];
   /** 왜 후보가 되었는지 — 로그로 설계를 확인하기 위해 남긴다. */
   why: Map<string, "글자" | "뜻">;
+  /** 뜻 후보의 코사인 점수. 임계값을 고를 때 본다. */
+  score: Map<string, number>;
   /** 고칠 수 있는 절 이름 — 다시 써도 되는 것. 해시가 일치하는 것만. */
   rewritable: string[];
   /** 링크를 걸 수 있는 이름. 제목과 별칭 전부. */
@@ -70,6 +72,7 @@ export type EmbedOpts = {
  */
 export function pickCandidates(note: Note, wiki: WikiPage[], embed?: EmbedOpts): Candidates {
   const why = new Map<string, "글자" | "뜻">();
+  const score = new Map<string, number>();
 
   for (const name of byLiteral(note, wiki)) why.set(name, "글자");
 
@@ -79,7 +82,8 @@ export function pickCandidates(note: Note, wiki: WikiPage[], embed?: EmbedOpts):
       .filter((x) => x.score >= embed.threshold)
       .sort((a, b) => b.score - a.score)
       .slice(0, embed.topN);
-    for (const { page } of scored) {
+    for (const { page, score: sc } of scored) {
+      score.set(page.name, sc);
       if (!why.has(page.name)) why.set(page.name, "뜻");
     }
   }
@@ -107,7 +111,7 @@ export function pickCandidates(note: Note, wiki: WikiPage[], embed?: EmbedOpts):
     linkable.push(aliases.length ? `${page.name} (별칭: ${aliases.join(", ")})` : page.name);
   }
 
-  return { related, why, rewritable, linkable };
+  return { related, why, score, rewritable, linkable };
 }
 
 /** 위키 페이지를 프롬프트에 넣을 마크다운으로. 사용자가 고친 절은 목록에서 빠지므로 표시가 필요 없다. */
