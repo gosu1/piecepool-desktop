@@ -1,12 +1,26 @@
 // 실험 분석 — 위키 폴더와 실행 로그를 읽어 지표를 뽑는다.
 //
-//   node scripts/demo/analyze.ts fixtures/vault-life [run.log]
+//   node scripts/demo/analyze.ts fixtures/vault-life [run.log] [--eval fixtures/vault-life/eval.json]
+//
+// 정답 세트(eval.json)가 볼트에 있거나 --eval 로 주어지면 재현율을 낸다 — 꼭 있어야 할 페이지,
+// 있으면 안 되는 페이지, 꼭 이어져야 할 링크 쌍, 꼭 남아야 할 사실. 규칙을 더하기 전에 이 숫자를 본다.
 //
 // 재는 것: 링크 밀도 · 고립 페이지 · 절 누적 · 기록 분포 · 지적 종류별 집계 · `나` 허브 구조.
 // ADR-0002 "측정 지표" 절의 실측 도구다. 앱에는 들어가지 않는다.
 
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { normalizeTitle, readWikiPage, scanWiki, type WikiPage } from "./vault.ts";
+
+type EvalSet = {
+  must_pages: string[];
+  must_not_pages: string[];
+  must_links: [string, string][];
+  must_facts: [string, string][];
+};
+
+/** `A|B|C` 를 대안 목록으로. */
+const alts = (s: string) => s.split("|").map((x) => normalizeTitle(x));
 
 function bodyLinks(page: WikiPage): string[] {
   const text = page.sections.map((s) => s.content).join("\n");
@@ -20,7 +34,10 @@ function paragraphs(s: string): number {
 }
 
 async function main(): Promise<void> {
-  const [vault, logPath] = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+  const evalIdx = argv.indexOf("--eval");
+  const evalPath = evalIdx >= 0 ? argv.splice(evalIdx, 2)[1] : join(argv[0] ?? "", "eval.json");
+  const [vault, logPath] = argv;
   if (!vault) throw new Error("볼트 경로가 필요합니다");
 
   const pages: WikiPage[] = [];
@@ -177,6 +194,62 @@ async function main(): Promise<void> {
       );
     }
     L.push(``);
+  }
+
+  // 정답 세트 대조
+  let evalSet: EvalSet | null = null;
+  try {
+    evalSet = JSON.parse(await readFile(evalPath, "utf8")) as EvalSet;
+  } catch {
+    evalSet = null;
+  }
+  if (evalSet) {
+    // 이름이 같거나, `exp-004 SummaC 한국어` 처럼 정답 이름 뒤에 설명이 붙은 것도 그 페이지다.
+    const matches = (p: WikiPage, spec: string) => {
+      const names = [p.name, ...(p.fm.aliases ?? [])].map(normalizeTitle);
+      return alts(spec).some((a) => names.some((n) => n === a || n.startsWith(a + " ")));
+    };
+    const findPage = (spec: string) => pages.find((p) => matches(p, spec));
+    const body = (p: WikiPage) =>
+      p.summary + "\n" + p.sections.map((x) => x.content).join("\n") + "\n" + p.records.join("\n");
+    const linksBetween = (a: WikiPage, b: WikiPage) => {
+      const outA = bodyLinks(a);
+      const outB = bodyLinks(b);
+      const namesA = [a.name, ...(a.fm.aliases ?? [])].map(normalizeTitle);
+      const namesB = [b.name, ...(b.fm.aliases ?? [])].map(normalizeTitle);
+      return outA.some((l) => namesB.includes(l)) || outB.some((l) => namesA.includes(l));
+    };
+
+    const pageHits = evalSet.must_pages.map((spec) => [spec, !!findPage(spec)] as const);
+    const notHits = evalSet.must_not_pages.map((spec) => [spec, !findPage(spec)] as const);
+    const linkHits = evalSet.must_links.map(([a, b]) => {
+      const pa = findPage(a);
+      const pb = findPage(b);
+      return [`${a} ↔ ${b}`, !!(pa && pb && pa !== pb && linksBetween(pa, pb))] as const;
+    });
+    const factHits = evalSet.must_facts.map(([spec, needle]) => {
+      // 사실은 대안 페이지 중 어디에든 있으면 된다
+      const cands = pages.filter((p) => matches(p, spec));
+      const ok = cands.some((p) => needle.split("|").some((n) => body(p).includes(n)));
+      return [`${spec} ⊃ "${needle}"`, ok] as const;
+    });
+    const pct = (xs: readonly (readonly [string, boolean])[]) =>
+      `${xs.filter((x) => x[1]).length}/${xs.length} (${Math.round((100 * xs.filter((x) => x[1]).length) / (xs.length || 1))}%)`;
+
+    L.push(`## 정답 대조 (${evalPath})`, ``);
+    L.push(`| 항목 | 재현율 |`);
+    L.push(`| --- | --- |`);
+    L.push(`| 꼭 있어야 할 페이지 | ${pct(pageHits)} |`);
+    L.push(`| 있으면 안 되는 페이지 (통과) | ${pct(notHits)} |`);
+    L.push(`| 꼭 이어져야 할 링크 | ${pct(linkHits)} |`);
+    L.push(`| 꼭 남아야 할 사실 | ${pct(factHits)} |`);
+    L.push(``);
+    const miss = (xs: readonly (readonly [string, boolean])[]) =>
+      xs.filter((x) => !x[1]).map((x) => `- ${x[0]}`);
+    if (miss(pageHits).length) L.push(`### 없는 페이지`, ``, ...miss(pageHits), ``);
+    if (miss(notHits).length) L.push(`### 있으면 안 되는데 있는 페이지`, ``, ...miss(notHits), ``);
+    if (miss(linkHits).length) L.push(`### 안 이어진 링크`, ``, ...miss(linkHits), ``);
+    if (miss(factHits).length) L.push(`### 빠진 사실`, ``, ...miss(factHits), ``);
   }
 
   L.push(`## 페이지 목록`, ``);
