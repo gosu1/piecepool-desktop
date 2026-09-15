@@ -13,6 +13,8 @@ export type Candidates = {
   score: Map<string, number>;
   /** 고칠 수 있는 절 이름 — 다시 써도 되는 것. 해시가 일치하는 것만. */
   rewritable: string[];
+  /** 노트에 글자로 나오는데 페이지가 아니라 어느 페이지의 절인 주제. "환각 (추상 요약의 절)". */
+  sectionTopics: string[];
   /** 링크를 걸 수 있는 이름. 제목과 별칭 전부. */
   linkable: string[];
 };
@@ -104,6 +106,20 @@ export function pickCandidates(note: Note, wiki: WikiPage[], embed?: EmbedOpts):
     if (names.length) rewritable.push(`${page.name}: ${names.join(", ")}`);
   }
 
+  // 절로 있는 주제 — 노트가 다루는 이름이 어느 페이지의 절 제목과 같으면 알린다.
+  // 첫 자료가 `환각` 을 `추상 요약` 의 절로 넣으면 이후 자료 스무 장이 그 절에 쌓였다
+  // (연구자 볼트 12회차). 규칙만으로는 AI 가 그 절의 존재를 눈여겨보지 않는다 — 코드가 보이게 한다.
+  const hay = normalizeTitle(note.body);
+  const pageNames = new Set(wiki.map((p) => normalizeTitle(p.name)));
+  const sectionTopics: string[] = [];
+  for (const page of wiki) {
+    for (const sec of page.sections) {
+      const h = sec.heading.trim();
+      if (h === "요약" || h.length < 2 || pageNames.has(normalizeTitle(h))) continue;
+      if (appears(hay, normalizeTitle(h))) sectionTopics.push(`${h} (${page.name}의 절)`);
+    }
+  }
+
   // 링크 후보 — 볼트의 모든 페이지. 후보로 추려진 것만이 아니다.
   const linkable: string[] = [];
   for (const page of wiki) {
@@ -111,7 +127,7 @@ export function pickCandidates(note: Note, wiki: WikiPage[], embed?: EmbedOpts):
     linkable.push(aliases.length ? `${page.name} (별칭: ${aliases.join(", ")})` : page.name);
   }
 
-  return { related, why, score, rewritable, linkable };
+  return { related, why, score, rewritable, sectionTopics, linkable };
 }
 
 /** 위키 페이지를 프롬프트에 넣을 마크다운으로. 사용자가 고친 절은 목록에서 빠지므로 표시가 필요 없다. */
@@ -162,6 +178,13 @@ export function buildUserMessage(note: Note, c: Candidates, part: string | null 
   out.push(c.rewritable.length ? c.rewritable.join("\n") : "(없습니다)");
   out.push("</고칠 수 있는 절>");
   out.push("");
+
+  if (c.sectionTopics.length) {
+    out.push("<절로 있는 주제>");
+    out.push(c.sectionTopics.join("\n"));
+    out.push("</절로 있는 주제>");
+    out.push("");
+  }
 
   out.push("<링크 후보 목록>");
   out.push(c.linkable.length ? c.linkable.join("\n") : "(볼트가 비어 있습니다)");

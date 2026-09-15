@@ -16,3 +16,6 @@ fixtures/vault-life/wiki/
 # 옵시디언 설정 — 사람마다 다르다. 픽스처 볼트를 열면 생긴다
 .obsidian/
 
+fixtures/vault-lab/wiki/
+fixtures/vault-lab/.piecepool/
+fixtures/vault-lab/sources/
