@@ -151,7 +151,7 @@ npm run ingest -- <볼트폴더> <파일>    # unimplemented 로 죽는다 (정�
 
 ### 실험 돌려보기 — 제품 코드 대신 데모로 파이프라인을 본다
 
-4단계의 설계(ADR-0002)를 실측한 도구가 `scripts/demo/` 에 있다. **제품 코드가 아니다.** 설계가 맞는지 62장짜리 볼트로 재는 도구이고, 4단계는 이것을 `src/core/` 로 옮기는 일이다.
+`scripts/demo/` 는 **ingest 엔진의 CLI 판**이다. 검문·빌더·트랜잭션·출처 페이지가 다 있고 62장 볼트로 설계를 실측했다. 다만 **앱에는 아직 안 꽂혀 있다** — 0단계 골격의 타입(`Vault` · `IngestSource` · `Written`)과 3단계 git 안전망에 붙어 있지 않다. 4단계는 이 엔진을 `src/core/` 에 옮겨 꽂는 일이지 다시 짜는 일이 아니다.
 
 ```bash
 cp .env.example .env                      # GEMINI_API_KEY 를 넣는다 (무료 키면 된다)

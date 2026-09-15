@@ -4,7 +4,7 @@
 //   node --env-file=.env scripts/demo/index.ts --only "DETR"
 //   node --env-file=.env scripts/demo/index.ts --embed
 //
-// 제품 코드가 아니다. 설계가 검증되면 src/core/ 로 옮긴다.
+// ingest 엔진의 CLI 판이다. 앱에는 아직 안 꽂혀 있다 — 4단계에서 src/core/ 로 옮겨 꽂는다.
 
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";

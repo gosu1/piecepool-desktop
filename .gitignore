@@ -6,18 +6,13 @@ dist/
 .env.local
 
 # 픽스처의 원본 PDF — 용량과 저작권. fixtures/README.md 참조
-fixtures/vault/sources/
+fixtures/vault-life/sources/
 
-# 데모 실행 산출물 — 응답 캐시, 동기화 상태, 생성된 위키
+# 실험 도구 산출물 — 응답 캐시, 동기화 상태, 생성된 위키
 .piecepool/
-fixtures/vault/.piecepool/
-fixtures/vault/wiki/
+fixtures/vault-life/.piecepool/
+fixtures/vault-life/wiki/
 
 # 옵시디언 설정 — 사람마다 다르다. 픽스처 볼트를 열면 생긴다
 .obsidian/
 
-fixtures/vault-life/wiki/
-fixtures/vault-life/.piecepool/
-fixtures/vault-life/sources/
-fixtures/vault-diary/wiki/
-fixtures/vault-diary/.piecepool/

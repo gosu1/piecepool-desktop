@@ -3,7 +3,7 @@
 //   node scripts/demo/analyze.ts fixtures/vault-life [run.log]
 //
 // 재는 것: 링크 밀도 · 고립 페이지 · 절 누적 · 기록 분포 · 지적 종류별 집계 · `나` 허브 구조.
-// ADR-0002 "측정 지표" 절의 실측 도구다. 제품 코드가 아니다.
+// ADR-0002 "측정 지표" 절의 실측 도구다. 앱에는 들어가지 않는다.
 
 import { readFile } from "node:fs/promises";
 import { normalizeTitle, readWikiPage, scanWiki, type WikiPage } from "./vault.ts";
