@@ -131,9 +131,11 @@ export function pickCandidates(note: Note, wiki: WikiPage[], embed?: EmbedOpts):
 }
 
 /** 위키 페이지를 프롬프트에 넣을 마크다운으로. 사용자가 고친 절은 목록에서 빠지므로 표시가 필요 없다. */
-function renderPage(page: WikiPage): string {
+function renderPage(page: WikiPage, hint?: string): string {
   const lines = [`# ${page.name}`];
   if (page.summary) lines.push("", `> ${page.summary}`);
+  // 코드가 아는 것을 보이게 한다 — 예: "이 요약은 노트 40장 전 것입니다".
+  if (hint) lines.push("", `(${hint})`);
   for (const s of page.sections) {
     if (s.heading === "요약") continue;
     lines.push("", `## ${s.heading}`, "", s.content);
@@ -148,7 +150,12 @@ function renderPage(page: WikiPage): string {
  * AI 에게 보낼 사용자 메시지.
  * 시스템 프롬프트(write.md)가 설명하는 네 블록을 그대로 만든다.
  */
-export function buildUserMessage(note: Note, c: Candidates, part: string | null = null): string {
+export function buildUserMessage(
+  note: Note,
+  c: Candidates,
+  part: string | null = null,
+  hints: Map<string, string> = new Map(),
+): string {
   const date = note.date ?? "";
   const out: string[] = [];
 
@@ -167,7 +174,7 @@ export function buildUserMessage(note: Note, c: Candidates, part: string | null 
     out.push("(찾지 못했습니다)");
   } else {
     for (const p of c.related) {
-      out.push(renderPage(p));
+      out.push(renderPage(p, hints.get(p.name)));
       out.push("");
     }
   }

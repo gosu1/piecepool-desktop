@@ -19,7 +19,7 @@ import {
   type WikiPage,
 } from "./vault.ts";
 import { buildUserMessage, pageEmbedText, pickCandidates } from "./prompt.ts";
-import { MODELS, embed, embedStats, writeWiki } from "./llm.ts";
+import { MODELS, askJson, embed, embedStats, writeWiki } from "./llm.ts";
 import { buildMarkdown, hasChanges, nameIndex, retroLink, safeFileName, verify } from "./build.ts";
 import {
   buildSourcePage,
@@ -46,6 +46,8 @@ type Args = {
   maxChars: number;
   /** 정리 없이 소급 링크만 — 기존 위키 전체에 대해 한 번. */
   relink: boolean;
+  /** `나` 요약을 이 장수마다 별도 호출로 다시 쓴다. 0 이면 안 한다. */
+  meEvery: number;
 };
 
 function parseArgs(argv: string[]): Args {
@@ -62,6 +64,7 @@ function parseArgs(argv: string[]): Args {
     prompt: "src/core/prompts/write.md",
     maxChars: 200_000,
     relink: false,
+    meEvery: 20,
   };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
@@ -75,13 +78,18 @@ function parseArgs(argv: string[]): Args {
     else if (k === "--prompt") a.prompt = argv[++i];
     else if (k === "--max-chars") a.maxChars = Number(argv[++i]);
     else if (k === "--relink") a.relink = true;
+    else if (k === "--me-every") a.meEvery = Number(argv[++i]);
   }
   return a;
 }
 
 /** 처리한 항목의 지문. `missing` 은 원본이 사라져 기록에 `(출처 삭제됨)` 을 붙인 상태. */
 type SyncEntry = { hash: string; compiledAt: string; missing?: true };
-type SyncState = { notes: Record<string, SyncEntry> };
+type SyncState = {
+  notes: Record<string, SyncEntry>;
+  /** `나` 요약의 지문과, 그 지문이 유지된 동안 처리한 항목 수. 요약이 낡았는지 AI 에게 알리는 데 쓴다. */
+  me?: { summaryHash: string; age: number };
+};
 
 async function readSyncState(vault: string): Promise<SyncState> {
   try {
@@ -244,6 +252,55 @@ async function markDeletedSources(vault: string, state: SyncState, today: string
     );
   }
   await writeSyncState(vault, state);
+}
+
+/**
+ * `나` 요약을 다시 쓴다 — 노트 한 장의 호출로는 "지금의 나" 를 쓸 재료가 없다 (87장 뒤에도
+ * 첫 노트의 요약이 그대로였고, 힌트를 줘도 null 을 냈다). 그래서 N장마다 한 번, `나` 가 가리키는
+ * 페이지들의 요약을 모아 작은 별도 호출로 쓴다. 소스당 1회 원칙에 1/N 을 얹는다.
+ */
+async function refreshMeSummary(vault: string, today: string): Promise<boolean> {
+  const wiki = await loadWiki(vault);
+  const me = wiki.get("나");
+  if (!me) return false;
+  const sumSec = me.sections.find((s) => s.heading === "요약");
+  if (sumSec && !sumSec.ours) return false; // 사용자가 고친 요약은 건드리지 않는다
+  const linked = new Set(
+    me.sections
+      .flatMap((s) => s.content.match(/\[\[[^\]|#]+/g) ?? [])
+      .map((l) => normalizeTitle(l.slice(2))),
+  );
+  const lines = [...wiki.values()]
+    .filter((p) => linked.has(normalizeTitle(p.name)) && p.summary)
+    .map((p) => `- ${p.name}: ${p.summary}`);
+  const user = [
+    `<옛 요약>\n${me.summary}\n</옛 요약>`,
+    `<나에 관한 페이지들>\n${lines.join("\n")}\n</나에 관한 페이지들>`,
+    `<최근 기록>\n${me.records.slice(-10).join("\n")}\n</최근 기록>`,
+  ].join("\n\n");
+  const sys = await readFile("scripts/demo/me-summary.md", "utf8");
+  const { value } = await askJson<{ summary: string }>(
+    sys,
+    user,
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["summary"],
+      properties: { summary: { type: "string" } },
+    },
+    "me_summary",
+  );
+  const summary = value.summary.trim();
+  if (!summary || summary === me.summary) return false;
+  const md = buildMarkdown({
+    page: { name: "나", aliasesToAdd: [], summary, newSections: [], replaces: [], records: [] },
+    existing: me,
+    sourceName: null,
+    date: null,
+    today,
+  });
+  await commitFiles([{ path: wikiPath(vault, "나"), content: md, mustExist: true }]);
+  return true;
 }
 
 /** 새 페이지 이름들을 기존 페이지 본문에 소급해서 링크한다. 바뀐 파일 수를 돌려준다. */
@@ -511,7 +568,17 @@ async function main(): Promise<void> {
           }
         }
 
-        const userMessage = buildUserMessage(note, cands, part);
+        // `나` 의 요약이 오래됐으면 알린다. "큰 그림이 바뀔 때만 고쳐라" 를 AI 는 "절대 고치지
+        // 마라" 로 받는다 — 87장 뒤에도 첫 노트의 요약이 그대로였다(23회차). 낡은 요약은
+        // 페이지를 열어도 안 보이는 오류라 코드가 세어서 보이게 한다.
+        const hints = new Map<string, string>();
+        if ((state.me?.age ?? 0) >= 15) {
+          hints.set(
+            "나",
+            `이 요약은 노트 ${state.me!.age}장 전에 쓴 것입니다. 지금의 나와 맞지 않으면 다시 쓰십시오`,
+          );
+        }
+        const userMessage = buildUserMessage(note, cands, part, hints);
 
         if (args.dry) {
           console.log("\n" + "─".repeat(70));
@@ -640,6 +707,23 @@ async function main(): Promise<void> {
 
     if (!args.dry) {
       state.notes[item.key] = { hash: item.hash, compiledAt: new Date().toISOString() };
+      // `나` 요약의 나이 — 지문이 그대로면 한 장 더 늙는다.
+      const me = (await loadWiki(args.vault)).get("나");
+      const h = me ? hash8(me.summary) : "";
+      state.me =
+        state.me?.summaryHash === h
+          ? { summaryHash: h, age: state.me.age + 1 }
+          : { summaryHash: h, age: 0 };
+      if (args.meEvery > 0 && state.me.age >= args.meEvery) {
+        if (await refreshMeSummary(args.vault, today)) {
+          calls++;
+          const fresh = (await loadWiki(args.vault)).get("나");
+          state.me = { summaryHash: fresh ? hash8(fresh.summary) : "", age: 0 };
+          console.log(`   나 요약 갱신: ${fresh?.summary.slice(0, 80)}`);
+        } else {
+          state.me = { summaryHash: h, age: 0 };
+        }
+      }
       // 항목마다 저장한다. 끝에서 한 번만 쓰면 중간에 죽었을 때 위키는 바뀌었는데
       // 상태는 안 남아, 다음 실행이 같은 노트를 다시 정리해 기록이 두 번 쌓인다.
       await writeSyncState(args.vault, state);

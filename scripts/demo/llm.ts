@@ -219,4 +219,30 @@ export async function embed(texts: string[]): Promise<number[][]> {
   return out as number[][];
 }
 
+/** 짧은 JSON 호출 — `나` 요약 갱신처럼 스키마가 작은 보조 호출. 캐시한다. */
+export async function askJson<T>(
+  systemPrompt: string,
+  userMessage: string,
+  schema: Record<string, unknown>,
+  name: string,
+): Promise<{ value: T; cached: boolean }> {
+  const key = keyOf("json", name, CHAT_MODEL, systemPrompt, userMessage);
+  const hit = await cacheGet<T>(key);
+  if (hit) return { value: hit, cached: true };
+  const raw = (await postJson("/chat/completions", {
+    model: CHAT_MODEL,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userMessage },
+    ],
+    response_format: { type: "json_schema", json_schema: { name, strict: true, schema } },
+    temperature: 0.2,
+  })) as { choices?: { message?: { content?: string } }[] };
+  const content = raw.choices?.[0]?.message?.content;
+  if (!content) throw new Error(`빈 응답: ${JSON.stringify(raw).slice(0, 300)}`);
+  const value = JSON.parse(content) as T;
+  await cacheSet(key, value);
+  return { value, cached: false };
+}
+
 export const MODELS = { chat: CHAT_MODEL, embed: EMBED_MODEL };
