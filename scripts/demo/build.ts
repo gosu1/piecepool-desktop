@@ -129,20 +129,20 @@ function autoLink(text: string, names: string[], selfName: string): string {
     .sort((a, b) => b.length - a.length);
 
   // 이미 링크된 구간은 건드리지 않는다. 홀수 인덱스가 링크다.
-  const parts = text.split(/(\[\[[^\]]+\]\])/);
-  const done = new Set<string>();
-
-  for (let i = 0; i < parts.length; i += 2) {
-    for (const name of targets) {
-      const key = normalizeTitle(name);
-      if (done.has(key)) continue;
+  // 이름 하나를 감쌀 때마다 다시 나눈다 — 한 번만 나누면 방금 만든 `[[부산 여행]]` 안에서
+  // 짧은 이름 `여행` 을 또 찾아 `[[부산 [[여행]]]]` 이 된다 (10회차 실측, 깨진 링크 1).
+  let out = text;
+  for (const name of targets) {
+    const parts = out.split(/(\[\[[^\]]+\]\])/);
+    for (let i = 0; i < parts.length; i += 2) {
       const idx = parts[i].indexOf(name);
       if (idx < 0) continue;
       parts[i] = parts[i].slice(0, idx) + `[[${name}]]` + parts[i].slice(idx + name.length);
-      done.add(key);
+      break;
     }
+    out = parts.join("");
   }
-  return parts.join("");
+  return out;
 }
 
 /** content 안의 `##` 는 `###` 으로 강등한다. 절 구조가 깨지는 것을 막되 내용은 살린다. */

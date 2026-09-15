@@ -191,3 +191,63 @@ describe("기록 순서", () => {
     expect(lines.map(head)).toEqual(["2020-05-29", "2026-09-26", "미상"]);
   });
 });
+
+describe("자동 링크", () => {
+  it("긴 이름을 감싼 뒤 그 안에서 짧은 이름을 또 감싸지 않는다", () => {
+    const out = verify({
+      llmPages: [
+        {
+          name: "가계부",
+          aliases_to_add: [],
+          summary: "s",
+          new_sections: [{ heading: "10월", content: "부산 여행 22만원. 여행 뒤 헬스장 등록." }],
+          replace_sections: [],
+          new_records: [],
+        },
+      ],
+      sourceBody: "",
+      names: { files: new Set(["부산 여행", "여행", "헬스장"]), aliases: new Map() },
+      existing: new Map([
+        [
+          "부산 여행",
+          {
+            path: "",
+            name: "부산 여행",
+            fm: {},
+            summary: "",
+            sections: [],
+            records: [],
+            recordsOurs: true,
+          },
+        ],
+        [
+          "여행",
+          {
+            path: "",
+            name: "여행",
+            fm: {},
+            summary: "",
+            sections: [],
+            records: [],
+            recordsOurs: true,
+          },
+        ],
+        [
+          "헬스장",
+          {
+            path: "",
+            name: "헬스장",
+            fm: {},
+            summary: "",
+            sections: [],
+            records: [],
+            recordsOurs: true,
+          },
+        ],
+      ]),
+    });
+    expect(out.pages[0].newSections[0].content).toBe(
+      "[[부산 여행]] 22만원. [[여행]] 뒤 [[헬스장]] 등록.",
+    );
+  });
+});
