@@ -153,8 +153,16 @@ npm run ingest -- <볼트폴더> <파일>    # unimplemented 로 죽는다 (정�
 
 `scripts/demo/` 는 **ingest 엔진의 CLI 판**이다. 검문·빌더·트랜잭션·출처 페이지가 다 있고 62장 볼트로 설계를 실측했다. 다만 **앱에는 아직 안 꽂혀 있다** — 0단계 골격의 타입(`Vault` · `IngestSource` · `Written`)과 3단계 git 안전망에 붙어 있지 않다. 4단계는 이 엔진을 `src/core/` 에 옮겨 꽂는 일이지 다시 짜는 일이 아니다.
 
+**자기 노트로 돌리는 게 제일 빠르다.** 노트 10~30장을 빈 폴더에 복사하고(원본 볼트에 직접 돌리지 않는다 — 하루 한도가 500회다), 돌리고, 그 폴더를 옵시디언으로 연다. 틀린 페이지·이상한 링크·빠진 사실을 그대로 보고하면 된다.
+
 ```bash
-cp .env.example .env                      # GEMINI_API_KEY 를 넣는다 (무료 키면 된다)
+cp .env.example .env                                              # GEMINI_API_KEY (무료 키면 된다)
+node --env-file=.env scripts/demo/index.ts --vault <내 노트 폴더>  # wiki/ 가 그 폴더 안에 생긴다
+```
+
+62장 픽스처로 돌리려면:
+
+```bash
 node --env-file=.env scripts/demo/index.ts --vault fixtures/vault-life --dry   # 키 없이. AI 에게 갈 입력만 본다
 node --env-file=.env scripts/demo/index.ts --vault fixtures/vault-life         # 62장 정리. 호출 62회, 20~30분
 node scripts/demo/analyze.ts fixtures/vault-life                               # 밀도·고립·누적 지표
