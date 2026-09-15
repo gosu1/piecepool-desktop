@@ -382,7 +382,7 @@ async function main(): Promise<void> {
       continue;
     }
 
-    await ensureMePage(args.vault, today);
+    if (!args.dry) await ensureMePage(args.vault, today);
     const chunks = splitChunks(item.body, args.maxChars);
     if (chunks.length > 1)
       console.log(`   ${args.maxChars}자를 넘어 ${chunks.length}청크로 나눕니다`);
