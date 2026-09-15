@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import type { NotePath } from "../../shared/types.ts";
-import type { TreeNode } from "../../shared/ipc.ts";
+import type { NotePath, Result } from "../../shared/types.ts";
+import type { TreeNode, VaultPayload } from "../../shared/ipc.ts";
 
 // FileTree.tsx 가 스토어에서 TreeNode 를 가져다 쓴다. 그 import 를 살려 둔다.
 export type { TreeNode };
@@ -13,55 +13,13 @@ export function clampWidth(px: number): number {
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, px));
 }
 
-/**
- * 목 데이터. 재구축 설계 §4.2 의 볼트 레이아웃을 그대로 흉내낸다 —
- * IPC 가 생기면 이 상수만 교체되고 UI 는 그대로다.
- */
-const MOCK_TREE: TreeNode[] = [
-  {
-    name: "wiki",
-    path: "wiki",
-    kind: "dir",
-    children: [
-      { name: "트랜스포머.md", path: "wiki/트랜스포머.md", kind: "file" },
-      { name: "어텐션.md", path: "wiki/어텐션.md", kind: "file" },
-      {
-        name: "논문",
-        path: "wiki/논문",
-        kind: "dir",
-        children: [
-          {
-            name: "Attention Is All You Need.md",
-            path: "wiki/논문/Attention Is All You Need.md",
-            kind: "file",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: "inbox",
-    path: "inbox",
-    kind: "dir",
-    children: [{ name: "2026-09-14 메모.md", path: "inbox/2026-09-14 메모.md", kind: "file" }],
-  },
-  {
-    name: "sources",
-    path: "sources",
-    kind: "dir",
-    children: [
-      {
-        name: "files",
-        path: "sources/files",
-        kind: "dir",
-        children: [{ name: "attention.pdf", path: "sources/files/attention.pdf", kind: "file" }],
-      },
-    ],
-  },
-];
-
 interface WorkspaceState {
+  /** 열린 볼트. 없으면 아직 폴더를 고르지 않은 것이다. */
+  vault: VaultPayload | null;
   tree: TreeNode[];
+  /** 읽기 실패 메시지. 빈 볼트와 읽기 실패는 다른 상태다. */
+  error: string | null;
+  loading: boolean;
   expanded: Set<NotePath>;
   selected: NotePath | null;
   sidebarOpen: boolean;
@@ -70,11 +28,31 @@ interface WorkspaceState {
   select: (path: NotePath) => void;
   toggleSidebar: () => void;
   setSidebarWidth: (px: number) => void;
+  pickVault: () => Promise<void>;
+  loadLastVault: () => Promise<void>;
+}
+
+/** 두 액션이 같은 응답 모양을 받는다. 해석을 한 곳에 둔다. */
+function applied(r: Result<VaultPayload | null>): Partial<WorkspaceState> {
+  if (!r.ok) return { error: r.error.message, loading: false };
+  // null 은 취소이거나 기억된 볼트가 없는 것이다 — 둘 다 아무 일도 일어나지 않는다.
+  if (r.value === null) return { loading: false };
+  return {
+    vault: r.value,
+    tree: r.value.tree,
+    expanded: new Set(),
+    selected: null,
+    error: null,
+    loading: false,
+  };
 }
 
 export const useWorkspace = create<WorkspaceState>((set) => ({
-  tree: MOCK_TREE,
-  expanded: new Set(["wiki"]),
+  vault: null,
+  tree: [],
+  error: null,
+  loading: false,
+  expanded: new Set(),
   selected: null,
   sidebarOpen: true,
   sidebarWidth: 240,
@@ -90,4 +68,14 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   select: (path) => set({ selected: path }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setSidebarWidth: (px) => set({ sidebarWidth: clampWidth(px) }),
+
+  pickVault: async () => {
+    set({ loading: true, error: null });
+    set(applied(await window.piecepool.pickVault()));
+  },
+
+  loadLastVault: async () => {
+    set({ loading: true, error: null });
+    set(applied(await window.piecepool.lastVault()));
+  },
 }));
