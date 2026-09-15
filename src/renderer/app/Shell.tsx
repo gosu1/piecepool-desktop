@@ -61,7 +61,9 @@ function ResizeHandle() {
       onPointerUp={onUp}
       onPointerCancel={onUp}
       onKeyDown={onKeyDown}
-      className="w-1 shrink-0 cursor-col-resize hover:bg-primary focus-visible:bg-primary focus-visible:outline-none"
+      // 핸들은 전체 높이라 상단 32px 이 드래그 띠와 겹친다.
+      // no-drag 가 없으면 그 구간에서 리사이즈 대신 창이 끌린다 — 눌러 봐야만 드러난다.
+      className="app-no-drag w-1 shrink-0 cursor-col-resize hover:bg-primary focus-visible:bg-primary focus-visible:outline-none"
     />
   );
 }
