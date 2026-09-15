@@ -23,5 +23,6 @@ export async function openVault(root: string): Promise<Vault> {
     throw new PiecePoolError("vault_not_found", `폴더가 아니다: ${abs}`);
   }
 
-  return { root: abs, agentWriteRoot: "wiki" };
+  // 기본 쓰기 루트 셋. shared/types.ts 의 Vault 주석이 규정한 값이다(ADR-0002 결정 6).
+  return { root: abs, agentWriteRoots: ["wiki", "sources", ".piecepool"] };
 }

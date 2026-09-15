@@ -10,7 +10,7 @@ async function fixture(): Promise<Vault> {
   const root = await mkdtemp(join(tmpdir(), "pp-paths-"));
   await mkdir(join(root, "wiki"), { recursive: true });
   await writeFile(join(root, "wiki", "a.md"), "# a", "utf8");
-  return { root, agentWriteRoot: "wiki" };
+  return { root, agentWriteRoots: ["wiki"] };
 }
 
 describe("resolveInVault", () => {
@@ -69,7 +69,7 @@ describe("resolveInVault", () => {
     const linked = join(await mkdtemp(join(tmpdir(), "pp-link-")), "vault");
     await symlink(real.root, linked, "junction");
 
-    const v = { root: linked, agentWriteRoot: "wiki" };
+    const v = { root: linked, agentWriteRoots: ["wiki"] };
     await expect(resolveInVault(v, "wiki/a.md")).resolves.toContain("a.md");
   });
 

@@ -10,7 +10,7 @@ async function fixture(dirs: string[], files: string[]): Promise<Vault> {
   const root = await mkdtemp(join(tmpdir(), "pp-tree-"));
   for (const d of dirs) await mkdir(join(root, d), { recursive: true });
   for (const f of files) await writeFile(join(root, f), "", "utf8");
-  return { root, agentWriteRoot: "wiki" };
+  return { root, agentWriteRoots: ["wiki"] };
 }
 
 describe("readTree", () => {

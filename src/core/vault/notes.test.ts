@@ -9,7 +9,7 @@ async function fixture(body: string): Promise<Vault> {
   const root = await mkdtemp(join(tmpdir(), "pp-notes-"));
   await mkdir(join(root, "wiki"), { recursive: true });
   await writeFile(join(root, "wiki", "a.md"), body, "utf8");
-  return { root, agentWriteRoot: "wiki" };
+  return { root, agentWriteRoots: ["wiki"] };
 }
 
 describe("readRaw", () => {

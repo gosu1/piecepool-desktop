@@ -14,7 +14,7 @@ describe("openVault", () => {
     const root = await tempDir();
     const v = await openVault(root);
     expect(v.root).toBe(resolve(root));
-    expect(v.agentWriteRoot).toBe("wiki");
+    expect(v.agentWriteRoots).toEqual(["wiki", "sources", ".piecepool"]);
   });
 
   it("없는 폴더는 vault_not_found 로 던진다", async () => {

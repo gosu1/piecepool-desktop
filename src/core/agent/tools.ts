@@ -26,7 +26,7 @@ export interface Tool {
 /**
  * 툴 6종: list_notes · read_note · write_note · search · backlinks · delete_note
  *
- * 읽기는 볼트 전체를 본다. 쓰기는 agentWriteRoot 아래 .md 만 —
+ * 읽기는 볼트 전체를 본다. 쓰기는 agentWriteRoots 아래만 —
  * 즉 에이전트는 볼트 전체를 근거로 삼되 정해진 곳에만 쓴다.
  * sources/files/ 는 쓰기 금지다.
  *
