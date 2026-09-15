@@ -61,9 +61,9 @@ function ResizeHandle() {
       onPointerUp={onUp}
       onPointerCancel={onUp}
       onKeyDown={onKeyDown}
-      // 핸들은 전체 높이라 상단 32px 이 드래그 띠와 겹친다.
-      // no-drag 가 없으면 그 구간에서 리사이즈 대신 창이 끌린다 — 눌러 봐야만 드러난다.
-      className="app-no-drag w-1 shrink-0 cursor-col-resize hover:bg-primary focus-visible:bg-primary focus-visible:outline-none"
+      // 핸들은 전체 높이라 상단 32px 이 드래그 띠와 겹친다. 둘 다 필요하다 —
+      // no-drag 가 없으면 창이 끌리고, z 가 없으면 띠가 위에 덮여 아무 일도 안 일어난다.
+      className="app-no-drag relative z-10 w-1 shrink-0 cursor-col-resize hover:bg-primary focus-visible:bg-primary focus-visible:outline-none"
     />
   );
 }
@@ -80,7 +80,10 @@ export function Shell() {
 
   return (
     <div className="relative flex h-full bg-canvas text-ink">
-      {/* 창을 끌 수 있는 유일한 자리. 위에 얹히는 클릭 대상은 app-no-drag 로 되돌린다. */}
+      {/* 창을 끌 수 있는 유일한 자리.
+          띠 위에 얹히는 클릭 대상은 `app-no-drag` 와 `relative z-10` 을 **둘 다** 받아야 한다.
+          no-drag 는 OS 드래그 영역에서만 빼 준다 — 띠는 absolute 라 페인트 순서상 정적 형제보다
+          위에 있어서, z 가 없으면 pointerdown 을 띠가 받아 아무 일도 안 일어난다. */}
       <div className="app-drag absolute inset-x-0 top-0 z-0 h-8" />
       <WindowControls />
       <Ribbon />
