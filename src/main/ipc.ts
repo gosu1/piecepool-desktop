@@ -45,7 +45,7 @@ async function open(root: string): Promise<VaultPayload> {
   return payload;
 }
 
-/** onProgress = webContents.send. CLI 가 console.log 를 넘기던 자리다. */
+/** vault:pick·vault:last 두 채널을 등록한다. 둘 다 열면 트리까지 실어 보낸다. */
 export function registerHandlers(): void {
   ipcMain.handle(CHANNEL.vaultPick, () =>
     wrap(async () => {

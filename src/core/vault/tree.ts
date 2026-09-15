@@ -19,7 +19,9 @@ async function readDir(absDir: string, relDir: string): Promise<TreeNode[]> {
   const files: TreeNode[] = [];
 
   for (const e of entries) {
-    // 심볼릭 링크는 볼트 밖으로 나가거나 순환할 수 있다 — 따라가지 않는다.
+    // 심볼릭 링크는 볼트 밖으로 나가거나 순환할 수 있다 — 파일·폴더 모두 건너뛴다.
+    // Windows 의 junction(OneDrive 류 폴더에 흔하다)도 isSymbolicLink() 가 true 라
+    // 여기서 함께 걸러진다 — 실사용에서 그런 폴더가 안 보이는 결과로 드러날 수 있다.
     if (e.isSymbolicLink()) continue;
 
     // 경로는 POSIX 구분자로 고정한다. NotePath 의 약속이다.

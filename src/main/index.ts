@@ -1,4 +1,4 @@
-// OWNER: 7단계 — 빈 셸이다. IPC·메뉴·창 상태 복원은 아직 없다.
+// OWNER: 7단계 — IPC·메뉴는 붙었다. 창 상태 복원은 아직 없다.
 import { app, BrowserWindow, Menu, shell } from "electron";
 import { join } from "node:path";
 import { registerHandlers } from "./ipc.ts";

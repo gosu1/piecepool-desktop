@@ -1,3 +1,4 @@
+// FROZEN: 파일 전체. 변경 시 상대 개발자와 합의 (IPC 경계 계약 — main·preload·renderer 3자)
 // IPC 경계의 계약이다. main·preload·renderer 가 같은 문자열과 같은 모양을 쓰게 하는 유일한 출처다.
 // shared 규칙 그대로 — 타입과 순수 상수만 둔다. node:* 도 electron 도 여기 없다.
 import type { NotePath, Result } from "./types.ts";
