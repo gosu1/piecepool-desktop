@@ -79,6 +79,10 @@ export function applied(r: Result<VaultPayload | null>): Partial<WorkspaceState>
     tree: r.value.tree,
     expanded: new Set(),
     selected: null,
+    // 탭도 비운다. NotePath 는 볼트 루트 기준 상대경로라 새 볼트에서 다른 파일을 뜻한다 —
+    // 남겨 두면 이전 볼트의 글이 새 볼트의 탭 제목을 달고 조용히 그대로 떠 있는다.
+    tabs: [],
+    activeTab: null,
     error: null,
     loading: false,
   };

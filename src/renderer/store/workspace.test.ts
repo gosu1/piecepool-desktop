@@ -95,18 +95,22 @@ describe("applied", () => {
     expect(result).toEqual({ loading: false });
   });
 
-  it("값이 있으면 vault·tree 를 싣고 expanded·selected 를 새 볼트 기준으로 되돌린다", () => {
+  it("값이 있으면 vault·tree 를 싣고 expanded·selected·탭을 새 볼트 기준으로 되돌린다", () => {
     const payload: VaultPayload = {
       root: "/vault",
       name: "vault",
       tree: [{ name: "a.md", path: "a.md", kind: "file" }],
     };
     const result = applied({ ok: true, value: payload });
+    // toEqual 로 모양 전체를 고정한다 — 볼트 전환이 비워야 할 것을 하나라도 빠뜨리면
+    // 이전 볼트의 상태가 새 볼트에 조용히 남는다.
     expect(result).toEqual({
       vault: payload,
       tree: payload.tree,
       expanded: new Set(),
       selected: null,
+      tabs: [],
+      activeTab: null,
       error: null,
       loading: false,
     });
