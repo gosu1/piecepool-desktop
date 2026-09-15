@@ -1,5 +1,6 @@
 // OWNER: 7단계 — 빈 셸이다. IPC·메뉴·창 상태 복원은 아직 없다.
 import { app, BrowserWindow, Menu, shell } from "electron";
+import { join } from "node:path";
 
 // vite dev 서버를 본다. 프로덕션 빌드 경로(out/renderer)는 패키징을 시작할 때 정한다.
 const DEV_URL = "http://localhost:5173";
@@ -32,6 +33,7 @@ function createWindow(): void {
       // 껍데기 단계부터 켜 둔다 — 나중에 켜면 그 사이에 만든 UI 가 깨진다.
       contextIsolation: true,
       nodeIntegration: false,
+      preload: join(import.meta.dirname, "../../out/preload/index.cjs"),
     },
   });
 
