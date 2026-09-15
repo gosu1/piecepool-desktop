@@ -1,3 +1,5 @@
+// FROZEN: addSource 만 동결 — A↔B 경계면 (0단계 설계 §3.5·§8)
+// parse · stringify · ParsedNote 는 가배치 1단계.
 import type { Fm } from "../../shared/types.ts";
 
 /** 원본 줄바꿈. LF 또는 CRLF. */

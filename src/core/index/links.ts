@@ -1,3 +1,5 @@
+// FROZEN: parseLinks 만 동결 (0단계 설계 §8, 상위 §6.1)
+// LinkTargets · normalizeTitle · resolveLink 은 가배치 2단계.
 import type { LinkRef, NotePath } from "../../shared/types.ts";
 
 /**

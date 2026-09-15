@@ -1,3 +1,4 @@
+// FROZEN: 파일 전체 — A↔B 경계면 + 진입점 (0단계 설계 §3.1·§3.3·§8)
 import type { NotePath, OnProgress, Vault } from "../../../shared/types.ts";
 
 /**

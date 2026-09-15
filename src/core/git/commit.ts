@@ -1,3 +1,5 @@
+// FROZEN: commit() 만 동결 — A↔B 경계면 (0단계 설계 §3.3·§8)
+// sealUserEdits 는 등급 밖이다.
 import type { Author, NotePath, Vault } from "../../shared/types.ts";
 
 /**

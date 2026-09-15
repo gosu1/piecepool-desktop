@@ -1,3 +1,4 @@
+// FROZEN: 파일 전체 — A↔B 경계면 + 툴 6종 (0단계 설계 §3.4·§8)
 import type { Vault } from "../../shared/types.ts";
 import type { Written } from "./written.ts";
 

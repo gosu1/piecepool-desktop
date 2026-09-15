@@ -1,3 +1,4 @@
+// FROZEN: 파일 전체 — A↔B 경계면 (0단계 설계 §3.2·§8)
 import type { NotePath } from "../../shared/types.ts";
 
 /**
