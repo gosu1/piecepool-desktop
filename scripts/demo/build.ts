@@ -461,6 +461,12 @@ export function buildMarkdown(input: BuildInput): string {
   for (const s of sections) {
     if (s.ours) hashes[s.heading] = hash8(s.content);
   }
+  // 날짜순. 처리 순서대로 쌓으면 2020년 논문의 줄이 2026년 일기 뒤에 붙는다 (PDF 실측).
+  // 우리 글일 때만 — 사용자가 고친 기록 절은 순서도 사용자 것이다. 날짜 미상은 맨 뒤.
+  if (existing?.recordsOurs !== false) {
+    const key = (l: string) => /^- (\d{4}-\d{2}-\d{2})/.exec(l)?.[1] ?? "9999";
+    records.sort((a, b) => key(a).localeCompare(key(b)));
+  }
   const recordsBody = records.join("\n");
   // 기록 절은 예외 — 사용자가 고쳤으면 지문을 갱신하지 않되 새 줄은 덧붙인다.
   if (existing?.records.length === 0 || existing?.recordsOurs !== false) {

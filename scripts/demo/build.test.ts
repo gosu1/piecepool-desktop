@@ -160,3 +160,34 @@ describe("기록", () => {
     expect(me.records.map((r) => r.fact)).toEqual(["장조림 절반"]);
   });
 });
+
+describe("기록 순서", () => {
+  it("우리 글이면 날짜순으로 정렬하고 날짜 미상은 맨 뒤에 둔다", () => {
+    const existing = {
+      path: "wiki/DETR.md",
+      name: "DETR",
+      fm: { hashes: {} },
+      summary: "",
+      sections: [],
+      records: ["- 2026-09-26 일기 ← [[a]]", "- (날짜 미상) 미상 ← [[b]]"],
+      recordsOurs: true,
+    };
+    const md = buildMarkdown({
+      page: {
+        name: "DETR",
+        aliasesToAdd: [],
+        summary: null,
+        newSections: [],
+        replaces: [],
+        records: [{ fact: "논문", quote: "q", anchor: "2페이지" }],
+      },
+      existing,
+      sourceName: "@DETR (2020)",
+      date: "2020-05-29",
+      today: "2026-09-15",
+    });
+    const lines = md.split("\n").filter((l) => l.startsWith("- "));
+    const head = (l: string) => (l.startsWith("- (날짜 미상)") ? "미상" : l.slice(2, 12));
+    expect(lines.map(head)).toEqual(["2020-05-29", "2026-09-26", "미상"]);
+  });
+});
