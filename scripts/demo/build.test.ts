@@ -285,3 +285,38 @@ describe("나 허브", () => {
     expect(md).toContain("## 공부\n\n[[DETR]] · [[CNN]]");
   });
 });
+
+describe("이름 정리", () => {
+  it("파일에 못 쓰는 글자를 뗀 이름으로 링크까지 고친다", () => {
+    const out = verify({
+      llmPages: [
+        {
+          name: "Numbers Lie First: Numeric",
+          aliases_to_add: [],
+          summary: "s",
+          new_sections: [],
+          replace_sections: [],
+          new_records: [],
+        },
+        {
+          name: "환각",
+          aliases_to_add: [],
+          summary: "s",
+          new_sections: [
+            { heading: "논문", content: "제목은 [[Numbers Lie First: Numeric|초안]] 이다." },
+          ],
+          replace_sections: [],
+          new_records: [],
+        },
+      ],
+      sourceBody: "",
+      names: { files: new Set(), aliases: new Map() },
+      existing: new Map(),
+    });
+    expect(out.pages[0].name).toBe("Numbers Lie First Numeric");
+    expect(out.pages[1].newSections[0].content).toBe(
+      "제목은 [[Numbers Lie First Numeric|초안]] 이다.",
+    );
+    expect(out.issues.filter((i) => i.kind === "링크-해제")).toHaveLength(0);
+  });
+});

@@ -194,17 +194,37 @@ export function verify(input: VerifyInput): VerifyResult {
     files: new Set(input.names.files),
     aliases: new Map(input.names.aliases),
   };
+
+  // 출력 벽 6 — 파일 이름에 못 쓰는 글자를 뗀다. 프롬프트가 금지해도 AI 는
+  // "Numbers Lie First: …" 처럼 넣는다 (16회차). 이름만 떼고 링크를 안 고치면 파일은
+  // 콜론 없는 이름인데 링크는 콜론 있는 이름을 가리켜 깨진다. 이름을 고치고 본문의
+  // 링크도 같은 이름으로 바꾼다.
+  const rename = new Map<string, string>();
+  const llmPages = input.llmPages.map((p) => {
+    const raw = p.name?.trim() ?? "";
+    const safe = safeFileName(raw);
+    if (raw && safe !== raw) rename.set(normalizeTitle(raw), safe);
+    return { ...p, name: safe };
+  });
+  const fixLinks = (text: string) =>
+    rename.size === 0
+      ? text
+      : text.replace(/\[\[([^\]|#]+)([|#][^\]]*)?\]\]/g, (whole, name: string, rest?: string) => {
+          const to = rename.get(normalizeTitle(name));
+          return to ? `[[${to}${rest ?? ""}]]` : whole;
+        });
+
   // 자동 링크 대상 — 실재하는 페이지의 **표시 이름**이 필요하다.
   // `names` 는 정규화된 소문자라 본문에 그대로 끼울 수 없다.
   const displayNames = [
     ...[...input.existing.values()].map((w) => w.name),
-    ...input.llmPages.map((x) => x.name?.trim()).filter((x): x is string => !!x),
+    ...llmPages.map((x) => x.name).filter((x) => !!x),
   ];
-  for (const p of input.llmPages) {
-    if (p.name?.trim()) names.files.add(normalizeTitle(p.name.trim()));
+  for (const p of llmPages) {
+    if (p.name) names.files.add(normalizeTitle(p.name));
   }
 
-  for (const p of input.llmPages) {
+  for (const p of llmPages) {
     if (!p.name?.trim()) {
       issues.push({ page: "(이름 없음)", kind: "이름-비었음", detail: "페이지를 버렸습니다" });
       continue;
@@ -227,7 +247,9 @@ export function verify(input: VerifyInput): VerifyResult {
       });
 
     const clean = (text: string) =>
-      demoteHeadings(autoLink(stripUnknownLinks(text, names, p.name, strip), displayNames, p.name));
+      demoteHeadings(
+        autoLink(stripUnknownLinks(fixLinks(text), names, p.name, strip), displayNames, p.name),
+      );
 
     // 별칭 차단 — 다른 페이지의 제목이나 별칭이면 넣지 않는다 (결정 9 의 예방 2겹째).
     // 넣으면 그 이름의 링크가 두 페이지에 걸려 해제된다.
