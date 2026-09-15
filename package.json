@@ -12,7 +12,7 @@
   "scripts": {
     "dev": "vite",
     "build:preload": "vite build --config vite.preload.config.ts",
-    "start": "npm run build:preload && electron .",
+    "start": "node scripts/dev.mjs",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.web.json",
     "test": "vitest run",

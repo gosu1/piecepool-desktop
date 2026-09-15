@@ -49,7 +49,7 @@ function createWindow(): void {
 
   win.loadURL(DEV_URL).catch((err: unknown) => {
     console.error(
-      `vite dev 서버(${DEV_URL})에 연결하지 못했다 — 다른 터미널에서 npm run dev 를 먼저 켜라.`,
+      `vite dev 서버(${DEV_URL})에 연결하지 못했다 — electron 을 직접 부르지 말고 npm start 를 써라.`,
       err,
     );
   });
