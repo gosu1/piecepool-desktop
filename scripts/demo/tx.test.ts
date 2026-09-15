@@ -126,3 +126,42 @@ describe("별칭 해석", () => {
     expect(out.issues.filter((i) => i.kind === "별칭-차단")).toHaveLength(2);
   });
 });
+
+describe("세션 로그", () => {
+  it("AI 턴에서 찾은 quote 는 기록 줄에 (AI) 가 붙고, 사용자 턴은 붙지 않는다", async () => {
+    const { buildMarkdown } = await import("./build.ts");
+    const log =
+      "## 1턴 (사용자)\n\n좌석마다 슬롯을 두는 식으로 쓸 수 있을까?\n\n## 2턴 (AI)\n\nquery 하나하나가 특정 위치와 크기 영역을 담당하는 경향이 있습니다.";
+    const out = verify({
+      llmPages: [
+        {
+          name: "DETR",
+          aliases_to_add: [],
+          summary: "s",
+          new_sections: [],
+          replace_sections: [],
+          new_records: [
+            {
+              fact: "query 는 특정 위치·크기 영역을 담당한다",
+              quote: "query 하나하나가 특정 위치와 크기 영역을 담당하는 경향이 있습니다",
+            },
+            { fact: "좌석마다 슬롯을 두는 발상", quote: "좌석마다 슬롯을 두는 식으로" },
+          ],
+        },
+      ],
+      sourceBody: log,
+      names: { files: new Set(), aliases: new Map() },
+      existing: new Map(),
+    });
+    const md = buildMarkdown({
+      page: out.pages[0],
+      existing: undefined,
+      sourceName: "@session-2026-09-15-2130",
+      date: "2026-09-15",
+      today: "2026-09-15",
+    });
+    expect(md).toContain("← [[@session-2026-09-15-2130#2턴 (AI)]] (AI)");
+    expect(md).toContain("← [[@session-2026-09-15-2130#1턴 (사용자)]]\n");
+    expect(md).not.toContain("(사용자)]] (AI)");
+  });
+});

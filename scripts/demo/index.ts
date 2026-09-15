@@ -195,7 +195,9 @@ async function markDeletedSources(vault: string, state: SyncState, today: string
     const present = await exists(join(vault, key));
     const name = key.startsWith("sources/")
       ? "@" + key.slice("sources/".length).replace(/\.[^.]+$/, "")
-      : key.replace(/^.*\//, "").replace(/\.[^.]+$/, "");
+      : key.startsWith(".piecepool/sessions/")
+        ? "@session-" + key.slice(".piecepool/sessions/".length).replace(/\.[^.]+$/, "")
+        : key.replace(/^.*\//, "").replace(/\.[^.]+$/, "");
     if (!present && !entry.missing) changes.push({ key, name, missing: true });
     if (present && entry.missing) changes.push({ key, name, missing: false });
   }

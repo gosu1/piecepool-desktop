@@ -433,7 +433,10 @@ export function buildMarkdown(input: BuildInput): string {
     const when = date ?? "(날짜 미상)";
     // AI 가 fact 앞에 노트 날짜를 또 붙이기도 한다 ("2026-10-08 2026-10-08 첫 운동으로…"). 뗀다.
     const fact = date ? r.fact.replace(new RegExp(`^${date}\\s*`), "") : r.fact;
-    const line = `- ${when} ${fact} ← [[${sourceName ?? "?"}${anchor}]]`;
+    // AI 턴(`## N턴 (AI)`)에서 찾은 quote 는 `(AI)` 를 붙인다 — 상위 §8.2 의 꼬리표.
+    // 사용자가 한 말과 AI 가 한 말이 한눈에 갈리고, 다음 정리의 AI 도 "사용자 자료가 아니다" 를 안다.
+    const ai = r.anchor && /\(AI\)\s*$/.test(r.anchor) ? " (AI)" : "";
+    const line = `- ${when} ${fact} ← [[${sourceName ?? "?"}${anchor}]]${ai}`;
     if (!seen.has(normQuote(line))) {
       records.push(line);
       seen.add(normQuote(line));

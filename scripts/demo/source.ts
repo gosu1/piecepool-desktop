@@ -9,29 +9,50 @@ import { pathToFileURL } from "node:url";
 import { hash8Bytes, localDate } from "./vault.ts";
 
 export type SourceFile = {
-  /** 볼트 기준 상대경로. `sources/DETR (2020).pdf` */
+  /** 볼트 기준 상대경로. `sources/DETR (2020).pdf` 또는 `.piecepool/sessions/<id>.md` */
   path: string;
-  /** 확장자를 뗀 파일명. 출처 페이지 이름은 `@` + 이것. */
+  /** 확장자를 뗀 파일명. 출처 페이지 이름은 `@` + 이것. 세션은 `@session-<id>`. */
   name: string;
+  /** 세션 로그인가. 로그는 `## N턴 (사용자)` · `## N턴 (AI)` 헤딩으로 나뉜다. */
+  session?: true;
 };
 
 const SOURCE_EXT = new Set([".pdf", ".txt", ".md"]);
 const MAX_BYTES = 50 * 1024 * 1024;
 
-/** `sources/` 안의 원본 파일. 출처 페이지(`@*.md`)와 숨김 파일은 뺀다. */
+/**
+ * `sources/` 안의 원본 파일과 `.piecepool/sessions/` 의 세션 로그. 출처 페이지(`@*.md`)와 숨김 파일은 뺀다.
+ * 세션 로그는 수확(상위 §8.1)의 입력이다 — 대화 로그를 자료 하나로 보고 같은 파이프라인을 탄다.
+ */
 export async function scanSources(root: string): Promise<SourceFile[]> {
-  const dir = join(root, "sources");
-  let entries;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return [];
+  const out: SourceFile[] = [];
+  const list = async (dir: string) => {
+    try {
+      return await readdir(join(root, dir), { withFileTypes: true });
+    } catch {
+      return [];
+    }
+  };
+  for (const e of await list("sources")) {
+    if (!e.isFile() || e.name.startsWith(".") || e.name.startsWith("@")) continue;
+    if (!SOURCE_EXT.has(extname(e.name))) continue;
+    out.push({ path: `sources/${e.name}`, name: basename(e.name, extname(e.name)) });
   }
-  return entries
-    .filter((e) => e.isFile() && !e.name.startsWith(".") && !e.name.startsWith("@"))
-    .filter((e) => SOURCE_EXT.has(extname(e.name)))
-    .map((e) => ({ path: `sources/${e.name}`, name: basename(e.name, extname(e.name)) }))
-    .sort((a, b) => a.path.localeCompare(b.path));
+  for (const e of await list(".piecepool/sessions")) {
+    if (!e.isFile() || extname(e.name) !== ".md") continue;
+    const id = basename(e.name, ".md");
+    out.push({ path: `.piecepool/sessions/${e.name}`, name: `session-${id}`, session: true });
+  }
+  return out.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+/**
+ * 세션 로그를 턴으로 나눈다. 형식은 B 가 정하되, 이 데모는 `## N턴 (사용자)` · `## N턴 (AI)`
+ * 헤딩이 이미 있는 로그를 받는다. 헤딩이 곧 앵커이고, `(AI)` 가 붙은 턴에서 찾은 quote 는
+ * 기록 줄에 `(AI)` 표시가 붙는다 (상위 §8.2 의 꼬리표).
+ */
+export function isAiTurn(anchor: string | null): boolean {
+  return !!anchor && /\(AI\)\s*$/.test(anchor);
 }
 
 /** 입력 벽 4·5·6 — 크기, 빈 파일, UTF-8. 통과하면 null, 아니면 이유. */
@@ -95,8 +116,12 @@ export async function extractPdf(file: string): Promise<Extracted> {
 export async function extract(root: string, src: SourceFile): Promise<Extracted> {
   const full = join(root, src.path);
   if (extname(src.path) === ".pdf") return extractPdf(full);
-  // 볼트 밖 .md/.txt — 원문의 헤딩을 그대로 살린다. 페이지 개념이 없다.
-  return { pages: [(await readFile(full, "utf8")).trim()], metaDate: null };
+  // 볼트 밖 .md/.txt 와 세션 로그 — 원문의 헤딩을 그대로 살린다. 페이지 개념이 없다.
+  const raw = (await readFile(full, "utf8")).trim();
+  // 세션 로그의 프론트매터(date 등)는 본문이 아니다.
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw);
+  const date = m ? (/^date:\s*(\d{4}-\d{2}-\d{2})/m.exec(m[1])?.[1] ?? null) : null;
+  return { pages: [m ? raw.slice(m[0].length).trim() : raw], metaDate: date };
 }
 
 export type SourcePageInput = {
@@ -112,7 +137,9 @@ export function buildSourcePage(input: SourcePageInput): string {
   const { src, rawHash, date, today, extracted } = input;
   const out = ["---", "type: source", `raw: "[[${src.path}]]"`, `raw_hash: ${rawHash}`];
   if (date) out.push(`date: ${date}`);
-  out.push(`created: ${today}`, "---", "", `# ${src.name}`, "", `![[${src.path}]]`);
+  out.push(`created: ${today}`, "---", "", `# ${src.name}`, "");
+  // PDF 는 임베드로 원본을 보여준다. 세션 로그와 .md 는 전문이 곧 아래에 있으므로 경로만 적는다.
+  out.push(extname(src.path) === ".pdf" ? `![[${src.path}]]` : `원본: \`${src.path}\``);
   if (extname(src.path) === ".pdf") {
     extracted.pages.forEach((text, i) => {
       out.push("", `## ${i + 1}페이지`, "", text);
