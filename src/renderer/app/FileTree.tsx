@@ -7,13 +7,13 @@ function Row({ node, depth }: { node: TreeNode; depth: number }) {
   const expanded = useWorkspace((s) => s.expanded.has(node.path));
   const selected = useWorkspace((s) => s.selected === node.path);
   const toggleFolder = useWorkspace((s) => s.toggleFolder);
-  const select = useWorkspace((s) => s.select);
+  const openTab = useWorkspace((s) => s.openTab);
 
   return (
     <>
       <button
         type="button"
-        onClick={() => (isDir ? toggleFolder(node.path) : select(node.path))}
+        onClick={() => (isDir ? toggleFolder(node.path) : void openTab(node.path, label))}
         aria-expanded={isDir ? expanded : undefined}
         aria-current={!isDir && selected ? "true" : undefined}
         style={{ paddingLeft: 8 + depth * 14 }}

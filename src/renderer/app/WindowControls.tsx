@@ -1,5 +1,13 @@
 import { bridge, IS_MAC } from "../bridge.ts";
 
+/**
+ * 창 조작 버튼 셋이 차지하는 폭(px). 버튼 하나가 w-11(44px)이고 셋이 붙어 있다.
+ *
+ * TabStrip 이 이만큼 오른쪽을 비워야 한다 — 이 영역은 z-20 이라,
+ * 탭이 여기까지 차면 탭 대신 최소화·최대화·닫기가 눌린다(설계 §6.1).
+ */
+export const WINDOW_CONTROLS_WIDTH = 132;
+
 const BTN = "app-no-drag grid h-8 w-11 place-items-center text-ink-muted hover:text-ink";
 
 /**

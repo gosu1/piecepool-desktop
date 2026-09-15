@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
+import { NoteView } from "./NoteView.tsx";
 import { Ribbon } from "./Ribbon.tsx";
 import { Sidebar } from "./Sidebar.tsx";
+import { TabStrip } from "./TabStrip.tsx";
 import { WindowControls } from "./WindowControls.tsx";
 import {
   MAX_SIDEBAR_WIDTH,
@@ -69,7 +71,6 @@ function ResizeHandle() {
 }
 
 export function Shell() {
-  const selected = useWorkspace((s) => s.selected);
   const sidebarOpen = useWorkspace((s) => s.sidebarOpen);
 
   // 마지막으로 연 볼트를 되살린다. StrictMode 가 개발 중 두 번 부르지만
@@ -93,8 +94,9 @@ export function Shell() {
           <ResizeHandle />
         </>
       )}
-      <main className="grid flex-1 place-items-center text-sm text-ink-muted">
-        {selected ?? "선택된 파일 없음"}
+      <main className="flex min-w-0 flex-1 flex-col">
+        <TabStrip />
+        <NoteView />
       </main>
     </div>
   );
