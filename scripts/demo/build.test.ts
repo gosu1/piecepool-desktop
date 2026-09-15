@@ -39,7 +39,7 @@ describe("잠긴 절", () => {
         },
       ],
       sourceBody: "",
-      knownNames: new Set(["달리기"]),
+      names: { files: new Set(["달리기"]), aliases: new Map() },
       existing: wiki,
     });
 
@@ -97,7 +97,7 @@ describe("기록", () => {
         },
       ],
       sourceBody: "",
-      knownNames: new Set(),
+      names: { files: new Set(), aliases: new Map() },
       existing: new Map(),
     });
     expect(out.issues.filter((i) => i.kind === "절-보호")).toHaveLength(2);
@@ -120,7 +120,7 @@ describe("기록", () => {
           },
         ],
         sourceBody: src,
-        knownNames: new Set(),
+        names: { files: new Set(), aliases: new Map() },
         existing: new Map(),
       }).pages[0].records.length;
     expect(run("스키마는 구조, 인스턴스는 실제 데이터는")).toBe(1);
@@ -153,7 +153,7 @@ describe("기록", () => {
         },
       ],
       sourceBody: src,
-      knownNames: new Set(),
+      names: { files: new Set(), aliases: new Map() },
       existing: new Map(),
     });
     const me = out.pages.find((p) => p.name === "나")!;

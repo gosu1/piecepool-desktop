@@ -9,7 +9,14 @@ import type { LlmPage } from "./llm.ts";
 export type VerifyIssue = {
   page: string;
   kind:
-    "quote-없음" | "링크-해제" | "절-잠김" | "절-없음" | "절-보호" | "이름-비었음" | "나-기록-중복";
+    | "quote-없음"
+    | "링크-해제"
+    | "절-잠김"
+    | "절-없음"
+    | "절-보호"
+    | "이름-비었음"
+    | "나-기록-중복"
+    | "별칭-차단";
   detail: string;
 };
 
@@ -84,9 +91,9 @@ function findQuote(sourceBody: string, quote: string): { found: boolean; anchor:
  */
 function stripUnknownLinks(
   text: string,
-  known: Set<string>,
+  names: NameIndex,
   selfName: string,
-  onStrip: (name: string, reason: "목록밖" | "자기링크") => void,
+  onStrip: (name: string, reason: "목록밖" | "자기링크" | "별칭충돌") => void,
 ): string {
   const self = normalizeTitle(selfName);
   return text.replace(/\[\[([^\]|#]+)(\|[^\]]+)?\]\]/g, (whole, name: string, alias?: string) => {
@@ -95,8 +102,12 @@ function stripUnknownLinks(
       onStrip(name, "자기링크");
       return alias ? alias.slice(1) : name;
     }
-    if (known.has(n)) return whole;
-    onStrip(name, "목록밖");
+    // ADR-0002 결정 9 의 해석 순서. 파일명이 항상 별칭을 이긴다 — 파일 시스템이 유일성을
+    // 보장하는 쪽이 파일명이다. 별칭이 두 페이지에 걸리면 한쪽을 고르지 않고 해제한다.
+    if (names.files.has(n)) return whole;
+    const owners = names.aliases.get(n) ?? [];
+    if (owners.length === 1) return whole;
+    onStrip(name, owners.length > 1 ? "별칭충돌" : "목록밖");
     return alias ? alias.slice(1) : name;
   });
 }
@@ -142,12 +153,31 @@ function demoteHeadings(text: string): string {
   );
 }
 
+/** 정규화한 파일명 집합과, 정규화한 별칭 → 그 별칭을 가진 페이지 이름들. */
+export type NameIndex = {
+  files: Set<string>;
+  aliases: Map<string, string[]>;
+};
+
+export function nameIndex(pages: Iterable<WikiPage>): NameIndex {
+  const files = new Set<string>();
+  const aliases = new Map<string, string[]>();
+  for (const p of pages) {
+    files.add(normalizeTitle(p.name));
+    for (const a of p.fm.aliases ?? []) {
+      const k = normalizeTitle(a);
+      aliases.set(k, [...(aliases.get(k) ?? []), p.name]);
+    }
+  }
+  return { files, aliases };
+}
+
 export type VerifyInput = {
   llmPages: LlmPage[];
   /** 지금 처리하는 노트의 본문. quote 대조의 기준. */
   sourceBody: string;
-  /** 볼트에 실재하는 페이지 이름과 별칭 전부. */
-  knownNames: Set<string>;
+  /** 볼트에 실재하는 페이지 이름과 별칭. 링크 해석과 별칭 차단의 기준. */
+  names: NameIndex;
   /** 기존 위키. 절 매칭과 해시 확인에 쓴다. */
   existing: Map<string, WikiPage>;
 };
@@ -160,15 +190,18 @@ export function verify(input: VerifyInput): VerifyResult {
   // "실재한다"의 기준 시점은 호출 전이 아니라 처리가 끝난 뒤다 — 같은 호출에서
   // 나온 페이지들끼리 서로를 가리키는 것이 정상이고, 프롬프트의 보기가 그렇게
   // 되어 있다. 호출 전 목록으로 판정하면 AI 가 옳게 건 링크를 코드가 벗겨낸다.
-  const known = new Set(input.knownNames);
+  const names: NameIndex = {
+    files: new Set(input.names.files),
+    aliases: new Map(input.names.aliases),
+  };
   // 자동 링크 대상 — 실재하는 페이지의 **표시 이름**이 필요하다.
-  // `knownNames` 는 정규화된 소문자라 본문에 그대로 끼울 수 없다.
+  // `names` 는 정규화된 소문자라 본문에 그대로 끼울 수 없다.
   const displayNames = [
     ...[...input.existing.values()].map((w) => w.name),
     ...input.llmPages.map((x) => x.name?.trim()).filter((x): x is string => !!x),
   ];
   for (const p of input.llmPages) {
-    if (p.name?.trim()) known.add(normalizeTitle(p.name.trim()));
+    if (p.name?.trim()) names.files.add(normalizeTitle(p.name.trim()));
   }
 
   for (const p of input.llmPages) {
@@ -181,16 +214,40 @@ export function verify(input: VerifyInput): VerifyResult {
     const newSections: { heading: string; content: string }[] = [];
     const replaces: { heading: string; content: string }[] = [];
 
-    const strip = (name: string, reason: "목록밖" | "자기링크") =>
+    const strip = (name: string, reason: "목록밖" | "자기링크" | "별칭충돌") =>
       issues.push({
         page: p.name,
         kind: "링크-해제",
         detail:
-          reason === "자기링크" ? `[[${name}]] — 자기 자신입니다` : `[[${name}]] — 목록에 없습니다`,
+          reason === "자기링크"
+            ? `[[${name}]] — 자기 자신입니다`
+            : reason === "별칭충돌"
+              ? `[[${name}]] — 별칭이 두 페이지에 걸립니다`
+              : `[[${name}]] — 목록에 없습니다`,
       });
 
     const clean = (text: string) =>
-      demoteHeadings(autoLink(stripUnknownLinks(text, known, p.name, strip), displayNames, p.name));
+      demoteHeadings(autoLink(stripUnknownLinks(text, names, p.name, strip), displayNames, p.name));
+
+    // 별칭 차단 — 다른 페이지의 제목이나 별칭이면 넣지 않는다 (결정 9 의 예방 2겹째).
+    // 넣으면 그 이름의 링크가 두 페이지에 걸려 해제된다.
+    const me = normalizeTitle(p.name);
+    const aliasesToAdd: string[] = [];
+    for (const raw of p.aliases_to_add ?? []) {
+      const a = raw.trim();
+      const k = normalizeTitle(a);
+      if (!a || k === me) continue;
+      const owners = (names.aliases.get(k) ?? []).filter((o) => normalizeTitle(o) !== me);
+      if (names.files.has(k) || owners.length) {
+        issues.push({
+          page: p.name,
+          kind: "별칭-차단",
+          detail: `"${a}" 은 다른 페이지(${names.files.has(k) ? a : owners[0]})의 이름입니다`,
+        });
+        continue;
+      }
+      aliasesToAdd.push(a);
+    }
 
     for (const s of p.new_sections ?? []) {
       const h = normalizeTitle(s.heading);
@@ -277,7 +334,7 @@ export function verify(input: VerifyInput): VerifyResult {
 
     pages.push({
       name: p.name.trim(),
-      aliasesToAdd: (p.aliases_to_add ?? []).map((s) => s.trim()).filter(Boolean),
+      aliasesToAdd: unique(aliasesToAdd),
       summary,
       newSections,
       replaces,
@@ -319,8 +376,8 @@ export type BuildInput = {
   page: VerifiedPage;
   /** 없으면 새로 만든다. */
   existing: WikiPage | undefined;
-  /** 기록 줄의 출처 링크. 노트 이름 또는 출처 페이지 이름. */
-  sourceName: string;
+  /** 기록 줄의 출처 링크. 노트 이름 또는 출처 페이지 이름. null 이면 정리용 재작성 — 출처를 더하지 않는다. */
+  sourceName: string | null;
   /** 기록 줄의 날짜. null 이면 (날짜 미상). */
   date: string | null;
   today: string;
@@ -376,7 +433,7 @@ export function buildMarkdown(input: BuildInput): string {
     const when = date ?? "(날짜 미상)";
     // AI 가 fact 앞에 노트 날짜를 또 붙이기도 한다 ("2026-10-08 2026-10-08 첫 운동으로…"). 뗀다.
     const fact = date ? r.fact.replace(new RegExp(`^${date}\\s*`), "") : r.fact;
-    const line = `- ${when} ${fact} ← [[${sourceName}${anchor}]]`;
+    const line = `- ${when} ${fact} ← [[${sourceName ?? "?"}${anchor}]]`;
     if (!seen.has(normQuote(line))) {
       records.push(line);
       seen.add(normQuote(line));
@@ -389,7 +446,7 @@ export function buildMarkdown(input: BuildInput): string {
   );
   // `parseList` 가 읽을 때 `[[ ]]` 를 벗기므로 여기서 다시 붙인다.
   // 벗긴 채로 저장하면 갱신을 한 번 거칠 때마다 링크가 죽는다.
-  const sources = unique([...(existing?.fm.sources ?? []), sourceName]);
+  const sources = unique([...(existing?.fm.sources ?? []), ...(sourceName ? [sourceName] : [])]);
 
   const hashes: Record<string, string> = {};
   if (summary) {

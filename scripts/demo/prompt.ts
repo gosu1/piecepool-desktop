@@ -24,11 +24,21 @@ function byLiteral(note: Note, wiki: WikiPage[]): Set<string> {
   const hit = new Set<string>();
   for (const page of wiki) {
     const names = [page.name, ...(page.fm.aliases ?? [])];
-    if (names.some((n) => n.length >= 2 && hay.includes(normalizeTitle(n)))) {
+    if (names.some((n) => n.length >= 2 && appears(hay, normalizeTitle(n)))) {
       hit.add(page.name);
     }
   }
   return hit;
+}
+
+/**
+ * 한글 이름은 조사가 붙으므로 부분 일치("달리기를")가 맞다. 로마자 이름은 단어 경계가
+ * 있어야 한다 — 별칭 `OS` 가 영어 논문의 "cos"·"loss" 에 걸렸다 (PDF 실측).
+ */
+function appears(hay: string, name: string): boolean {
+  if (!/^[\x20-\x7e]+$/.test(name)) return hay.includes(name);
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9])${esc}($|[^a-z0-9])`).test(hay);
 }
 
 /** 코사인 유사도. */
@@ -118,12 +128,15 @@ function renderPage(page: WikiPage): string {
  * AI 에게 보낼 사용자 메시지.
  * 시스템 프롬프트(write.md)가 설명하는 네 블록을 그대로 만든다.
  */
-export function buildUserMessage(note: Note, c: Candidates): string {
+export function buildUserMessage(note: Note, c: Candidates, part: string | null = null): string {
   const date = note.date ?? "";
   const out: string[] = [];
 
   out.push("<소스>");
-  out.push(`<context source="${note.name}"${date ? ` date="${date}"` : ""}>`);
+  // part 는 긴 소스를 청크로 나눴을 때 "2/3" 처럼 붙는다. AI 가 앞뒤가 잘렸음을 알게 한다.
+  out.push(
+    `<context source="${note.name}"${date ? ` date="${date}"` : ""}${part ? ` part="${part}"` : ""}>`,
+  );
   out.push(note.body);
   out.push("</context>");
   out.push("</소스>");

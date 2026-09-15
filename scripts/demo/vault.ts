@@ -71,6 +71,11 @@ export function hash8(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex").slice(0, 8);
 }
 
+/** 원본 파일(PDF 등)의 지문. 같은 규칙, 입력만 바이트. */
+export function hash8Bytes(data: Uint8Array): string {
+  return createHash("sha256").update(data).digest("hex").slice(0, 8);
+}
+
 /**
  * 제목 정규화. CLAUDE.md §4 — 이 함수 하나만 쓴다.
  * NFC 는 macOS 옵시디언이 파일명을 NFD 로 저장하는 경우를 잡는다.

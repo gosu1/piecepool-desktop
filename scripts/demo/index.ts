@@ -6,7 +6,7 @@
 //
 // 제품 코드가 아니다. 설계가 검증되면 src/core/ 로 옮긴다.
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   hash8,
@@ -20,7 +20,17 @@ import {
 } from "./vault.ts";
 import { buildUserMessage, pageEmbedText, pickCandidates } from "./prompt.ts";
 import { MODELS, embed, embedStats, writeWiki } from "./llm.ts";
-import { buildMarkdown, hasChanges, safeFileName, verify } from "./build.ts";
+import { buildMarkdown, hasChanges, nameIndex, safeFileName, verify } from "./build.ts";
+import {
+  buildSourcePage,
+  extract,
+  inputWall,
+  rawHashOf,
+  readRawHash,
+  scanSources,
+  sourceDate,
+} from "./source.ts";
+import { commitFiles, type FileWrite } from "./tx.ts";
 
 type Args = {
   vault: string;
@@ -32,6 +42,8 @@ type Args = {
   topN: number;
   /** 시스템 프롬프트 파일. 실험에서 옛 판과 비교할 때 바꾼다. */
   prompt: string;
+  /** 이 글자 수까지는 통째로 한 번에 넘긴다. 넘으면 헤딩 경계로 나눠 청크마다 부른다. */
+  maxChars: number;
 };
 
 function parseArgs(argv: string[]): Args {
@@ -44,6 +56,7 @@ function parseArgs(argv: string[]): Args {
     threshold: 0.6,
     topN: 8,
     prompt: "src/core/prompts/write.md",
+    maxChars: 200_000,
   };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
@@ -55,11 +68,14 @@ function parseArgs(argv: string[]): Args {
     else if (k === "--threshold") a.threshold = Number(argv[++i]);
     else if (k === "--top") a.topN = Number(argv[++i]);
     else if (k === "--prompt") a.prompt = argv[++i];
+    else if (k === "--max-chars") a.maxChars = Number(argv[++i]);
   }
   return a;
 }
 
-type SyncState = { notes: Record<string, { hash: string; compiledAt: string }> };
+/** 처리한 항목의 지문. `missing` 은 원본이 사라져 기록에 `(출처 삭제됨)` 을 붙인 상태. */
+type SyncEntry = { hash: string; compiledAt: string; missing?: true };
+type SyncState = { notes: Record<string, SyncEntry> };
 
 async function readSyncState(vault: string): Promise<SyncState> {
   try {
@@ -76,6 +92,15 @@ async function writeSyncState(vault: string, st: SyncState): Promise<void> {
   await writeFile(join(dir, "sync_state.json"), JSON.stringify(st, null, 2) + "\n", "utf8");
 }
 
+async function exists(p: string): Promise<boolean> {
+  try {
+    await stat(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * `나.md` 가 없으면 만든다. '나' 에 관한 페이지들의 목차이고, 레퍼런스의
  * overview.md / Home.md 와 같은 고정 허브다. 내용은 AI 가 채우고, 여기서는
@@ -83,13 +108,7 @@ async function writeSyncState(vault: string, st: SyncState): Promise<void> {
  */
 async function ensureMePage(vault: string, today: string): Promise<void> {
   const file = join(vault, "wiki", "나.md");
-  try {
-    await readFile(file, "utf8");
-    return;
-  } catch {
-    // 없다 — 만든다
-  }
-  await mkdir(join(vault, "wiki"), { recursive: true });
+  if (await exists(file)) return;
   // 초기 요약에도 지문을 찍는다. 없으면 "지문 없음 = 사용자 편집" 규칙에 걸려
   // 코드가 만든 자리 표시 문장을 AI 가 영영 못 고친다 (2026-09-14 실측).
   const summary = "아직 정리된 것이 없다.";
@@ -106,12 +125,17 @@ async function ensureMePage(vault: string, today: string): Promise<void> {
     `> ${summary}`,
     "",
   ].join("\n");
-  await writeFile(file, md, "utf8");
+  await commitFiles([{ path: file, content: md }]);
   console.log("   wiki/나.md 를 만들었습니다 (허브)");
 }
 
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** 기록 줄이 이 출처를 가리키는가. `← [[이름]]` 또는 `← [[이름#절]]`. */
+function sourceTag(name: string): RegExp {
+  return new RegExp(`← \\[\\[${escapeRe(name)}(\\]\\]|#)`);
 }
 
 async function loadWiki(vault: string): Promise<Map<string, WikiPage>> {
@@ -121,16 +145,6 @@ async function loadWiki(vault: string): Promise<Map<string, WikiPage>> {
     map.set(normalizeTitle(page.name), page);
   }
   return map;
-}
-
-/** 볼트에 실재하는 이름 전부 — 제목과 별칭. 링크 검증의 허용 목록. */
-function knownNames(wiki: Map<string, WikiPage>): Set<string> {
-  const s = new Set<string>();
-  for (const page of wiki.values()) {
-    s.add(normalizeTitle(page.name));
-    for (const a of page.fm.aliases ?? []) s.add(normalizeTitle(a));
-  }
-  return s;
 }
 
 /**
@@ -147,6 +161,177 @@ function countBodyLinks(markdown: string): number {
   return new Set(names).size;
 }
 
+function wikiPath(vault: string, name: string): string {
+  return join(vault, "wiki", `${safeFileName(name)}.md`);
+}
+
+/** 정리용 재작성 — 기록만 바뀐 페이지를 같은 빌더로 다시 조립한다. 출처는 더하지 않는다. */
+function rebuildRecordsOnly(existing: WikiPage, today: string): string {
+  return buildMarkdown({
+    page: {
+      name: existing.name,
+      aliasesToAdd: [],
+      summary: null,
+      newSections: [],
+      replaces: [],
+      records: [],
+    },
+    existing,
+    sourceName: null,
+    date: null,
+    today,
+  });
+}
+
+const DELETED_MARK = " (출처 삭제됨)";
+
+/**
+ * 출처가 사라졌거나 돌아왔을 때 기록 줄의 표시를 붙이거나 뗀다. 지우지 않는다 —
+ * 의도를 모르면 파괴하지 않는다. 사용자가 기록 절을 고친 페이지는 건드리지 않는다.
+ */
+async function markDeletedSources(vault: string, state: SyncState, today: string): Promise<void> {
+  const changes: { key: string; name: string; missing: boolean }[] = [];
+  for (const [key, entry] of Object.entries(state.notes)) {
+    const present = await exists(join(vault, key));
+    const name = key.startsWith("sources/")
+      ? "@" + key.slice("sources/".length).replace(/\.[^.]+$/, "")
+      : key.replace(/^.*\//, "").replace(/\.[^.]+$/, "");
+    if (!present && !entry.missing) changes.push({ key, name, missing: true });
+    if (present && entry.missing) changes.push({ key, name, missing: false });
+  }
+  if (!changes.length) return;
+
+  const wiki = await loadWiki(vault);
+  const writes: FileWrite[] = [];
+  for (const page of wiki.values()) {
+    if (!page.recordsOurs) continue;
+    let touched = false;
+    page.records = page.records.map((line) => {
+      for (const c of changes) {
+        if (!sourceTag(c.name).test(line)) continue;
+        if (c.missing && !line.endsWith(DELETED_MARK)) {
+          touched = true;
+          return line + DELETED_MARK;
+        }
+        if (!c.missing && line.endsWith(DELETED_MARK)) {
+          touched = true;
+          return line.slice(0, -DELETED_MARK.length);
+        }
+      }
+      return line;
+    });
+    if (touched)
+      writes.push({
+        path: wikiPath(vault, page.name),
+        content: rebuildRecordsOnly(page, today),
+        mustExist: true,
+      });
+  }
+  await commitFiles(writes);
+  for (const c of changes) {
+    if (c.missing) state.notes[c.key].missing = true;
+    else delete state.notes[c.key].missing;
+    console.log(
+      `   출처 ${c.missing ? "삭제됨" : "복구됨"}: ${c.key} → 기록 ${writes.length}장에 표시`,
+    );
+  }
+  await writeSyncState(vault, state);
+}
+
+/** 정리할 항목 하나 — 볼트 노트이거나 `sources/` 의 원본이다. */
+type Item = {
+  /** sync_state 의 키. 볼트 기준 상대경로. */
+  key: string;
+  /** 기록 줄의 링크 이름. 노트는 파일명, 원본은 `@파일명`. */
+  name: string;
+  /** AI 에게 넘기고 quote 를 대조할 본문. */
+  body: string;
+  date: string | null;
+  hash: string;
+  /** 원본이면 같은 트랜잭션에서 쓸 출처 페이지. */
+  sourcePage?: FileWrite;
+  /** 입력 벽에 걸린 이유. 있으면 건너뛴다. */
+  wall?: string;
+};
+
+async function collectItems(args: Args, today: string): Promise<Item[]> {
+  const items: Item[] = [];
+
+  for (const path of await scanNotes(args.vault)) {
+    const wall = await inputWall(args.vault, path);
+    if (wall) {
+      items.push({ key: path, name: "", body: "", date: null, hash: "", wall });
+      continue;
+    }
+    const note = await readNote(args.vault, path);
+    items.push({ key: path, name: note.name, body: note.body, date: note.date, hash: note.hash });
+  }
+
+  for (const src of await scanSources(args.vault)) {
+    const wall = await inputWall(args.vault, src.path);
+    if (wall) {
+      items.push({ key: src.path, name: "", body: "", date: null, hash: "", wall });
+      continue;
+    }
+    const rawHash = await rawHashOf(args.vault, src);
+    // 입력 벽 7 — 출처 페이지의 raw_hash 가 같으면 이미 처리한 원본이다. 추출도 안 한다.
+    if (!args.noCache && (await readRawHash(args.vault, src)) === rawHash) {
+      items.push({ key: src.path, name: `@${src.name}`, body: "", date: null, hash: rawHash });
+      continue;
+    }
+    const extracted = await extract(args.vault, src);
+    const chars = extracted.pages.reduce((a, p) => a + p.length, 0);
+    if (chars === 0) {
+      // 입력 벽 8 — 텍스트가 0자면 스캔본이다. OCR 은 v1 범위 밖.
+      items.push({
+        key: src.path,
+        name: "",
+        body: "",
+        date: null,
+        hash: "",
+        wall: "parse_failed (텍스트 0자)",
+      });
+      continue;
+    }
+    const date = await sourceDate(args.vault, src, extracted.metaDate);
+    const md = buildSourcePage({ src, rawHash, date, today, extracted });
+    // AI 에게는 페이지 절만 넘긴다 — H1 과 임베드 줄은 자료가 아니다.
+    const body =
+      md.slice(md.indexOf("\n## ") + 1).trim() || md.replace(/^---[\s\S]*?\n---\n/, "").trim();
+    items.push({
+      key: src.path,
+      name: `@${src.name}`,
+      body,
+      date,
+      hash: rawHash,
+      sourcePage: { path: join(args.vault, "sources", `@${src.name}.md`), content: md },
+    });
+  }
+
+  // 날짜순으로 처리한다. 경로순이면 `독서/` 가 `일기/` 보다 먼저 와서 시간이 뒤섞이고,
+  // 뒤에 만들어질 페이지의 사실이 앞 노트에서 빠진다.
+  return items.sort(
+    (a, b) => (a.date ?? "9999").localeCompare(b.date ?? "9999") || a.key.localeCompare(b.key),
+  );
+}
+
+/** 본문이 상한을 넘으면 `## ` 헤딩 경계에서 나눈다. 헤딩이 없으면 그대로 한 덩어리다. */
+function splitChunks(body: string, maxChars: number): string[] {
+  if (body.length <= maxChars) return [body];
+  const parts = body.split(/(?=^## )/m);
+  const chunks: string[] = [];
+  let cur = "";
+  for (const p of parts) {
+    if (cur && cur.length + p.length > maxChars) {
+      chunks.push(cur.trim());
+      cur = "";
+    }
+    cur += p;
+  }
+  if (cur.trim()) chunks.push(cur.trim());
+  return chunks;
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const today = localDate(new Date());
@@ -161,23 +346,16 @@ async function main(): Promise<void> {
   if (args.prompt !== "src/core/prompts/write.md") console.log(`프롬프트: ${args.prompt}`);
   const state = await readSyncState(args.vault);
 
-  // 날짜순으로 처리한다. 경로순이면 `독서/` 가 `일기/` 보다 먼저 와서 시간이 뒤섞이고,
-  // 뒤에 만들어질 페이지의 사실이 앞 노트에서 빠진다.
-  const dated = await Promise.all(
-    (await scanNotes(args.vault)).map(async (p) => ({
-      p,
-      d: (await readNote(args.vault, p)).date ?? "9999",
-    })),
-  );
-  let notePaths = dated
-    .sort((a, b) => a.d.localeCompare(b.d) || a.p.localeCompare(b.p))
-    .map((x) => x.p);
+  // 출처가 사라졌으면 기록에 표시한다. 돌아왔으면 뗀다.
+  if (!args.dry) await markDeletedSources(args.vault, state, today);
+
+  let items = await collectItems(args, today);
   if (args.only) {
     const q = normalizeTitle(args.only);
-    notePaths = notePaths.filter((p) => normalizeTitle(p).includes(q));
+    items = items.filter((it) => normalizeTitle(it.key).includes(q));
   }
-  if (notePaths.length === 0) {
-    console.log("처리할 노트가 없습니다.");
+  if (items.length === 0) {
+    console.log("처리할 것이 없습니다.");
     return;
   }
 
@@ -186,156 +364,224 @@ async function main(): Promise<void> {
   let embedOk = args.useEmbed;
   const allIssues: string[] = [];
 
-  for (const path of notePaths) {
-    const note = await readNote(args.vault, path);
-    console.log(`── ${path}`);
-    console.log(`   날짜 ${note.date ?? "(미상)"} · 본문 ${note.body.length}자`);
+  for (const item of items) {
+    console.log(`── ${item.key}`);
+    if (item.wall) {
+      console.log(`   ! 입력벽 ${item.wall} — 건너뜁니다\n`);
+      allIssues.push(`${item.key} 입력벽 ${item.wall}`);
+      continue;
+    }
+    console.log(`   날짜 ${item.date ?? "(미상)"} · 본문 ${item.body.length}자`);
 
     // 입력 벽 7 — 이미 처리했고 내용이 그대로면 건너뛴다.
-    const prev = state.notes[path];
-    if (prev && prev.hash === note.hash && !args.noCache) {
+    const prev = state.notes[item.key];
+    if (prev && prev.hash === item.hash && !args.noCache) {
       console.log("   이미 처리했습니다 (해시 동일) — 건너뜁니다\n");
       continue;
     }
 
     await ensureMePage(args.vault, today);
-    const wiki = await loadWiki(args.vault);
+    const chunks = splitChunks(item.body, args.maxChars);
+    if (chunks.length > 1)
+      console.log(`   ${args.maxChars}자를 넘어 ${chunks.length}청크로 나눕니다`);
 
-    // 노트가 바뀌어 다시 정리하는 경우 — 이 노트에서 나온 기록을 먼저 걷어낸다.
-    // 덧붙이기만 하면 같은 사실이 표현만 다른 줄로 두 번 쌓인다 (4회차 실측:
-    // "트레이너가 … 했다" 와 "… 트레이너가 말했다"). 기록은 출처에서 파생된 것이므로
-    // 출처가 바뀌면 다시 파생한다. 출처가 **삭제된** 경우와는 다르다 — 그때는 표시만 남긴다.
-    // 사용자가 기록 절을 고친 페이지는 건드리지 않는다.
-    const stale = new Set<string>();
-    if (prev && prev.hash !== note.hash) {
-      const tag = new RegExp(`← \\[\\[${escapeRe(note.name)}(\\]\\]|#)`);
-      for (const page of wiki.values()) {
-        if (!page.recordsOurs) continue;
-        const kept = page.records.filter((r) => !tag.test(r));
-        if (kept.length !== page.records.length) {
-          page.records = kept;
-          stale.add(normalizeTitle(page.name));
+    for (let ci = 0; ci < chunks.length; ci++) {
+      const body = chunks[ci];
+      const part = chunks.length > 1 ? `${ci + 1}/${chunks.length}` : null;
+      // 다시 읽어 빌드하는 루프 — hashes 선행조건(결정 7 의 3단계). 데모는 단일 프로세스라
+      // 두 번째 바퀴가 돌 일이 없지만, 앱 편집기가 들어오면 여기서 잡는다.
+      for (let attempt = 0; ; attempt++) {
+        const wiki = await loadWiki(args.vault);
+        const snapshot = new Map(
+          [...wiki.values()].map((p) => [
+            normalizeTitle(p.name),
+            JSON.stringify(p.fm.hashes ?? {}),
+          ]),
+        );
+
+        // 노트가 바뀌어 다시 정리하는 경우 — 이 노트에서 나온 기록을 먼저 걷어낸다 (결정 10).
+        // 기록은 출처에서 파생된 것이므로 출처가 바뀌면 다시 파생한다. 삭제(표시만)와 다르다.
+        // 사용자가 기록 절을 고친 페이지는 건드리지 않는다. 청크가 여럿이면 첫 청크에서만.
+        const stale = new Set<string>();
+        if (ci === 0 && prev && prev.hash !== item.hash) {
+          const tag = sourceTag(item.name);
+          for (const page of wiki.values()) {
+            if (!page.recordsOurs) continue;
+            const kept = page.records.filter((r) => !tag.test(r));
+            if (kept.length !== page.records.length) {
+              page.records = kept;
+              stale.add(normalizeTitle(page.name));
+            }
+          }
+          if (stale.size && attempt === 0)
+            console.log(`   다시 정리 — 기록을 걷어낸 페이지 ${stale.size}장`);
         }
-      }
-      if (stale.size) console.log(`   다시 정리 — 기록을 걷어낸 페이지 ${stale.size}장`);
-    }
 
-    // 후보 추리기 — 글자 일치는 항상, 뜻 유사도는 --embed 일 때만.
-    // 임베딩이 막히면(한도 소진 등) 글자 일치만으로 계속 간다. 후보를 넓히는 보조
-    // 수단 때문에 정리 자체가 멈추면 안 된다.
-    let embedOpts;
-    if (embedOk && wiki.size > 0) {
-      try {
-        const pages = [...wiki.values()];
-        const vecs = await embed([note.body, ...pages.map(pageEmbedText)]);
-        embedOpts = {
-          noteVec: vecs[0],
-          pageVecs: new Map(pages.map((p, i) => [p.name, vecs[i + 1]])),
-          threshold: args.threshold,
-          topN: args.topN,
+        // 후보 추리기 — 글자 일치는 항상, 뜻 유사도는 --embed 일 때만.
+        // 임베딩이 막히면(한도 소진 등) 글자 일치만으로 계속 간다. 후보를 넓히는 보조
+        // 수단 때문에 정리 자체가 멈추면 안 된다.
+        let embedOpts;
+        if (embedOk && wiki.size > 0) {
+          try {
+            const pages = [...wiki.values()];
+            const vecs = await embed([body, ...pages.map(pageEmbedText)]);
+            embedOpts = {
+              noteVec: vecs[0],
+              pageVecs: new Map(pages.map((p, i) => [p.name, vecs[i + 1]])),
+              threshold: args.threshold,
+              topN: args.topN,
+            };
+          } catch (e: unknown) {
+            embedOk = false;
+            const msg = e instanceof Error ? e.message : String(e);
+            console.log(`   ! 임베딩-불가 이후 글자 일치만 씁니다 — ${msg.slice(0, 120)}`);
+            allIssues.push(`${item.key} 임베딩-불가`);
+          }
+        }
+
+        const note = {
+          path: item.key,
+          name: item.name,
+          body,
+          userFm: {},
+          hash: item.hash,
+          date: item.date,
         };
-      } catch (e: unknown) {
-        embedOk = false;
-        const msg = e instanceof Error ? e.message : String(e);
-        console.log(`   ! 임베딩-불가 이후 글자 일치만 씁니다 — ${msg.slice(0, 120)}`);
-        allIssues.push(`${path} 임베딩-불가`);
-      }
-    }
-
-    const cands = pickCandidates(note, [...wiki.values()], embedOpts);
-    if (cands.related.length) {
-      const detail = cands.related.map((p) => `${p.name}(${cands.why.get(p.name)})`).join(", ");
-      console.log(`   후보 ${cands.related.length}장: ${detail}`);
-    } else {
-      console.log(`   후보 없음 (위키 ${wiki.size}장)`);
-    }
-
-    const userMessage = buildUserMessage(note, cands);
-
-    if (args.dry) {
-      console.log("\n" + "─".repeat(70));
-      console.log(userMessage);
-      console.log("─".repeat(70) + "\n");
-      continue;
-    }
-
-    const res = await writeWiki(systemPrompt, userMessage, { noCache: args.noCache });
-    if (res.cached) cached++;
-    else calls++;
-    console.log(
-      `   AI ${res.cached ? "(캐시)" : "호출"} (입력 ${userMessage.length}자) → 페이지 ${res.pages.length}장`,
-    );
-
-    const verified = verify({
-      llmPages: res.pages,
-      sourceBody: note.body,
-      knownNames: knownNames(wiki),
-      existing: wiki,
-    });
-
-    for (const i of verified.issues) {
-      const line = `   ! ${i.kind} [${i.page}] ${i.detail}`;
-      console.log(line);
-      allIssues.push(`${path} ${i.kind} [${i.page}] ${i.detail}`);
-    }
-
-    for (const page of verified.pages) {
-      const existing = wiki.get(normalizeTitle(page.name));
-
-      if (!hasChanges(page)) {
-        if (!existing) {
-          // 출력 벽 1 — 검문 뒤 아무것도 안 남은 새 페이지는 만들지 않는다.
-          console.log(`   ! 빈-깡통 [${page.name}] 만들지 않았습니다`);
-          allIssues.push(`${path} 빈-깡통 [${page.name}]`);
-        } else {
-          console.log(`   변화 없음 [${page.name}] 쓰지 않았습니다`);
+        const cands = pickCandidates(note, [...wiki.values()], embedOpts);
+        if (attempt === 0) {
+          if (cands.related.length) {
+            const detail = cands.related
+              .map((p) => `${p.name}(${cands.why.get(p.name)})`)
+              .join(", ");
+            console.log(`   후보 ${cands.related.length}장: ${detail}`);
+          } else {
+            console.log(`   후보 없음 (위키 ${wiki.size}장)`);
+          }
         }
-        continue;
+
+        const userMessage = buildUserMessage(note, cands, part);
+
+        if (args.dry) {
+          console.log("\n" + "─".repeat(70));
+          console.log(userMessage);
+          console.log("─".repeat(70) + "\n");
+          break;
+        }
+
+        // 같은 입력이면 캐시에서 온다 — 선행조건 재시도가 AI 를 다시 부르지 않는 이유.
+        const res = await writeWiki(systemPrompt, userMessage, {
+          noCache: args.noCache && attempt === 0,
+        });
+        if (attempt === 0) {
+          if (res.cached) cached++;
+          else calls++;
+          console.log(
+            `   AI ${res.cached ? "(캐시)" : "호출"} (입력 ${userMessage.length}자) → 페이지 ${res.pages.length}장`,
+          );
+        }
+
+        const verified = verify({
+          llmPages: res.pages,
+          sourceBody: body,
+          names: nameIndex(wiki.values()),
+          existing: wiki,
+        });
+
+        if (attempt === 0) {
+          for (const i of verified.issues) {
+            console.log(`   ! ${i.kind} [${i.page}] ${i.detail}`);
+            allIssues.push(`${item.key} ${i.kind} [${i.page}] ${i.detail}`);
+          }
+        }
+
+        const writes: FileWrite[] = [];
+        const logs: string[] = [];
+        if (ci === 0 && item.sourcePage) {
+          // 출처 페이지는 위키와 같은 트랜잭션에서 쓴다. 먼저 쓰고 실패하면 raw_hash 만 남아 영구 스킵된다.
+          writes.push(item.sourcePage);
+          logs.push(`   출처 sources/@${item.name.slice(1)}.md`);
+        }
+        for (const page of verified.pages) {
+          const existing = wiki.get(normalizeTitle(page.name));
+          if (!hasChanges(page)) {
+            if (!existing) {
+              // 출력 벽 1 — 검문 뒤 아무것도 안 남은 새 페이지는 만들지 않는다.
+              logs.push(`   ! 빈-깡통 [${page.name}] 만들지 않았습니다`);
+              allIssues.push(`${item.key} 빈-깡통 [${page.name}]`);
+            } else {
+              logs.push(`   변화 없음 [${page.name}] 쓰지 않았습니다`);
+            }
+            continue;
+          }
+          const md = buildMarkdown({
+            page,
+            existing,
+            sourceName: item.name,
+            date: item.date,
+            today,
+          });
+          writes.push({
+            path: wikiPath(args.vault, page.name),
+            content: md,
+            mustExist: !!existing,
+          });
+          logs.push(
+            `   ${existing ? "갱신" : "생성"} wiki/${safeFileName(page.name)}.md (기록 ${page.records.length}, 링크 ${countBodyLinks(md)})`,
+          );
+          stale.delete(normalizeTitle(page.name));
+        }
+        // 기록을 걷어냈는데 이번 결과에 없는 페이지 — 걷어낸 상태 그대로 써서 남긴다.
+        for (const key of stale) {
+          const existing = wiki.get(key)!;
+          writes.push({
+            path: wikiPath(args.vault, existing.name),
+            content: rebuildRecordsOnly(existing, today),
+            mustExist: true,
+          });
+          logs.push(`   정리 wiki/${safeFileName(existing.name)}.md (이 노트의 옛 기록을 뺌)`);
+        }
+
+        // 선행조건 — 쓰기 직전에 대상 페이지를 다시 읽어 hashes 가 그대로인지 본다.
+        // 다르면 누군가(앱 편집기) 그 사이에 고친 것이다. 새 판 위에 빌더를 다시 돌린다.
+        let changed = false;
+        const wikiDir = join(args.vault, "wiki");
+        for (const w of writes) {
+          if (!w.mustExist || !w.path.startsWith(wikiDir)) continue;
+          const rel =
+            "wiki/" +
+            w.path
+              .slice(wikiDir.length + 1)
+              .split("\\")
+              .join("/");
+          const fresh = await readWikiPage(args.vault, rel).catch(() => null);
+          if (
+            fresh &&
+            JSON.stringify(fresh.fm.hashes ?? {}) !== snapshot.get(normalizeTitle(fresh.name))
+          )
+            changed = true;
+        }
+        if (changed) {
+          if (attempt >= 2) {
+            console.log("   ! 선행조건 3회 실패 — 이 항목은 보류합니다");
+            allIssues.push(`${item.key} 선행조건-실패`);
+            break;
+          }
+          console.log("   선행조건 — 쓰기 직전에 파일이 바뀌어 다시 빌드합니다");
+          continue;
+        }
+
+        await commitFiles(writes);
+        for (const l of logs) console.log(l);
+        break;
       }
-
-      const md = buildMarkdown({
-        page,
-        existing,
-        sourceName: note.name,
-        date: note.date,
-        today,
-      });
-
-      const file = join(args.vault, "wiki", `${safeFileName(page.name)}.md`);
-      await mkdir(join(args.vault, "wiki"), { recursive: true });
-      await writeFile(file, md, "utf8");
-      const mark = existing ? "갱신" : "생성";
-      console.log(
-        `   ${mark} wiki/${safeFileName(page.name)}.md (기록 ${page.records.length}, 링크 ${countBodyLinks(md)})`,
-      );
-      stale.delete(normalizeTitle(page.name));
     }
 
-    // 기록을 걷어냈는데 이번 결과에 없는 페이지 — 걷어낸 상태 그대로 써서 남긴다.
-    for (const key of stale) {
-      const existing = wiki.get(key)!;
-      const md = buildMarkdown({
-        page: {
-          name: existing.name,
-          aliasesToAdd: [],
-          summary: null,
-          newSections: [],
-          replaces: [],
-          records: [],
-        },
-        existing,
-        sourceName: note.name,
-        date: note.date,
-        today,
-      });
-      await writeFile(join(args.vault, "wiki", `${safeFileName(existing.name)}.md`), md, "utf8");
-      console.log(`   정리 wiki/${safeFileName(existing.name)}.md (이 노트의 옛 기록을 뺌)`);
+    if (!args.dry) {
+      state.notes[item.key] = { hash: item.hash, compiledAt: new Date().toISOString() };
+      // 항목마다 저장한다. 끝에서 한 번만 쓰면 중간에 죽었을 때 위키는 바뀌었는데
+      // 상태는 안 남아, 다음 실행이 같은 노트를 다시 정리해 기록이 두 번 쌓인다.
+      await writeSyncState(args.vault, state);
     }
-
-    state.notes[path] = { hash: note.hash, compiledAt: new Date().toISOString() };
-    // 노트마다 저장한다. 끝에서 한 번만 쓰면 중간에 죽었을 때 위키는 바뀌었는데
-    // 상태는 안 남아, 다음 실행이 같은 노트를 다시 정리해 기록이 두 번 쌓인다.
-    await writeSyncState(args.vault, state);
     console.log("");
   }
 
