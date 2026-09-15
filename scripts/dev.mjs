@@ -32,10 +32,16 @@ function killAll() {
   for (const child of children) child.kill();
 }
 
-/** 이미 열려 있으면 true. 켜져 있는 dev 서버를 두 번 띄우지 않는다. */
+/**
+ * 이미 열려 있으면 true. 켜져 있는 dev 서버를 두 번 띄우지 않는다.
+ *
+ * host 는 반드시 "localhost" 다. vite 는 IPv6 루프백(`[::1]`)에만 바인딩하므로
+ * `127.0.0.1` 로 붙으면 서버가 멀쩡히 떠 있어도 영원히 ECONNREFUSED 다.
+ * 이름으로 물으면 node 가 두 패밀리를 다 시도하고, main/index.ts 의 DEV_URL 과도 같은 이름이 된다.
+ */
 function isPortOpen(port) {
   return new Promise((resolve) => {
-    const socket = createConnection({ port, host: "127.0.0.1" });
+    const socket = createConnection({ port, host: "localhost" });
     socket.once("connect", () => {
       socket.destroy();
       resolve(true);
