@@ -12,7 +12,8 @@ export async function resolveInVault(v: Vault, p: NotePath): Promise<string> {
 /**
  * 에이전트 쓰기 대상인지 검사한다. `.md` 만 허용한다.
  *
- * 허용 루트는 `agentWriteRoot`(기본 wiki/) **와 `inbox/`** 둘이다 —
+ * 허용 루트는 `agentWriteRoots`(기본 wiki/ · sources/ · .piecepool/) **와 `inbox/`** 다 —
+ * (ADR-0002 결정 6 으로 셋이 됐다. sources/ 에는 .md 가 아닌 원본 복사본도 쓴다 — 4단계에서 반영.)
  * 상위 §4.1 이 "에이전트의 쓰기 대상은 wiki/·inbox/ 로 한정한다" 로 규정하고,
  * processInbox 가 편입 후 단편을 지우려면 inbox/ 쓰기가 필요하다.
  *
