@@ -73,3 +73,14 @@
       sans-serif;
   }
 }
+
+/* 프레임리스 창의 드래그 영역.
+   Tailwind 에 대응 유틸리티가 없고, React 의 CSSProperties 에
+   -webkit-app-region 이 없어 인라인 style 은 캐스트를 요구한다. */
+.app-drag {
+  -webkit-app-region: drag;
+}
+
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}

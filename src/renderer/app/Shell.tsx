@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import { Ribbon } from "./Ribbon.tsx";
 import { Sidebar } from "./Sidebar.tsx";
+import { WindowControls } from "./WindowControls.tsx";
 import {
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
@@ -76,7 +77,8 @@ export function Shell() {
   }, []);
 
   return (
-    <div className="flex h-full bg-canvas text-ink">
+    <div className="relative flex h-full bg-canvas text-ink">
+      <WindowControls />
       <Ribbon />
       {sidebarOpen && (
         <>
