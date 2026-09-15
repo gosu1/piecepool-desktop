@@ -251,3 +251,39 @@ describe("자동 링크", () => {
     );
   });
 });
+
+describe("나 허브", () => {
+  it("링크 집합이 같은 절은 뒤에 생긴 쪽을 버리고, 부분집합은 둔다", () => {
+    const md = buildMarkdown({
+      page: {
+        name: "나",
+        aliasesToAdd: [],
+        summary: null,
+        newSections: [
+          { heading: "공유", content: "[[CNN]] · [[DETR]]" },
+          { heading: "여행", content: "[[부산 여행]]" },
+        ],
+        replaces: [],
+        records: [],
+      },
+      existing: {
+        path: "wiki/나.md",
+        name: "나",
+        fm: { hashes: {} },
+        summary: "",
+        sections: [
+          { heading: "공부", content: "[[DETR]] · [[CNN]]", hash: "", ours: true },
+        ],
+        records: [],
+        recordsOurs: true,
+      },
+      sourceName: "s",
+      date: null,
+      today: "2026-09-15",
+    });
+    // 공유 == 공부 (순서만 다름) → 버림. 여행 ⊂ 공부 → 남김
+    expect(md).not.toContain("## 공유");
+    expect(md).toContain("## 여행\n\n[[부산 여행]]");
+    expect(md).toContain("## 공부\n\n[[DETR]] · [[CNN]]");
+  });
+});

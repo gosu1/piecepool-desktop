@@ -423,6 +423,16 @@ export function buildMarkdown(input: BuildInput): string {
       const before = existing?.sections.find((x) => x.heading === s.heading)?.content ?? "";
       s.content = linkSet(before + "\n" + s.content);
     }
+    // 링크 집합이 다른 절과 똑같은 절은 버린다. AI 가 `공부` 를 `공유` 로 잘못 내면 같은 링크
+    // 42개가 두 절에 들어가고, 합집합은 절 사이 중복을 못 잡는다 (7·11회차 실측). 뒤에 생긴
+    // 쪽을 버린다. 부분집합(`여행` ⊂ `공부`)은 분류이므로 둔다. 잠긴 절은 건드리지 않는다.
+    const linksOf = (c: string) => (c.match(/\[\[[^\]]+\]\]/g) ?? []).sort().join(" ");
+    for (let i = sections.length - 1; i >= 0; i--) {
+      const me = sections[i];
+      if (!me.ours || !me.content) continue;
+      const dup = sections.some((o, j) => j < i && linksOf(o.content) === linksOf(me.content));
+      if (dup) sections.splice(i, 1);
+    }
   }
 
   // 기록: append-only. 중복은 date + fact + source 로 판정한다.
