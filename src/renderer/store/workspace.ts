@@ -47,6 +47,17 @@ function applied(r: Result<VaultPayload | null>): Partial<WorkspaceState> {
   };
 }
 
+/** IPC 자체가 끊긴 경우(preload 부재 등). Result 로 오지 않으므로 여기서 잡는다. */
+async function call(
+  fn: () => Promise<Result<VaultPayload | null>>,
+): Promise<Partial<WorkspaceState>> {
+  try {
+    return applied(await fn());
+  } catch (e) {
+    return { error: `앱 내부 연결이 끊겼다: ${String(e)}`, loading: false };
+  }
+}
+
 export const useWorkspace = create<WorkspaceState>((set) => ({
   vault: null,
   tree: [],
@@ -71,11 +82,11 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
 
   pickVault: async () => {
     set({ loading: true, error: null });
-    set(applied(await window.piecepool.pickVault()));
+    set(await call(() => window.piecepool.pickVault()));
   },
 
   loadLastVault: async () => {
     set({ loading: true, error: null });
-    set(applied(await window.piecepool.lastVault()));
+    set(await call(() => window.piecepool.lastVault()));
   },
 }));
