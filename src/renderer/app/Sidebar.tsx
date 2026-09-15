@@ -9,9 +9,9 @@ export function Sidebar() {
 
   return (
     <aside style={{ width }} className="flex shrink-0 flex-col border-r border-hairline bg-chrome">
-      <header className="flex h-9 shrink-0 items-center px-3 text-xs font-medium text-ink-muted">
-        {vault ? vault.name : "파일 탐색기"}
-      </header>
+      {/* 볼트 이름은 하단 전환기가 이미 보여 준다. 여기는 비워 두되 높이는 남긴다 —
+          이 36px 이 트리 첫 행을 드래그 띠(상단 32px) 밖으로 밀어낸다. 지우면 첫 행이 안 눌린다. */}
+      <div className="h-9 shrink-0" />
 
       {error !== null ? (
         <div className="flex-1 overflow-y-auto px-3 text-sm text-danger">{error}</div>
