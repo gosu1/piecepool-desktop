@@ -26,6 +26,15 @@ describe("recent", () => {
     expect(await readLastVault(f)).toBeNull();
   });
 
+  it("문법은 맞지만 모양이 틀린 JSON 도 null 이다", async () => {
+    // try 범위를 JSON.parse 로만 좁히는 "정리" 가 들어오면 null 에서 다시 던진다.
+    for (const bad of ["null", "[]", '"그냥 문자열"', '{"lastVault":42}']) {
+      const f = await tempState();
+      await writeFile(f, bad, "utf8");
+      expect(await readLastVault(f)).toBeNull();
+    }
+  });
+
   it("부모 폴더가 없어도 쓴다", async () => {
     const f = join(await mkdtemp(join(tmpdir(), "pp-recent-")), "깊은", "곳", "state.json");
     await writeLastVault(f, "C:/볼트/y");
