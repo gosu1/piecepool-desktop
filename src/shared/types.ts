@@ -9,16 +9,25 @@ export type NotePath = string;
 /** 열린 볼트. 경로 문자열 하나가 아니라 상태다. */
 export interface Vault {
   root: string;
-  /** 에이전트가 쓸 수 있는 루트. 기본값은 "wiki". 설정에서 바꿀 수 있다. */
-  agentWriteRoot: string;
+  /**
+   * 에이전트가 쓸 수 있는 루트들. 기본값은 ["wiki", "sources", ".piecepool"] (ADR-0002 결정 6).
+   * wiki/ 는 위키 페이지, sources/ 는 원본 복사본과 출처 페이지, .piecepool/ 은 파생 캐시.
+   * 출력 벽 4 (경로 제한) 가 이 목록으로 판정한다. sources/ 에는 .md 가 아닌 원본도 들어간다.
+   */
+  agentWriteRoots: readonly string[];
 }
 
 /**
- * 프론트매터 4필드. 전부 optional 이다 —
+ * 프론트매터. 전부 optional 이다 —
  * 임의의 옵시디언 볼트를 열면 프론트매터가 아예 없는 노트가 있고,
  * 그것도 똑같이 유효해야 한다.
+ *
+ * 위키 페이지가 쓰는 5필드는 aliases · sources · created · compiledAt · hashes 다
+ * (ADR-0002 결정 5). title · updated 는 사용자 노트에만 있고 위키 페이지는 쓰지 않는다.
+ * 출처 페이지(sources/@원본.md)의 프론트매터는 규칙이 달라 별개 타입으로 둔다 (결정 6).
  */
 export interface Fm {
+  /** 사용자 노트에만. 위키 페이지는 파일명이 식별자라 쓰지 않는다. */
   title?: string;
   /**
    * ISO date 문자열. YAML 이 Date 로 역직렬화하므로 파서가 정규화한다.
@@ -26,9 +35,20 @@ export interface Fm {
    * 왕복에서 사용자 원문이 `2026-09-05T00:00:00.000Z` 로 바뀐다.
    */
   created?: string;
+  /** 사용자 노트에만. 위키 페이지는 쓰지 않는다 — 앱 편집기와 AI 가 번갈아 건드리면 신뢰도를 잃는다. */
   updated?: string;
   /** append-only. 덮어쓰지 않는다 — core/vault/frontmatter.addSource 참조. */
   sources?: string[];
+  /** 같은 것을 가리키는 다른 표기. 링크 해석은 파일명 > 단일 별칭 > 충돌 시 해제 (ADR-0002 결정 9). */
+  aliases?: string[];
+  /** AI 가 마지막으로 정리한 시각. ISO 8601. 코드만 쓴다. */
+  compiledAt?: string;
+  /**
+   * H2 절 이름 → 절 내용의 sha256 앞 8자리. 일치 = 우리 글(다시 써도 된다),
+   * 불일치 = 사용자 편집(건드리지 않는다), 없음 = 모르면 지킨다 (ADR-0002 결정 5).
+   * 앱 편집기는 이 값을 갱신하지 않는다. 갱신은 ingest 빌더만 한다.
+   */
+  hashes?: Record<string, string>;
 }
 
 export interface Note {
