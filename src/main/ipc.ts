@@ -40,8 +40,9 @@ function stateFile(): string {
 /** 볼트를 열고 트리까지 실어 보낸다. 열면 트리는 항상 필요하다. */
 async function open(root: string): Promise<VaultPayload> {
   const v = await openVault(root);
+  const payload = { root: v.root, name: basename(v.root), tree: await readTree(v) };
   await writeLastVault(stateFile(), v.root);
-  return { root: v.root, name: basename(v.root), tree: await readTree(v) };
+  return payload;
 }
 
 /** onProgress = webContents.send. CLI 가 console.log 를 넘기던 자리다. */
@@ -60,10 +61,10 @@ export function registerHandlers(): void {
       if (last === null) return null;
       try {
         return await open(last);
-      } catch {
-        // 기억한 폴더가 사라졌으면 조용히 "볼트 없음" 으로 떨어진다.
-        // 사용자가 지운 폴더를 에러로 들이밀 이유가 없다.
-        return null;
+      } catch (e) {
+        // 사라진 폴더만 조용히 넘긴다. 권한·IO 실패는 화면에 보여야 한다(설계 §3).
+        if (e instanceof PiecePoolError && e.kind === "vault_not_found") return null;
+        throw e; // wrap() 이 Result 실패로 만든다
       }
     }),
   );
