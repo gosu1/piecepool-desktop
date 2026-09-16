@@ -175,9 +175,12 @@ describe("쿼리 탭", () => {
 npx vitest run src/renderer/store/workspace.test.ts
 ```
 
-Expected: **FAIL.** `SyntaxError: The requested module './workspace.ts' does not provide an export named 'QUERY_TAB_ID'` 류의 메시지.
+Expected: **`Tests 4 failed | 30 passed (34)`** — `TypeError: useWorkspace.getState(...).openQueryTab is not a function`.
 
-**이 파일의 기존 테스트도 전부 같이 빨개진다.** import 가 끊기면 모듈이 아예 안 뜨기 때문이다 — 무언가를 깬 것이 아니다. 정상이다.
+**둘을 확인하고 넘어간다.**
+
+- **기존 30건은 그대로 초록이다.** vite 는 없는 named export 를 `SyntaxError` 로 던지지 않고 `undefined` 로 넘긴다 — 모듈은 정상적으로 뜬다
+- **5건 중 `focusTab` 하나는 구현 없이 통과한다.** `QUERY_TAB_ID` 가 `undefined` 라 `focusTab(undefined)` 가 `id: undefined` 인 탭을 찾아내고, `expect(activeTab).toBe(undefined)` 가 맞아떨어진다. **거짓 초록이다.** Step 4 에서 상수가 `"query"` 가 되면 비로소 진짜를 잰다
 
 - [ ] **Step 3: 스토어에 자리를 만든다**
 
