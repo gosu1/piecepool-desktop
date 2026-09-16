@@ -118,9 +118,12 @@ export function parseLinks(from: NotePath, body: string): LinkRef[] {
  * from 을 받는 이유: 옵시디언은 동명 노트가 있을 때 링크가 놓인 노트에
  * 가까운 후보를 우선한다. from 이 없으면 그 규칙도 상대경로도 구현할 수 없다.
  * 모호성 자체를 사용자에게 보고하는 것은 lint 규칙의 몫이다.
+ *
+ * 지금은 `from` 을 쓰지 않는다. 동명 노트는 맵에 먼저 들어온 것이 이기고,
+ * 모호성 보고는 lint 규칙의 몫이다 (2026-09-16 그래프 뷰 설계 §4.3).
  */
 export function resolveLink(from: NotePath, to: string, t: LinkTargets): NotePath | null {
-  throw new Error("unimplemented: core/index/links.resolveLink");
+  return t.titles.get(normalizeTitle(to)) ?? (t.files.has(to) ? to : null);
 }
 
 export function backlinksOf(p: NotePath, all: LinkRef[]): NotePath[] {

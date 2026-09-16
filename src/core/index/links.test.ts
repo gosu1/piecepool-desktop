@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { normalizeTitle, parseLinks } from "./links.ts";
+import { normalizeTitle, parseLinks, resolveLink } from "./links.ts";
+import type { LinkTargets } from "./links.ts";
 
 describe("normalizeTitle", () => {
   it("공백을 지운다 — 구 레포 PIE-64 가 이것으로 막힌다", () => {
@@ -101,5 +102,31 @@ describe("parseLinks", () => {
   it("닫히지 않은 펜스는 파일 끝까지 삼킨다", () => {
     const body = ["```", "[[예시]]", "[[또예시]]"].join("\n");
     expect(parseLinks("a.md", body)).toEqual([]);
+  });
+});
+
+describe("resolveLink", () => {
+  const targets: LinkTargets = {
+    titles: new Map([
+      [normalizeTitle("CNN"), "wiki/CNN.md"],
+      [normalizeTitle("교착 상태"), "wiki/교착상태.md"],
+    ]),
+    files: new Set(["wiki/CNN.md", "wiki/교착상태.md", "sources/files/x.pdf"]),
+  };
+
+  it("제목으로 해석한다", () => {
+    expect(resolveLink("a.md", "CNN", targets)).toBe("wiki/CNN.md");
+  });
+
+  it("공백이 달라도 같은 노트로 해석한다", () => {
+    expect(resolveLink("a.md", "교착상태", targets)).toBe("wiki/교착상태.md");
+  });
+
+  it("경로로도 해석한다", () => {
+    expect(resolveLink("a.md", "sources/files/x.pdf", targets)).toBe("sources/files/x.pdf");
+  });
+
+  it("없는 대상은 null 이다 — 깨진 링크다", () => {
+    expect(resolveLink("a.md", "없는것", targets)).toBeNull();
   });
 });
