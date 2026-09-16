@@ -32,16 +32,18 @@ function noteBody(tab: Tab | null) {
   );
 }
 
-/** 활성 탭의 본문. 마크다운을 렌더하지 않는다 — 원문 그대로다(설계 §2). */
-export function NoteView() {
-  const tabs = useWorkspace((s) => s.tabs);
-  const activeTab = useWorkspace((s) => s.activeTab);
-  const tab = tabs.find((t) => t.id === activeTab) ?? null;
-  const graphOpen = tabs.some((t) => t.kind === "graph");
+/** 한 칸의 활성 탭 본문. 마크다운을 렌더하지 않는다 — 원문 그대로다(설계 §2). */
+export function NoteView({ pane }: { pane: number }) {
+  // 칸을 통째로 받는다 — 파생값을 셀렉터에서 만들면 매번 새 참조가 나온다.
+  const p = useWorkspace((s) => s.panes[pane]);
+  if (p === undefined) return null;
+
+  const tab = p.tabs.find((t) => t.id === p.activeTab) ?? null;
+  const graphOpen = p.tabs.some((t) => t.kind === "graph");
 
   return (
     <>
-      {/* 그래프 탭이 있는 한 계속 마운트해 둔다 — 언마운트하면 재스캔·재배치로
+      {/* 그래프 탭이 이 칸에 있는 한 계속 마운트해 둔다 — 언마운트하면 재스캔·재배치로
           pan/zoom 과 노드 위치를 잃는다. 탭이 안 바뀌었을 땐 숨기기만 한다. */}
       {graphOpen && <GraphView hidden={tab === null || tab.kind !== "graph"} />}
       {noteBody(tab)}

@@ -21,10 +21,20 @@ beforeEach(() => {
     selected: null,
     sidebarOpen: true,
     sidebarWidth: 240,
-    tabs: [],
-    activeTab: null,
+    panes: [{ id: 0, tabs: [], activeTab: null }],
+    activePane: 0,
   });
 });
+
+/** 칸 0 의 탭들. 기존 테스트가 s.tabs 로 읽던 자리를 대신한다. */
+function tabs0() {
+  return useWorkspace.getState().panes[0].tabs;
+}
+
+/** 칸 0 의 활성 탭. */
+function active0() {
+  return useWorkspace.getState().panes[0].activeTab;
+}
 
 describe("clampWidth", () => {
   it("최소보다 작으면 최소로 올린다", () => {
@@ -112,8 +122,8 @@ describe("applied", () => {
       tree: payload.tree,
       expanded: new Set(),
       selected: null,
-      tabs: [],
-      activeTab: null,
+      panes: [{ id: 0, tabs: [], activeTab: null }],
+      activePane: 0,
       error: null,
       loading: false,
     });
@@ -155,9 +165,8 @@ describe("탭", () => {
     const { openTab } = useWorkspace.getState();
     openTab("wiki/a.md", "a");
     openTab("wiki/a.md", "a");
-    const s = useWorkspace.getState();
-    expect(s.tabs).toHaveLength(1);
-    expect(s.activeTab).toBe(noteTabId("wiki/a.md"));
+    expect(tabs0()).toHaveLength(1);
+    expect(active0()).toBe(noteTabId("wiki/a.md"));
   });
 
   it("활성인 가운데 탭을 닫으면 오른쪽 이웃이 활성이 된다", () => {
@@ -168,9 +177,8 @@ describe("탭", () => {
     // b 를 다시 열어 활성으로 만든다. 활성 탭을 닫아야 이웃 이동이 일어난다.
     openTab("wiki/b.md", "b");
     closeTab(noteTabId("wiki/b.md"));
-    const s = useWorkspace.getState();
-    expect(s.tabs.map((t) => t.id)).toEqual([noteTabId("wiki/a.md"), noteTabId("wiki/c.md")]);
-    expect(s.activeTab).toBe(noteTabId("wiki/c.md"));
+    expect(tabs0().map((t) => t.id)).toEqual([noteTabId("wiki/a.md"), noteTabId("wiki/c.md")]);
+    expect(active0()).toBe(noteTabId("wiki/c.md"));
   });
 
   it("활성이 아닌 탭을 닫으면 활성이 그대로다", () => {
@@ -178,16 +186,15 @@ describe("탭", () => {
     openTab("wiki/a.md", "a");
     openTab("wiki/b.md", "b");
     closeTab(noteTabId("wiki/a.md"));
-    expect(useWorkspace.getState().activeTab).toBe(noteTabId("wiki/b.md"));
+    expect(active0()).toBe(noteTabId("wiki/b.md"));
   });
 
   it("마지막 탭을 닫으면 activeTab 이 null 이다", () => {
     const { openTab, closeTab } = useWorkspace.getState();
     openTab("wiki/a.md", "a");
     closeTab(noteTabId("wiki/a.md"));
-    const s = useWorkspace.getState();
-    expect(s.tabs).toHaveLength(0);
-    expect(s.activeTab).toBeNull();
+    expect(tabs0()).toHaveLength(0);
+    expect(active0()).toBeNull();
   });
 
   it("닫았다가 다시 연 탭에 옛 응답이 덮어쓰지 않는다", async () => {
@@ -215,7 +222,7 @@ describe("탭", () => {
       resolvers[0]({ ok: true, value: "옛 본문" });
       await Promise.all([first, second]);
 
-      const tabs = useWorkspace.getState().tabs;
+      const tabs = tabs0();
       expect(tabs).toHaveLength(1);
       const [tab] = tabs;
       expect(tab.kind === "note" ? tab.body : null).toBe("새 본문");
@@ -228,58 +235,68 @@ describe("탭", () => {
 describe("그래프 탭", () => {
   it("연 적 없으면 새로 만들고 활성으로 둔다", () => {
     useWorkspace.getState().openGraphTab();
-    const s = useWorkspace.getState();
-    expect(s.tabs).toEqual([{ kind: "graph", id: GRAPH_TAB_ID, title: "그래프" }]);
-    expect(s.activeTab).toBe(GRAPH_TAB_ID);
+    expect(tabs0()).toEqual([{ kind: "graph", id: GRAPH_TAB_ID, title: "그래프" }]);
+    expect(active0()).toBe(GRAPH_TAB_ID);
   });
 
   it("두 번 눌러도 탭이 둘이 되지 않는다", () => {
     const { openGraphTab } = useWorkspace.getState();
     openGraphTab();
     openGraphTab();
-    expect(useWorkspace.getState().tabs).toHaveLength(1);
+    expect(tabs0()).toHaveLength(1);
   });
 
   it("노트 탭과 키 공간이 겹치지 않는다", () => {
     useWorkspace.setState({
-      tabs: [
+      panes: [
         {
-          kind: "note",
-          id: noteTabId("graph"),
-          path: "graph",
-          title: "graph",
-          body: "",
-          error: null,
-          seq: 1,
+          id: 0,
+          tabs: [
+            {
+              kind: "note",
+              id: noteTabId("graph"),
+              path: "graph",
+              title: "graph",
+              body: "",
+              error: null,
+              seq: 1,
+            },
+          ],
+          activeTab: noteTabId("graph"),
         },
       ],
-      activeTab: noteTabId("graph"),
+      activePane: 0,
     });
     useWorkspace.getState().openGraphTab();
-    expect(useWorkspace.getState().tabs).toHaveLength(2);
+    expect(tabs0()).toHaveLength(2);
   });
 
   it("focusTab 은 그래프 탭에서 selected 를 건드리지 않는다", () => {
     useWorkspace.setState({
-      tabs: [
+      panes: [
         {
-          kind: "note",
-          id: noteTabId("a.md"),
-          path: "a.md",
-          title: "a",
-          body: "",
-          error: null,
-          seq: 1,
+          id: 0,
+          tabs: [
+            {
+              kind: "note",
+              id: noteTabId("a.md"),
+              path: "a.md",
+              title: "a",
+              body: "",
+              error: null,
+              seq: 1,
+            },
+            { kind: "graph", id: GRAPH_TAB_ID, title: "그래프" },
+          ],
+          activeTab: noteTabId("a.md"),
         },
-        { kind: "graph", id: GRAPH_TAB_ID, title: "그래프" },
       ],
-      activeTab: noteTabId("a.md"),
+      activePane: 0,
       selected: "a.md",
     });
     useWorkspace.getState().focusTab(GRAPH_TAB_ID);
-    const s = useWorkspace.getState();
-    expect(s.activeTab).toBe(GRAPH_TAB_ID);
-    expect(s.selected).toBe("a.md");
+    expect(active0()).toBe(GRAPH_TAB_ID);
+    expect(useWorkspace.getState().selected).toBe("a.md");
   });
 
   it("볼트를 바꾸면 그래프 탭도 함께 닫힌다", () => {
@@ -288,67 +305,77 @@ describe("그래프 탭", () => {
       ok: true,
       value: { root: "/새볼트", name: "새볼트", tree: [] },
     });
-    expect(next.tabs).toEqual([]);
-    expect(next.activeTab).toBeNull();
+    expect(next.panes).toEqual([{ id: 0, tabs: [], activeTab: null }]);
+    expect(next.activePane).toBe(0);
   });
 });
 
 describe("쿼리 탭", () => {
   it("연 적 없으면 새로 만들고 활성으로 둔다", () => {
     useWorkspace.getState().openQueryTab();
-    const s = useWorkspace.getState();
-    expect(s.tabs).toEqual([{ kind: "query", id: QUERY_TAB_ID, title: "쿼리" }]);
-    expect(s.activeTab).toBe(QUERY_TAB_ID);
+    expect(tabs0()).toEqual([{ kind: "query", id: QUERY_TAB_ID, title: "쿼리" }]);
+    expect(active0()).toBe(QUERY_TAB_ID);
   });
 
   it("두 번 눌러도 탭이 둘이 되지 않는다", () => {
     const { openQueryTab } = useWorkspace.getState();
     openQueryTab();
     openQueryTab();
-    expect(useWorkspace.getState().tabs).toHaveLength(1);
+    expect(tabs0()).toHaveLength(1);
   });
 
   it("노트 탭·그래프 탭과 키 공간이 겹치지 않는다", () => {
     useWorkspace.setState({
-      tabs: [
+      panes: [
         {
-          kind: "note",
-          id: noteTabId("query"),
-          path: "query",
-          title: "query",
-          body: "",
-          error: null,
-          seq: 1,
+          id: 0,
+          tabs: [
+            {
+              kind: "note",
+              id: noteTabId("query"),
+              path: "query",
+              title: "query",
+              body: "",
+              error: null,
+              seq: 1,
+            },
+            { kind: "graph", id: GRAPH_TAB_ID, title: "그래프" },
+          ],
+          activeTab: noteTabId("query"),
         },
-        { kind: "graph", id: GRAPH_TAB_ID, title: "그래프" },
       ],
-      activeTab: noteTabId("query"),
+      activePane: 0,
     });
     useWorkspace.getState().openQueryTab();
-    expect(useWorkspace.getState().tabs).toHaveLength(3);
+    expect(tabs0()).toHaveLength(3);
   });
 
   it("focusTab 은 쿼리 탭에서 selected 를 건드리지 않는다", () => {
     useWorkspace.setState({
-      tabs: [
+      panes: [
         {
-          kind: "note",
-          id: noteTabId("a.md"),
-          path: "a.md",
-          title: "a",
-          body: "",
-          error: null,
-          seq: 1,
+          id: 0,
+          tabs: [
+            {
+              kind: "note",
+              id: noteTabId("a.md"),
+              path: "a.md",
+              title: "a",
+              body: "",
+              error: null,
+              seq: 1,
+            },
+            { kind: "query", id: QUERY_TAB_ID, title: "쿼리" },
+          ],
+          activeTab: noteTabId("a.md"),
         },
-        { kind: "query", id: QUERY_TAB_ID, title: "쿼리" },
       ],
-      activeTab: noteTabId("a.md"),
+      activePane: 0,
       selected: "a.md",
     });
     useWorkspace.getState().focusTab(QUERY_TAB_ID);
-    const s = useWorkspace.getState();
-    expect(s.activeTab).toBe(QUERY_TAB_ID);
-    expect(s.selected).toBe("a.md");
+    expect(active0()).toBe(QUERY_TAB_ID);
+    expect(useWorkspace.getState().selected).toBe("a.md");
   });
 
   it("볼트를 바꾸면 쿼리 탭도 함께 닫힌다", () => {
@@ -357,7 +384,7 @@ describe("쿼리 탭", () => {
       ok: true,
       value: { root: "/새볼트", name: "새볼트", tree: [] },
     });
-    expect(next.tabs).toEqual([]);
-    expect(next.activeTab).toBeNull();
+    expect(next.panes).toEqual([{ id: 0, tabs: [], activeTab: null }]);
+    expect(next.activePane).toBe(0);
   });
 });

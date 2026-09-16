@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
-import { NoteView } from "./NoteView.tsx";
+import { Pane } from "./Pane.tsx";
 import { Ribbon } from "./Ribbon.tsx";
 import { Sidebar } from "./Sidebar.tsx";
-import { TabStrip } from "./TabStrip.tsx";
 import { WindowControls } from "./WindowControls.tsx";
 import {
   MAX_SIDEBAR_WIDTH,
@@ -72,6 +71,7 @@ function ResizeHandle() {
 
 export function Shell() {
   const sidebarOpen = useWorkspace((s) => s.sidebarOpen);
+  const panes = useWorkspace((s) => s.panes);
 
   // 마지막으로 연 볼트를 되살린다. StrictMode 가 개발 중 두 번 부르지만
   // 읽기만 하므로 결과가 같다.
@@ -94,9 +94,15 @@ export function Shell() {
           <ResizeHandle />
         </>
       )}
-      <main className="flex min-w-0 flex-1 flex-col">
-        <TabStrip />
-        <NoteView />
+      <main className="flex min-w-0 flex-1">
+        {panes.map((p, i) => (
+          // key 는 인덱스가 아니라 칸 id 다. 인덱스면 왼쪽 칸이 접힐 때 React 가
+          // 오른쪽 칸의 내용을 왼쪽 자리로 재조정해 GraphView 가 새로 마운트된다.
+          <Fragment key={p.id}>
+            {i > 0 && <div className="w-px shrink-0 bg-hairline" />}
+            <Pane index={i} />
+          </Fragment>
+        ))}
       </main>
     </div>
   );

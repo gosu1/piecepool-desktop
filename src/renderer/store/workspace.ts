@@ -1,9 +1,14 @@
 import { create } from "zustand";
 import type { NotePath, Result } from "../../shared/types.ts";
 import type { TreeNode, VaultPayload } from "../../shared/ipc.ts";
+import { compact } from "./panes.ts";
+import type { Pane } from "./panes.ts";
 
 // FileTree.tsx 가 스토어에서 TreeNode 를 가져다 쓴다. 그 import 를 살려 둔다.
 export type { TreeNode };
+
+// Shell·Pane 이 스토어에서 Pane 을 가져다 쓴다. 그 import 를 살려 둔다.
+export type { Pane };
 
 export const MIN_SIDEBAR_WIDTH = 180;
 export const MAX_SIDEBAR_WIDTH = 480;
@@ -78,6 +83,50 @@ export type Tab = NoteTab | GraphTab | QueryTab;
 /** 탭 요청 세대. 닫았다가 곧바로 다시 연 탭에 옛 응답이 덮어쓰는 것을 막는다. */
 let tabSeq = 0;
 
+/** 탭이 든 칸의 인덱스. 없으면 -1. */
+function paneOf(panes: Pane[], id: string): number {
+  return panes.findIndex((p) => p.tabs.some((t) => t.id === id));
+}
+
+/** 칸에서 탭 하나를 뺀다. 뺀 것이 활성이었으면 오른쪽 이웃, 없으면 왼쪽으로 옮긴다. */
+function removeTab(p: Pane, id: string): Pane {
+  const idx = p.tabs.findIndex((t) => t.id === id);
+  if (idx === -1) return p;
+  const tabs = p.tabs.filter((t) => t.id !== id);
+  const activeTab = p.activeTab === id ? (tabs[idx]?.id ?? tabs[idx - 1]?.id ?? null) : p.activeTab;
+  return { ...p, tabs, activeTab };
+}
+
+/**
+ * 빈 칸 하나. 볼트를 바꿀 때와 초기 상태가 쓴다.
+ *
+ * id 가 늘 0 인 것이 맞다 — 키는 **같은 시점에 살아 있는 칸끼리만** 겹치지 않으면 되고,
+ * 이 칸이 놓이는 순간 다른 칸은 전부 사라진다. paneSeq 를 쓰면 테스트가 앞선 분할 횟수에
+ * 따라 다른 값을 기대하게 된다.
+ */
+function firstPane(): Pane {
+  return { id: 0, tabs: [], activeTab: null };
+}
+
+/**
+ * 그래프·쿼리처럼 id 가 상수인 탭을 연다.
+ * 어느 칸에든 이미 있으면 그 칸으로 포커스하고, 없으면 activePane 에 붙인다.
+ */
+function openFixed(s: WorkspaceState, tab: GraphTab | QueryTab): Partial<WorkspaceState> {
+  const found = paneOf(s.panes, tab.id);
+  if (found !== -1) {
+    return {
+      panes: s.panes.map((p, i) => (i === found ? { ...p, activeTab: tab.id } : p)),
+      activePane: found,
+    };
+  }
+  return {
+    panes: s.panes.map((p, i) =>
+      i === s.activePane ? { ...p, tabs: [...p.tabs, tab], activeTab: tab.id } : p,
+    ),
+  };
+}
+
 interface WorkspaceState {
   /** 열린 볼트. 없으면 아직 폴더를 고르지 않은 것이다. */
   vault: VaultPayload | null;
@@ -95,9 +144,10 @@ interface WorkspaceState {
   setSidebarWidth: (px: number) => void;
   pickVault: () => Promise<void>;
   loadLastVault: () => Promise<void>;
-  tabs: Tab[];
-  /** 활성 탭의 id. NotePath 가 아니다 — 파일이 아닌 탭이 있다. */
-  activeTab: string | null;
+  /** 열린 칸들. 길이는 1 또는 2 다. 절대 빈 배열이 되지 않는다. */
+  panes: Pane[];
+  /** 새 탭이 열릴 칸. */
+  activePane: number;
   openTab: (path: NotePath, title: string) => Promise<void>;
   openGraphTab: () => void;
   openQueryTab: () => void;
@@ -115,10 +165,10 @@ export function applied(r: Result<VaultPayload | null>): Partial<WorkspaceState>
     tree: r.value.tree,
     expanded: new Set(),
     selected: null,
-    // 탭도 비운다. NotePath 는 볼트 루트 기준 상대경로라 새 볼트에서 다른 파일을 뜻한다 —
+    // 칸도 하나로 되돌린다. NotePath 는 볼트 루트 기준 상대경로라 새 볼트에서 다른 파일을 뜻한다 —
     // 남겨 두면 이전 볼트의 글이 새 볼트의 탭 제목을 달고 조용히 그대로 떠 있는다.
-    tabs: [],
-    activeTab: null,
+    panes: [firstPane()],
+    activePane: 0,
     error: null,
     loading: false,
   };
@@ -144,8 +194,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   selected: null,
   sidebarOpen: true,
   sidebarWidth: 240,
-  tabs: [],
-  activeTab: null,
+  panes: [firstPane()],
+  activePane: 0,
 
   toggleFolder: (path) =>
     set((s) => {
@@ -172,17 +222,25 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   openTab: async (path, title) => {
     const id = noteTabId(path);
 
-    // 이미 열려 있으면 다시 읽지 않는다. 파일 감시가 없어 다시 읽어도
+    // 어느 칸에든 이미 열려 있으면 다시 읽지 않는다. 파일 감시가 없어 다시 읽어도
     // 최신이라는 보장이 없고, 보던 글이 갑자기 바뀌는 쪽이 더 나쁘다.
-    if (get().tabs.some((t) => t.id === id)) {
-      set({ activeTab: id, selected: path });
+    const found = paneOf(get().panes, id);
+    if (found !== -1) {
+      set((s) => ({
+        panes: s.panes.map((p, i) => (i === found ? { ...p, activeTab: id } : p)),
+        activePane: found,
+        selected: path,
+      }));
       return;
     }
 
     const seq = ++tabSeq;
+    // 먼저 타입을 붙여 둔다. map 안에서 리터럴로 쓰면 kind 가 string 으로 넓어진다.
+    const tab: Tab = { kind: "note", id, path, title, body: null, error: null, seq };
     set((s) => ({
-      tabs: [...s.tabs, { kind: "note", id, path, title, body: null, error: null, seq }],
-      activeTab: id,
+      panes: s.panes.map((p, i) =>
+        i === s.activePane ? { ...p, tabs: [...p.tabs, tab], activeTab: id } : p,
+      ),
       selected: path,
     }));
 
@@ -197,46 +255,40 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       error = `앱 내부 연결이 끊겼다: ${String(e)}`;
     }
 
+    // 모든 칸을 훑는다 — 읽는 동안 탭이 옆 칸으로 옮겨졌을 수 있다.
     // 세대까지 같아야 담는다. 그 사이에 닫혔거나 다시 열렸으면 이 응답은 낡은 것이다.
     set((s) => ({
-      tabs: s.tabs.map((t) =>
-        t.kind === "note" && t.id === id && t.seq === seq ? { ...t, body, error } : t,
-      ),
+      panes: s.panes.map((p) => ({
+        ...p,
+        tabs: p.tabs.map((t) =>
+          t.kind === "note" && t.id === id && t.seq === seq ? { ...t, body, error } : t,
+        ),
+      })),
     }));
   },
 
   openGraphTab: () =>
-    set((s) => ({
-      tabs: s.tabs.some((t) => t.id === GRAPH_TAB_ID)
-        ? s.tabs
-        : [...s.tabs, { kind: "graph", id: GRAPH_TAB_ID, title: "그래프" }],
-      activeTab: GRAPH_TAB_ID,
-    })),
+    set((s) => openFixed(s, { kind: "graph", id: GRAPH_TAB_ID, title: "그래프" })),
 
-  openQueryTab: () =>
-    set((s) => ({
-      tabs: s.tabs.some((t) => t.id === QUERY_TAB_ID)
-        ? s.tabs
-        : [...s.tabs, { kind: "query", id: QUERY_TAB_ID, title: "쿼리" }],
-      activeTab: QUERY_TAB_ID,
-    })),
+  openQueryTab: () => set((s) => openFixed(s, { kind: "query", id: QUERY_TAB_ID, title: "쿼리" })),
 
   focusTab: (id) =>
     set((s) => {
-      const t = s.tabs.find((x) => x.id === id);
-      if (t === undefined) return {};
-      // 그래프 탭에는 경로가 없다 — 트리 선택을 건드리지 않는다.
-      return t.kind === "note" ? { activeTab: id, selected: t.path } : { activeTab: id };
+      const i = paneOf(s.panes, id);
+      if (i === -1) return {};
+      const t = s.panes[i].tabs.find((x) => x.id === id);
+      const panes = s.panes.map((p, j) => (j === i ? { ...p, activeTab: id } : p));
+      // 그래프·쿼리 탭에는 경로가 없다 — 트리 선택을 건드리지 않는다.
+      return t?.kind === "note"
+        ? { panes, activePane: i, selected: t.path }
+        : { panes, activePane: i };
     }),
 
   closeTab: (id) =>
     set((s) => {
-      const idx = s.tabs.findIndex((t) => t.id === id);
-      if (idx === -1) return {};
-      const tabs = s.tabs.filter((t) => t.id !== id);
-      // 닫은 탭이 활성이었을 때만 옮긴다. 오른쪽 이웃, 없으면 왼쪽.
-      const activeTab =
-        s.activeTab === id ? (tabs[idx]?.id ?? tabs[idx - 1]?.id ?? null) : s.activeTab;
-      return { tabs, activeTab };
+      const i = paneOf(s.panes, id);
+      if (i === -1) return {};
+      const panes = s.panes.map((p, j) => (j === i ? removeTab(p, id) : p));
+      return compact(panes, s.activePane);
     }),
 }));

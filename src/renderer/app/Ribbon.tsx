@@ -41,9 +41,9 @@ export function Ribbon() {
   const sidebarOpen = useWorkspace((s) => s.sidebarOpen);
   const toggleSidebar = useWorkspace((s) => s.toggleSidebar);
   const openGraphTab = useWorkspace((s) => s.openGraphTab);
-  const graphActive = useWorkspace((s) => s.activeTab === GRAPH_TAB_ID);
+  const graphActive = useWorkspace((s) => s.panes.some((p) => p.activeTab === GRAPH_TAB_ID));
   const openQueryTab = useWorkspace((s) => s.openQueryTab);
-  const queryActive = useWorkspace((s) => s.activeTab === QUERY_TAB_ID);
+  const queryActive = useWorkspace((s) => s.panes.some((p) => p.activeTab === QUERY_TAB_ID));
 
   return (
     <nav
