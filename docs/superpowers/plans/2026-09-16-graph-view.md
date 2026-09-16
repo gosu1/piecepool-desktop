@@ -1789,7 +1789,10 @@ export function GraphView() {
   useEffect(() => {
     void load();
     // 탭을 떠나면 시뮬을 세운다. 안 세우면 안 보이는 캔버스에 계속 힘을 푼다.
-    return () => layoutRef.current?.sim.stop();
+    // sim.stop() 은 this 를 돌려주므로 () => sim.stop() 은 Destructor 타입(void 만 허용)에 안 맞는다 — 블록으로 버린다.
+    return () => {
+      layoutRef.current?.sim.stop();
+    };
   }, [load]);
 
   useEffect(() => {
