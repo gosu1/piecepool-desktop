@@ -96,7 +96,7 @@
   - `normalizeTitle(t: string): string` — NFC → trim → 소문자 → 공백 제거
   - `parseLinks(from: NotePath, body: string): LinkRef[]` — `resolved` 는 항상 `null` 로 둔다. 채우는 것은 `scanVault` 의 몫이다 (Task 2)
 
-**예상 테스트 증가:** +16 (66 → 82)
+**예상 테스트 증가:** +18 (66 → 84)
 
 - [ ] **Step 1: 실패하는 테스트를 먼저 쓴다**
 
@@ -303,7 +303,7 @@ export function parseLinks(from: NotePath, body: string): LinkRef[] {
 npx vitest run src/core/index/links.test.ts
 ```
 
-Expected: PASS — 16 tests
+Expected: PASS — 18 tests
 
 - [ ] **Step 5: 전체 검증**
 
@@ -311,7 +311,7 @@ Expected: PASS — 16 tests
 npx prettier --write . && npm run lint && npm run typecheck && npm test
 ```
 
-Expected: 전부 통과. `Tests 82 passed (82)`
+Expected: 전부 통과. `Tests 84 passed (84)`
 
 - [ ] **Step 6: 커밋**
 
@@ -353,7 +353,7 @@ MSG
   - `scanVault(v: Vault): Promise<VaultIndex>`
   - `toGraph(ix: VaultIndex): GraphData`
 
-**예상 테스트 증가:** +15 (82 → 97)
+**예상 테스트 증가:** +17 (84 → 101)
 
 - [ ] **Step 1: `resolveLink` 테스트를 먼저 쓴다**
 
@@ -635,7 +635,7 @@ export function toGraph(ix: VaultIndex): GraphData {
 npx vitest run src/core/index/
 ```
 
-Expected: PASS — 31 tests (links 20 + scan 11)
+Expected: PASS — 35 tests (links 22 + scan 13)
 
 - [ ] **Step 7: 전체 검증**
 
@@ -643,7 +643,7 @@ Expected: PASS — 31 tests (links 20 + scan 11)
 npx prettier --write . && npm run lint && npm run typecheck && npm test
 ```
 
-Expected: `Tests 97 passed (97)`
+Expected: `Tests 101 passed (101)`
 
 - [ ] **Step 8: 커밋**
 
@@ -677,7 +677,7 @@ MSG
 - Consumes: `scanVault`·`toGraph` (Task 2), `GraphData` (`src/shared/types.ts`), `PiecePoolError` (`src/core/errors.ts`), `wrap` (`src/main/ipc.ts` 에 이미 있다)
 - Produces: `window.piecepool.buildGraph(): Promise<Result<GraphData>>` — renderer 가 Task 6 에서 부른다
 
-**예상 테스트 증가:** +0 (97 유지)
+**예상 테스트 증가:** +0 (101 유지)
 
 - [ ] **Step 1: `shared/ipc.ts` 에 채널과 계약을 더한다**
 
@@ -761,7 +761,7 @@ ipcMain.handle(CHANNEL.graphBuild, () =>
 npx prettier --write . && npm run lint && npm run typecheck && npm test
 ```
 
-Expected: 전부 통과. `Tests 97 passed (97)`
+Expected: 전부 통과. `Tests 101 passed (101)`
 
 - [ ] **Step 5: FROZEN 변경 범위를 눈으로 확인한다**
 
@@ -806,7 +806,7 @@ MSG
   - `Tab = NoteTab | GraphTab` — `NoteTab` 은 `{ kind: "note"; id: string; path: NotePath; title: string; body: string | null; error: string | null; seq: number }`, `GraphTab` 은 `{ kind: "graph"; id: "graph"; title: "그래프" }`
   - 스토어: `activeTab: string | null` · `openTab(path, title): Promise<void>` (**시그니처 유지**) · `openGraphTab(): void` · `focusTab(id: string): void` · `closeTab(id: string): void`
 
-**예상 테스트 증가:** +5 (97 → 102). 기존 탭 테스트는 `path` → `id` 로 **고쳐 쓴다**
+**예상 테스트 증가:** +5 (101 → 106). 기존 탭 테스트는 `path` → `id` 로 **고쳐 쓴다**
 
 - [ ] **Step 1: 실패하는 테스트를 먼저 쓴다**
 
@@ -1108,7 +1108,7 @@ Expected: PASS — 기존 탭 테스트 + 새 그래프 탭 5개
 npx prettier --write . && npm run lint && npm run typecheck && npm test
 ```
 
-Expected: `Tests 102 passed (102)`
+Expected: `Tests 106 passed (106)`
 
 - [ ] **Step 8: 커밋**
 
@@ -1150,7 +1150,7 @@ MSG
   - `hit.ts` — `View` · `toWorld(v, sx, sy)` · `hitNode(nodes, v, sx, sy)`
   - `draw.ts` — `Palette` · `Scene` · `LABEL_ZOOM` · `draw(ctx, w, h, s)`
 
-**예상 테스트 증가:** +11 (102 → 113)
+**예상 테스트 증가:** +15 (106 → 121)
 
 - [ ] **Step 1: 의존성을 설치한다**
 
@@ -1575,7 +1575,7 @@ export function draw(ctx: CanvasRenderingContext2D, w: number, h: number, s: Sce
 npx vitest run src/renderer/features/graph/
 ```
 
-Expected: PASS — 11 tests
+Expected: PASS — 15 tests
 
 - [ ] **Step 11: 전체 검증**
 
@@ -1583,7 +1583,7 @@ Expected: PASS — 11 tests
 npx prettier --write . && npm run lint && npm run typecheck && npm test
 ```
 
-Expected: `Tests 113 passed (113)`
+Expected: `Tests 121 passed (121)`
 
 - [ ] **Step 12: 커밋**
 
@@ -1617,7 +1617,7 @@ MSG
 - Consumes: `bridge` (`src/renderer/bridge.ts`), `useWorkspace`·`GRAPH_TAB_ID`·`RIBBON_WIDTH` (`src/renderer/store/workspace.ts`), Task 5 의 세 모듈
 - Produces: `GraphView` — 인자 없는 컴포넌트
 
-**예상 테스트 증가:** +0 (113 유지). `.tsx` 는 테스트 대상이 아니다
+**예상 테스트 증가:** +0 (121 유지). `.tsx` 는 테스트 대상이 아니다
 
 - [ ] **Step 1: `GraphView.tsx` 를 만든다**
 
@@ -1988,7 +1988,7 @@ export function Ribbon() {
 npx prettier --write . && npm run lint && npm run typecheck && npm test
 ```
 
-Expected: `Tests 113 passed (113)`
+Expected: `Tests 121 passed (121)`
 
 - [ ] **Step 5: 앱을 띄워 눈으로 본다**
 
