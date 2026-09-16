@@ -96,13 +96,13 @@
   - `normalizeTitle(t: string): string` — NFC → trim → 소문자 → 공백 제거
   - `parseLinks(from: NotePath, body: string): LinkRef[]` — `resolved` 는 항상 `null` 로 둔다. 채우는 것은 `scanVault` 의 몫이다 (Task 2)
 
-**예상 테스트 증가:** +18 (66 → 84)
+**예상 테스트 증가:** +19 (66 → 85)
 
 - [ ] **Step 1: 실패하는 테스트를 먼저 쓴다**
 
 `src/core/index/links.test.ts` 를 만든다.
 
-````ts
+`````ts
 import { describe, expect, it } from "vitest";
 import { normalizeTitle, parseLinks } from "./links.ts";
 
@@ -190,6 +190,13 @@ describe("parseLinks", () => {
     expect(parseLinks("a.md", body).map((r) => r.to)).toEqual(["진짜"]);
   });
 
+  it("긴 펜스 안의 짧은 펜스는 블록을 닫지 못한다", () => {
+    // 백틱 넷으로 연 블록 안의 백틱 셋은 예제일 뿐이다.
+    // CommonMark 는 닫는 런이 여는 런 이상이기를 요구한다.
+    const body = ["````", "```", "[[예시]]", "```", "````", "[[진짜]]"].join("\n");
+    expect(parseLinks("a.md", body).map((r) => r.to)).toEqual(["진짜"]);
+  });
+
   it("인라인 코드 안의 [[예시]] 는 링크가 아니다", () => {
     expect(
       parseLinks("a.md", "`[[예시]]` 는 문법이고 [[진짜]] 는 링크다").map((r) => r.to),
@@ -201,7 +208,7 @@ describe("parseLinks", () => {
     expect(parseLinks("a.md", body)).toEqual([]);
   });
 });
-````
+`````
 
 - [ ] **Step 2: 실패를 확인한다**
 
@@ -225,7 +232,11 @@ export function normalizeTitle(t: string): string {
 }
 ```
 
-`parseLinks` 위에 헬퍼를 두고(같은 파일, export 하지 않는다) 본체를 채운다:
+헬퍼를 두고(같은 파일, export 하지 않는다) `parseLinks` 본체를 채운다.
+
+**헬퍼는 `parseLinks` 의 JSDoc 블록 *위*에 둔다** — `normalizeTitle` 과 그 JSDoc 사이다.
+JSDoc 바로 아래에 두면 주석 블록이 둘 겹쳐서, 글자를 한 자도 안 바꿨는데도 IDE 와 typedoc 이
+그 설명을 헬퍼의 것으로 읽는다. FROZEN 주석이 자기 함수에서 떨어지는 것은 `git diff` 가 못 잡는다.
 
 ```ts
 /**
@@ -234,15 +245,17 @@ export function normalizeTitle(t: string): string {
  */
 function blankCode(body: string): string {
   const lines = body.split("\n");
-  let fence: string | null = null;
+  let fenceChar: string | null = null;
+  let fenceLen = 0;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const m = /^\s*(`{3,}|~{3,})/.exec(line);
 
-    if (fence === null) {
+    if (fenceChar === null) {
       if (m !== null) {
-        fence = m[1][0];
+        fenceChar = m[1][0];
+        fenceLen = m[1].length;
         lines[i] = " ".repeat(line.length);
         continue;
       }
@@ -251,8 +264,9 @@ function blankCode(body: string): string {
       continue;
     }
 
-    // 펜스 안이다. 같은 문자로 시작하는 줄이 닫는다. 닫는 줄도 함께 지운다.
-    if (m !== null && m[1][0] === fence) fence = null;
+    // 펜스 안이다. 닫으려면 같은 문자에 길이가 여는 쪽 이상이어야 한다 —
+    // 백틱 넷으로 연 블록 안의 백틱 셋짜리 예제는 그 블록을 닫지 못한다(CommonMark).
+    if (m !== null && m[1][0] === fenceChar && m[1].length >= fenceLen) fenceChar = null;
     lines[i] = " ".repeat(line.length);
   }
 
@@ -303,7 +317,7 @@ export function parseLinks(from: NotePath, body: string): LinkRef[] {
 npx vitest run src/core/index/links.test.ts
 ```
 
-Expected: PASS — 18 tests
+Expected: PASS — 19 tests
 
 - [ ] **Step 5: 전체 검증**
 
@@ -311,7 +325,7 @@ Expected: PASS — 18 tests
 npx prettier --write . && npm run lint && npm run typecheck && npm test
 ```
 
-Expected: 전부 통과. `Tests 84 passed (84)`
+Expected: 전부 통과. `Tests 85 passed (85)`
 
 - [ ] **Step 6: 커밋**
 
@@ -353,7 +367,7 @@ MSG
   - `scanVault(v: Vault): Promise<VaultIndex>`
   - `toGraph(ix: VaultIndex): GraphData`
 
-**예상 테스트 증가:** +17 (84 → 101)
+**예상 테스트 증가:** +17 (85 → 102)
 
 - [ ] **Step 1: `resolveLink` 테스트를 먼저 쓴다**
 
@@ -635,7 +649,7 @@ export function toGraph(ix: VaultIndex): GraphData {
 npx vitest run src/core/index/
 ```
 
-Expected: PASS — 35 tests (links 22 + scan 13)
+Expected: PASS — 36 tests (links 23 + scan 13)
 
 - [ ] **Step 7: 전체 검증**
 
@@ -643,7 +657,7 @@ Expected: PASS — 35 tests (links 22 + scan 13)
 npx prettier --write . && npm run lint && npm run typecheck && npm test
 ```
 
-Expected: `Tests 101 passed (101)`
+Expected: `Tests 102 passed (102)`
 
 - [ ] **Step 8: 커밋**
 
@@ -677,7 +691,7 @@ MSG
 - Consumes: `scanVault`·`toGraph` (Task 2), `GraphData` (`src/shared/types.ts`), `PiecePoolError` (`src/core/errors.ts`), `wrap` (`src/main/ipc.ts` 에 이미 있다)
 - Produces: `window.piecepool.buildGraph(): Promise<Result<GraphData>>` — renderer 가 Task 6 에서 부른다
 
-**예상 테스트 증가:** +0 (101 유지)
+**예상 테스트 증가:** +0 (102 유지)
 
 - [ ] **Step 1: `shared/ipc.ts` 에 채널과 계약을 더한다**
 
@@ -761,7 +775,7 @@ ipcMain.handle(CHANNEL.graphBuild, () =>
 npx prettier --write . && npm run lint && npm run typecheck && npm test
 ```
 
-Expected: 전부 통과. `Tests 101 passed (101)`
+Expected: 전부 통과. `Tests 102 passed (102)`
 
 - [ ] **Step 5: FROZEN 변경 범위를 눈으로 확인한다**
 
@@ -806,7 +820,7 @@ MSG
   - `Tab = NoteTab | GraphTab` — `NoteTab` 은 `{ kind: "note"; id: string; path: NotePath; title: string; body: string | null; error: string | null; seq: number }`, `GraphTab` 은 `{ kind: "graph"; id: "graph"; title: "그래프" }`
   - 스토어: `activeTab: string | null` · `openTab(path, title): Promise<void>` (**시그니처 유지**) · `openGraphTab(): void` · `focusTab(id: string): void` · `closeTab(id: string): void`
 
-**예상 테스트 증가:** +5 (101 → 106). 기존 탭 테스트는 `path` → `id` 로 **고쳐 쓴다**
+**예상 테스트 증가:** +5 (102 → 107). 기존 탭 테스트는 `path` → `id` 로 **고쳐 쓴다**
 
 - [ ] **Step 1: 실패하는 테스트를 먼저 쓴다**
 
@@ -1108,7 +1122,7 @@ Expected: PASS — 기존 탭 테스트 + 새 그래프 탭 5개
 npx prettier --write . && npm run lint && npm run typecheck && npm test
 ```
 
-Expected: `Tests 106 passed (106)`
+Expected: `Tests 107 passed (107)`
 
 - [ ] **Step 8: 커밋**
 
@@ -1150,7 +1164,7 @@ MSG
   - `hit.ts` — `View` · `toWorld(v, sx, sy)` · `hitNode(nodes, v, sx, sy)`
   - `draw.ts` — `Palette` · `Scene` · `LABEL_ZOOM` · `draw(ctx, w, h, s)`
 
-**예상 테스트 증가:** +15 (106 → 121)
+**예상 테스트 증가:** +15 (107 → 122)
 
 - [ ] **Step 1: 의존성을 설치한다**
 
@@ -1583,7 +1597,7 @@ Expected: PASS — 15 tests
 npx prettier --write . && npm run lint && npm run typecheck && npm test
 ```
 
-Expected: `Tests 121 passed (121)`
+Expected: `Tests 122 passed (122)`
 
 - [ ] **Step 12: 커밋**
 
@@ -1617,7 +1631,7 @@ MSG
 - Consumes: `bridge` (`src/renderer/bridge.ts`), `useWorkspace`·`GRAPH_TAB_ID`·`RIBBON_WIDTH` (`src/renderer/store/workspace.ts`), Task 5 의 세 모듈
 - Produces: `GraphView` — 인자 없는 컴포넌트
 
-**예상 테스트 증가:** +0 (121 유지). `.tsx` 는 테스트 대상이 아니다
+**예상 테스트 증가:** +0 (122 유지). `.tsx` 는 테스트 대상이 아니다
 
 - [ ] **Step 1: `GraphView.tsx` 를 만든다**
 
@@ -1988,7 +2002,7 @@ export function Ribbon() {
 npx prettier --write . && npm run lint && npm run typecheck && npm test
 ```
 
-Expected: `Tests 121 passed (121)`
+Expected: `Tests 122 passed (122)`
 
 - [ ] **Step 5: 앱을 띄워 눈으로 본다**
 
