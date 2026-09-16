@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { scanVault, titleOf, toGraph } from "./scan.ts";
+import { isUnreadable, scanVault, titleOf, toGraph } from "./scan.ts";
 import type { Vault } from "../../shared/types.ts";
 
 /** 픽스처 볼트. files 는 `상대경로 → 내용` 이다. */
@@ -53,6 +53,32 @@ describe("scanVault", () => {
     const ix = await scanVault(v);
     // readTree 는 폴더를 이름순으로 내므로 inbox/ 가 wiki/ 보다 먼저다.
     expect(ix.links[0].resolved).toBe("inbox/A.md");
+  });
+});
+
+describe("isUnreadable", () => {
+  it("ENOENT 는 못 읽는 것이다", () => {
+    expect(isUnreadable({ code: "ENOENT" })).toBe(true);
+  });
+
+  it("EACCES 는 못 읽는 것이다", () => {
+    expect(isUnreadable({ code: "EACCES" })).toBe(true);
+  });
+
+  it("code 가 없는 일반 Error 는 못 읽는 것이 아니다", () => {
+    expect(isUnreadable(new Error("boom"))).toBe(false);
+  });
+
+  it("모르는 code 는 못 읽는 것이 아니다", () => {
+    expect(isUnreadable({ code: "EUNEXPECTED" })).toBe(false);
+  });
+
+  it("null 은 못 읽는 것이 아니다", () => {
+    expect(isUnreadable(null)).toBe(false);
+  });
+
+  it("객체가 아닌 값은 못 읽는 것이 아니다", () => {
+    expect(isUnreadable("ENOENT")).toBe(false);
   });
 });
 

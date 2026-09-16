@@ -32,6 +32,26 @@ function flatten(nodes: TreeNode[]): NotePath[] {
 }
 
 /**
+ * 읽다가 사라졌거나 못 읽는 파일인가.
+ *
+ * 경로는 방금 readTree 가 나열한 것이다. 그 사이에 지워지거나(ENOENT)
+ * 권한이 막는(EACCES·EPERM) 일은 실제로 있고, 그 한 장 때문에 그래프 전체가
+ * 안 뜨는 쪽이 더 나쁘다. **그 밖의 예외는 우리 버그다** — 삼키면 노트가
+ * 아무 신호 없이 그래프에서 사라져 원인까지 거슬러 올라갈 단서가 남지 않는다.
+ */
+export function isUnreadable(e: unknown): boolean {
+  if (typeof e !== "object" || e === null || !("code" in e)) return false;
+  const code = (e as { code: unknown }).code;
+  return (
+    code === "ENOENT" ||
+    code === "EACCES" ||
+    code === "EPERM" ||
+    code === "EISDIR" ||
+    code === "ENOTDIR"
+  );
+}
+
+/**
  * 볼트를 훑어 링크 색인을 만든다.
  *
  * 순회는 readTree 를 그대로 쓴다 — .md 만·숨김 폴더 제외·심볼릭 링크 제외·POSIX 경로가
@@ -53,8 +73,9 @@ export async function scanVault(v: Vault): Promise<VaultIndex> {
     let body: string;
     try {
       body = await readRaw(v, p);
-    } catch {
-      // 한 장을 못 읽었다고 그래프 전체가 안 뜨는 쪽이 더 나쁘다.
+    } catch (e) {
+      // 못 읽는 한 장은 건너뛴다. 그 밖의 예외는 버그 신호라 그대로 올려보낸다.
+      if (!isUnreadable(e)) throw e;
       continue;
     }
     for (const ref of parseLinks(p, body)) {
