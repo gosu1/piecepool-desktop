@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { adjacency, buildLayout, degrees, radiusOf } from "./layout.ts";
+import type { SimNode } from "./layout.ts";
 import type { GraphData } from "../../../shared/types.ts";
 
 /** A—B, A—C. A 가 허브다. D 는 고아다. */
@@ -63,9 +64,14 @@ describe("buildLayout", () => {
     ]);
   });
 
-  it("엣지 수를 그대로 옮긴다", () => {
+  it("엣지의 source/target 을 노드 객체로 그대로 옮긴다", () => {
     const { sim, edges } = buildLayout(g, 800, 600);
     sim.stop();
-    expect(edges).toHaveLength(2);
+    // forceLink 가 문자열이던 source/target 을 노드 객체로 제자리에서 바꿔 넣는다 —
+    // 개수만 세면 하나를 빼고 다른 하나를 중복해도 통과한다.
+    expect(edges.map((e) => [(e.source as SimNode).id, (e.target as SimNode).id])).toEqual([
+      ["A.md", "B.md"],
+      ["A.md", "C.md"],
+    ]);
   });
 });

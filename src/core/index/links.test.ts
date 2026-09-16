@@ -129,4 +129,13 @@ describe("resolveLink", () => {
   it("없는 대상은 null 이다 — 깨진 링크다", () => {
     expect(resolveLink("a.md", "없는것", targets)).toBeNull();
   });
+
+  it("같은 문자열이 제목과(다른 노트의) 경로 둘 다에 걸리면 제목이 이긴다", () => {
+    const collide: LinkTargets = {
+      titles: new Map([[normalizeTitle("CNN"), "wiki/CNN.md"]]),
+      // "CNN" 이 wiki/CNN.md 와 무관한 다른 파일의 리터럴 경로이기도 하다.
+      files: new Set(["wiki/CNN.md", "CNN"]),
+    };
+    expect(resolveLink("a.md", "CNN", collide)).toBe("wiki/CNN.md");
+  });
 });
