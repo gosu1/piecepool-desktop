@@ -9,6 +9,7 @@ import { PiecePoolError } from "../core/errors.ts";
 import { openVault } from "../core/vault/open.ts";
 import { readTree } from "../core/vault/tree.ts";
 import { readRaw } from "../core/vault/notes.ts";
+import { scanVault, toGraph } from "../core/index/scan.ts";
 import { readLastVault, writeLastVault } from "./recent.ts";
 
 /**
@@ -62,7 +63,7 @@ function senderWindow(e: IpcMainEvent): BrowserWindow | null {
   return BrowserWindow.fromWebContents(e.sender);
 }
 
-/** vault 둘과 창 조작 셋을 등록한다. 창 조작은 돌려줄 값이 없어 단방향이다. */
+/** vault 둘, 그래프 하나, 창 조작 셋을 등록한다. 창 조작은 돌려줄 값이 없어 단방향이다. */
 export function registerHandlers(): void {
   ipcMain.handle(CHANNEL.vaultPick, () =>
     wrap(async () => {
@@ -96,6 +97,16 @@ export function registerHandlers(): void {
         throw new PiecePoolError("vault_not_found", "볼트가 열려 있지 않다");
       }
       return await readRaw(opened, path);
+    }),
+  );
+
+  ipcMain.handle(CHANNEL.graphBuild, () =>
+    wrap(async () => {
+      // 인자가 없다 — 검증할 경로가 없고, 대상은 지금 열린 볼트 전체다.
+      if (opened === null) {
+        throw new PiecePoolError("vault_not_found", "볼트가 열려 있지 않다");
+      }
+      return toGraph(await scanVault(opened));
     }),
   );
 

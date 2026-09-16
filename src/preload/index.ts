@@ -11,9 +11,9 @@ import type { PiecePoolApi } from "../shared/ipc.ts";
  * fs 를 통째로 노출하면 격리가 무의미해진다 —
  * 경로 검증은 반드시 core/vault/paths.ts 에 둔다.
  *
- * 지금 열어 주는 것은 일곱이다.
+ * 지금 열어 주는 것은 여덟이다.
  *
- * `readRaw` 만 renderer 에서 경로를 받는다 — 나머지 여섯은 인자가 없다.
+ * `readRaw` 만 renderer 에서 경로를 받는다 — 나머지 일곱은 인자가 없다.
  * 그 하나 때문에 main 이 resolveInVault 로 검증한다(core/vault/paths.ts).
  * 여기에 경로를 받는 함수를 더할 때마다 그 검증을 통과하는지 확인해야 한다.
  *
@@ -24,6 +24,7 @@ export function exposeApi(): void {
     pickVault: () => ipcRenderer.invoke(CHANNEL.vaultPick),
     lastVault: () => ipcRenderer.invoke(CHANNEL.vaultLast),
     readRaw: (path) => ipcRenderer.invoke(CHANNEL.noteRead, path),
+    buildGraph: () => ipcRenderer.invoke(CHANNEL.graphBuild),
     minimizeWindow: () => ipcRenderer.send(CHANNEL.windowMinimize),
     toggleMaximizeWindow: () => ipcRenderer.send(CHANNEL.windowToggleMaximize),
     closeWindow: () => ipcRenderer.send(CHANNEL.windowClose),
