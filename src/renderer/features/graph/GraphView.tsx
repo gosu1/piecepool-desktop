@@ -48,6 +48,8 @@ export function GraphView() {
   const dragRef = useRef<{ node: SimNode | null; x: number; y: number; moved: boolean } | null>(
     null,
   );
+  /** load() 호출 세대. openTab 의 seq 와 같은 역할 — 낡은 응답이 새 레이아웃을 못 짓게 막는다. */
+  const genRef = useRef(0);
 
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [message, setMessage] = useState("");
@@ -57,9 +59,14 @@ export function GraphView() {
     layoutRef.current?.sim.stop();
     layoutRef.current = null;
 
+    // 이 호출의 세대를 찜해 둔다. await 도중 언마운트되거나 StrictMode 가 다시 돌면
+    // genRef 가 앞서 나가고, 그러면 이 호출은 아래에서 자신이 낡았음을 안다.
+    const gen = ++genRef.current;
+
     let g: GraphData;
     try {
       const r = await bridge?.buildGraph();
+      if (gen !== genRef.current) return;
       if (r === undefined) {
         setStatus("error");
         setMessage("앱 내부 연결이 끊겼다");
@@ -72,6 +79,7 @@ export function GraphView() {
       }
       g = r.value;
     } catch (e) {
+      if (gen !== genRef.current) return;
       setStatus("error");
       setMessage(`앱 내부 연결이 끊겼다: ${String(e)}`);
       return;
@@ -92,6 +100,9 @@ export function GraphView() {
     // 탭을 떠나면 시뮬을 세운다. 안 세우면 안 보이는 캔버스에 계속 힘을 푼다.
     // sim.stop() 은 this 를 돌려주므로 () => sim.stop() 은 Destructor 타입(void 만 허용)에 안 맞는다 — 블록으로 버린다.
     return () => {
+      // 세대를 먼저 올려 진행 중인 load() 를 무효화한다 — 그래야 언마운트 후
+      // 늦게 도착한 응답이 아무도 세우지 않을 시뮬레이션을 새로 짓지 않는다.
+      genRef.current++;
       layoutRef.current?.sim.stop();
     };
   }, [load]);
@@ -195,6 +206,11 @@ export function GraphView() {
     }
   };
 
+  /** 포인터가 캔버스를 벗어나면 pointermove 가 더 안 온다 — 안 지우면 마지막 hover 가 영영 남는다. */
+  const onLeave = () => {
+    hoverRef.current = null;
+  };
+
   const onUp = (e: ReactPointerEvent<HTMLCanvasElement>) => {
     const lay = layoutRef.current;
     const d = dragRef.current;
@@ -224,6 +240,7 @@ export function GraphView() {
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerCancel={onUp}
+        onPointerLeave={onLeave}
         className="block h-full w-full"
       />
 
