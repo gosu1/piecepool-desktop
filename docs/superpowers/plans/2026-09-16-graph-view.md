@@ -1431,7 +1431,13 @@ import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } 
 import type { Simulation, SimulationLinkDatum, SimulationNodeDatum } from "d3-force";
 import type { GraphData, NotePath } from "../../../shared/types.ts";
 
-/** 시뮬이 좌표를 실어 주는 노드. x·y 는 첫 tick 전에는 없다. */
+/**
+ * 시뮬이 좌표를 실어 주는 노드.
+ *
+ * x·y 가 optional 인 것은 tick 을 기다려야 해서가 아니다 — forceSimulation 이
+ * 팩토리 안에서 동기적으로 초기 좌표를 넣으므로 buildLayout 이 반환하는 순간 이미 있다.
+ * buildLayout 을 거치지 않고 손으로 만든 노드 때문에 열어 둔다.
+ */
 export interface SimNode extends SimulationNodeDatum {
   id: NotePath;
   title: string;
@@ -1540,9 +1546,10 @@ export function hitNode(nodes: SimNode[], v: View, sx: number, sy: number): SimN
   const { x, y } = toWorld(v, sx, sy);
   for (let i = nodes.length - 1; i >= 0; i--) {
     const n = nodes[i];
-    // 첫 tick 전에는 좌표가 없다.
+    // buildLayout 이 낸 노드는 항상 좌표가 있다. 손으로 만든 노드만 여기 걸린다.
     if (n.x === undefined || n.y === undefined) continue;
-    // 작은 노드를 누르기 쉽도록 2px 여유를 준다.
+    // 작은 노드를 누르기 쉽도록 여유를 준다. 월드 단위라 화면에서는 2*zoom px 다 —
+    // 반지름도 같이 확대되므로 손끝 감각은 줌과 무관하게 일정하다.
     const r = radiusOf(n.degree) + 2;
     if ((n.x - x) ** 2 + (n.y - y) ** 2 <= r * r) return n;
   }
