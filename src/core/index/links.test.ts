@@ -85,6 +85,13 @@ describe("parseLinks", () => {
     expect(parseLinks("a.md", body).map((r) => r.to)).toEqual(["진짜"]);
   });
 
+  it("긴 펜스 안의 짧은 펜스는 블록을 닫지 못한다", () => {
+    // 백틱 넷으로 연 블록 안의 백틱 셋은 예제일 뿐이다.
+    // CommonMark 는 닫는 런이 여는 런 이상이기를 요구한다.
+    const body = ["````", "```", "[[예시]]", "```", "````", "[[진짜]]"].join("\n");
+    expect(parseLinks("a.md", body).map((r) => r.to)).toEqual(["진짜"]);
+  });
+
   it("인라인 코드 안의 [[예시]] 는 링크가 아니다", () => {
     expect(
       parseLinks("a.md", "`[[예시]]` 는 문법이고 [[진짜]] 는 링크다").map((r) => r.to),

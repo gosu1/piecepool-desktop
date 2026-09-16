@@ -29,6 +29,43 @@ export function normalizeTitle(t: string): string {
 }
 
 /**
+ * 코드 펜스와 인라인 코드를 **같은 길이의 공백**으로 지운다.
+ * 길이를 유지하는 이유: 나중에 링크 위치(offset)가 필요해질 때 통째로 밀리지 않는다.
+ */
+function blankCode(body: string): string {
+  const lines = body.split("\n");
+  let fenceChar: string | null = null;
+  let fenceLen = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const m = /^\s*(`{3,}|~{3,})/.exec(line);
+
+    if (fenceChar === null) {
+      if (m !== null) {
+        fenceChar = m[1][0];
+        fenceLen = m[1].length;
+        lines[i] = " ".repeat(line.length);
+        continue;
+      }
+      // 백틱 런의 길이가 같은 쌍만 인라인 코드다.
+      lines[i] = line.replace(/(`+)[^\n]*?\1/g, (s) => " ".repeat(s.length));
+      continue;
+    }
+
+    // 펜스 안이다. 닫으려면 같은 문자에 길이가 여는 쪽 이상이어야 한다 —
+    // 백틱 넷으로 연 블록 안의 백틱 셋짜리 예제는 그 블록을 닫지 못한다(CommonMark).
+    if (m !== null && m[1][0] === fenceChar && m[1].length >= fenceLen) fenceChar = null;
+    lines[i] = " ".repeat(line.length);
+  }
+
+  return lines.join("\n");
+}
+
+/** `!` 여부 + `[[…]]` 안쪽. 대괄호와 줄바꿈은 안쪽에 들어올 수 없다. */
+const LINK = /(!?)\[\[([^\]\n]+)\]\]/g;
+
+/**
  * 옵시디언 규칙 그대로다.
  *   [[제목]] · [[제목|표시]] · ![[sources/files/x.pdf]] · ![[...#page=N]]
  * N 은 1-indexed 정수다. 타입은 없다 — 관계의 의미론은 링크 주변 산문이 담는다.
@@ -41,40 +78,6 @@ export function normalizeTitle(t: string): string {
  * 여기는 raw 문자열을 받으므로 직접 걸러야 한다. 놓치면 마크다운 문법을
  * 설명하는 위키 페이지마다 유령 깨진 링크가 lint 에 영구히 남는다.
  */
-/**
- * 코드 펜스와 인라인 코드를 **같은 길이의 공백**으로 지운다.
- * 길이를 유지하는 이유: 나중에 링크 위치(offset)가 필요해질 때 통째로 밀리지 않는다.
- */
-function blankCode(body: string): string {
-  const lines = body.split("\n");
-  let fence: string | null = null;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const m = /^\s*(`{3,}|~{3,})/.exec(line);
-
-    if (fence === null) {
-      if (m !== null) {
-        fence = m[1][0];
-        lines[i] = " ".repeat(line.length);
-        continue;
-      }
-      // 백틱 런의 길이가 같은 쌍만 인라인 코드다.
-      lines[i] = line.replace(/(`+)[^\n]*?\1/g, (s) => " ".repeat(s.length));
-      continue;
-    }
-
-    // 펜스 안이다. 같은 문자로 시작하는 줄이 닫는다. 닫는 줄도 함께 지운다.
-    if (m !== null && m[1][0] === fence) fence = null;
-    lines[i] = " ".repeat(line.length);
-  }
-
-  return lines.join("\n");
-}
-
-/** `!` 여부 + `[[…]]` 안쪽. 대괄호와 줄바꿈은 안쪽에 들어올 수 없다. */
-const LINK = /(!?)\[\[([^\]\n]+)\]\]/g;
-
 export function parseLinks(from: NotePath, body: string): LinkRef[] {
   const refs: LinkRef[] = [];
 
