@@ -15,6 +15,60 @@ const ENDPOINT =
 const CHAT_MODEL = process.env.PIECEPOOL_LLM_MODEL ?? "gemini-3.1-flash-lite";
 const EMBED_MODEL = process.env.PIECEPOOL_EMBED_MODEL ?? "gemini-embedding-001";
 
+// Kimi 는 temperature 등을 고정값으로 요구한다("omit them from requests"). 추론 깊이만 고른다 —
+// 기본 max 는 출력($15/1M)이 가장 많이 나온다. 실비이므로 낮은 것부터 잰다.
+const IS_KIMI = CHAT_MODEL.startsWith("kimi");
+const SAMPLING = IS_KIMI
+  ? { reasoning_effort: process.env.PIECEPOOL_REASONING_EFFORT ?? "low" }
+  : { temperature: 0.2 };
+
+/** 1M 토큰당 달러 — 입력(캐시 안 됨) · 입력(캐시 됨) · 출력. 없는 모델은 토큰만 센다. */
+const PRICES: Record<string, { in: number; hit: number; out: number }> = {
+  "kimi-k3": { in: 3, hit: 0.3, out: 15 },
+};
+
+/** 이번 실행의 토큰과 비용. 실비가 나가는 모델은 호출마다 로그에 찍는다. */
+export const usage = {
+  calls: 0,
+  prompt: 0,
+  cached: 0,
+  completion: 0,
+  reasoning: 0,
+  usd: 0,
+  last: "",
+};
+
+type Usage = {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  cached_tokens?: number;
+  prompt_tokens_details?: { cached_tokens?: number };
+  completion_tokens_details?: { reasoning_tokens?: number };
+};
+
+function recordUsage(raw: { usage?: Usage }): void {
+  const u = raw.usage;
+  if (!u) return;
+  const prompt = u.prompt_tokens ?? 0;
+  const completion = u.completion_tokens ?? 0;
+  const cached = u.prompt_tokens_details?.cached_tokens ?? u.cached_tokens ?? 0;
+  const reasoning = u.completion_tokens_details?.reasoning_tokens ?? 0;
+  const p = PRICES[CHAT_MODEL];
+  const usd = p ? ((prompt - cached) * p.in + cached * p.hit + completion * p.out) / 1e6 : 0;
+  usage.calls++;
+  usage.prompt += prompt;
+  usage.cached += cached;
+  usage.completion += completion;
+  usage.reasoning += reasoning;
+  usage.usd += usd;
+  usage.last = `토큰 입력 ${prompt} (캐시 ${cached}) · 출력 ${completion} (추론 ${reasoning})${p ? ` · $${usd.toFixed(4)}` : ""}`;
+}
+
+export function usageSummary(): string {
+  const p = PRICES[CHAT_MODEL];
+  return `토큰 입력 ${usage.prompt} (캐시 ${usage.cached}) · 출력 ${usage.completion} (추론 ${usage.reasoning}) · ${p ? `$${usage.usd.toFixed(2)}` : "요금표 없음"}`;
+}
+
 function apiKey(): string {
   const k = process.env.PIECEPOOL_LLM_API_KEY ?? process.env.GEMINI_API_KEY;
   if (!k) {
@@ -174,8 +228,9 @@ export async function writeWiki(
       type: "json_schema",
       json_schema: { name: "wiki_pages", strict: true, schema: PAGES_SCHEMA },
     },
-    temperature: 0.2,
-  })) as { choices?: { message?: { content?: string } }[] };
+    ...SAMPLING,
+  })) as { choices?: { message?: { content?: string } }[]; usage?: Usage };
+  recordUsage(raw);
 
   const content = raw.choices?.[0]?.message?.content;
   if (!content) throw new Error(`빈 응답: ${JSON.stringify(raw).slice(0, 300)}`);
@@ -236,8 +291,9 @@ export async function askJson<T>(
       { role: "user", content: userMessage },
     ],
     response_format: { type: "json_schema", json_schema: { name, strict: true, schema } },
-    temperature: 0.2,
-  })) as { choices?: { message?: { content?: string } }[] };
+    ...SAMPLING,
+  })) as { choices?: { message?: { content?: string } }[]; usage?: Usage };
+  recordUsage(raw);
   const content = raw.choices?.[0]?.message?.content;
   if (!content) throw new Error(`빈 응답: ${JSON.stringify(raw).slice(0, 300)}`);
   const value = JSON.parse(content) as T;

@@ -20,7 +20,7 @@ import {
   type WikiPage,
 } from "./vault.ts";
 import { buildUserMessage, pageEmbedText, pickCandidates } from "./prompt.ts";
-import { MODELS, askJson, embed, embedStats, writeWiki } from "./llm.ts";
+import { MODELS, askJson, embed, embedStats, usage, usageSummary, writeWiki } from "./llm.ts";
 import { buildMarkdown, hasChanges, nameIndex, retroLink, safeFileName, verify } from "./build.ts";
 import {
   buildSourcePage,
@@ -607,6 +607,7 @@ async function main(): Promise<void> {
           console.log(
             `   AI ${res.cached ? "(캐시)" : "호출"} (입력 ${userMessage.length}자) → 페이지 ${res.pages.length}장`,
           );
+          if (!res.cached && usage.last) console.log(`   ${usage.last}`);
         }
 
         const verified = verify({
@@ -730,6 +731,7 @@ async function main(): Promise<void> {
           const fresh = (await loadWiki(args.vault)).get("나");
           state.me = { summaryHash: fresh ? hash8(fresh.summary) : "", age: 0 };
           console.log(`   나 요약 갱신: ${fresh?.summary.slice(0, 80)}`);
+          if (usage.last) console.log(`   ${usage.last}`);
         } else {
           state.me = { summaryHash: h, age: 0 };
         }
@@ -752,7 +754,7 @@ async function main(): Promise<void> {
   console.log("═".repeat(70));
   console.log(`위키 ${finalWiki.size}장 · 링크 ${links}개 · 문서당 ${density} (기준선 1.5)`);
   console.log(
-    `AI 호출 ${calls}회 · 캐시 ${cached}회 · 임베딩 ${embedStats.sent}항목 · 지적 ${allIssues.length}건`,
+    `AI 호출 ${calls}회 · 캐시 ${cached}회 · 임베딩 ${embedStats.sent}항목 · 지적 ${allIssues.length}건 · ${usageSummary()}`,
   );
   if (finalWiki.size) {
     console.log(`\n만들어진 페이지: ${[...finalWiki.values()].map((p) => p.name).join(", ")}`);
