@@ -2,7 +2,7 @@ import { useWorkspace } from "../store/workspace.ts";
 import type { Tab } from "../store/workspace.ts";
 import { GraphView } from "../features/graph/GraphView.tsx";
 
-/** graphOpen 이 아닌 동안엔 호출되지 않으므로 tab.kind 는 여기서 "graph" 가 아니다. */
+/** 그래프 탭이 활성일 땐 GraphView 가 그리므로 이 함수는 null 을 반환해 자리를 비켜 준다. */
 function noteBody(tab: Tab | null) {
   if (tab === null) {
     return (

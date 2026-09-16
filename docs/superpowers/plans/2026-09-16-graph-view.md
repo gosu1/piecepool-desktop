@@ -1690,7 +1690,7 @@ MSG
 **Interfaces:**
 
 - Consumes: `bridge` (`src/renderer/bridge.ts`), `useWorkspace`·`GRAPH_TAB_ID`·`RIBBON_WIDTH` (`src/renderer/store/workspace.ts`), Task 5 의 세 모듈
-- Produces: `GraphView` — 인자 없는 컴포넌트
+- Produces: `GraphView` — `{ hidden: boolean }` 하나를 받는 컴포넌트
 
 **예상 테스트 증가:** +0 (128 유지). `.tsx` 는 테스트 대상이 아니다
 
@@ -1701,7 +1701,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from "react";
 import { bridge } from "../../bridge.ts";
 import { useWorkspace } from "../../store/workspace.ts";
-import { adjacency, buildLayout } from "./layout.ts";
+import { buildLayout } from "./layout.ts";
 import type { Layout, SimNode } from "./layout.ts";
 import { draw } from "./draw.ts";
 import type { Palette } from "./draw.ts";
@@ -1733,15 +1733,17 @@ function readPalette(el: HTMLElement): Palette {
  *
  * 좌표·변환·hover 는 전부 ref 에 둔다 — 상태로 두면 프레임마다 리렌더가 돈다.
  * 화면에 글자로 나가는 것(상태 문구)만 useState 다.
+ *
+ * hidden 인 동안에도 마운트는 유지된다(NoteView.tsx) — 탭을 오가도 배치와 pan/zoom 을
+ * 잃지 않기 위해서다. 실제로 안 그리는 것은 rAF 루프 안의 가드 하나로 충분하다.
  */
-export function GraphView() {
+export function GraphView({ hidden }: { hidden: boolean }) {
   const openTab = useWorkspace((s) => s.openTab);
 
   const hostRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const layoutRef = useRef<Layout | null>(null);
   const paletteRef = useRef<Palette | null>(null);
-  const adjRef = useRef(new Map<NotePath, Set<NotePath>>());
   const viewRef = useRef<View>({ zoom: 1, panX: 0, panY: 0 });
   const hoverRef = useRef<NotePath | null>(null);
   const dragRef = useRef<{ node: SimNode | null; x: number; y: number; moved: boolean } | null>(
@@ -1749,6 +1751,8 @@ export function GraphView() {
   );
   /** load() 호출 세대. openTab 의 seq 와 같은 역할 — 낡은 응답이 새 레이아웃을 못 짓게 막는다. */
   const genRef = useRef(0);
+  /** rAF 루프가 매 프레임 읽는 최신 hidden 값. prop 을 직접 읽으면 루프를 다시 걸어야 한다. */
+  const hiddenRef = useRef(hidden);
 
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [message, setMessage] = useState("");
@@ -1786,7 +1790,6 @@ export function GraphView() {
 
     const host = hostRef.current;
     layoutRef.current = buildLayout(g, host?.clientWidth ?? 800, host?.clientHeight ?? 600);
-    adjRef.current = adjacency(g);
     if (host !== null) paletteRef.current = readPalette(host);
     viewRef.current = { zoom: 1, panX: 0, panY: 0 };
     hoverRef.current = null;
@@ -1796,7 +1799,9 @@ export function GraphView() {
 
   useEffect(() => {
     void load();
-    // 탭을 떠나면 시뮬을 세운다. 안 세우면 안 보이는 캔버스에 계속 힘을 푼다.
+    // 이 컴포넌트는 그래프 탭이 있는 한 hidden 으로만 바뀌고 마운트는 유지된다
+    // (NoteView.tsx) — 여기서 세우는 것은 탭을 "닫아" 진짜 언마운트될 때뿐이다.
+    // 탭을 잠깐 떠나는 동안에도 시뮬은 계속 돌아 배치를 지킨다(hidden 이면 rAF 가 안 그릴 뿐이다).
     // sim.stop() 은 this 를 돌려주므로 () => sim.stop() 은 Destructor 타입(void 만 허용)에 안 맞는다 — 블록으로 버린다.
     return () => {
       // 세대를 먼저 올려 진행 중인 load() 를 무효화한다 — 그래야 언마운트 후
@@ -1806,10 +1811,18 @@ export function GraphView() {
     };
   }, [load]);
 
+  // 매 프레임 읽는 hiddenRef 를 최신 prop 값으로 맞춘다 — 루프 자체는 다시 걸지 않는다.
+  useEffect(() => {
+    hiddenRef.current = hidden;
+  }, [hidden]);
+
   useEffect(() => {
     let raf = 0;
     const tick = () => {
       raf = requestAnimationFrame(tick);
+      // display:none 인 host 는 clientWidth/Height 가 0 이다 — 그 값으로 백버퍼를 키우면
+      // 캔버스가 0×0 이 되어 다음에 보일 때 그림이 사라진다. 읽기 전에 막는다.
+      if (hiddenRef.current) return;
       const cv = canvasRef.current;
       const host = hostRef.current;
       const lay = layoutRef.current;
@@ -1841,9 +1854,7 @@ export function GraphView() {
         // 리렌더가 도는데, 그릴 사람은 이 루프라 얻는 것이 없다.
         active: useWorkspace.getState().selected,
         lit:
-          hover === null
-            ? NOTHING_LIT
-            : new Set<NotePath>([hover, ...(adjRef.current.get(hover) ?? [])]),
+          hover === null ? NOTHING_LIT : new Set<NotePath>([hover, ...(lay.adj.get(hover) ?? [])]),
       });
     };
     raf = requestAnimationFrame(tick);
@@ -1931,7 +1942,11 @@ export function GraphView() {
   };
 
   return (
-    <div ref={hostRef} className="relative min-h-0 flex-1 overflow-hidden">
+    <div
+      ref={hostRef}
+      // hidden 이면 display:none — rAF 가드(위)와 짝을 이뤄 안 보이는 캔버스를 0×0 으로 만들지 않는다.
+      className={`relative min-h-0 flex-1 overflow-hidden ${hidden ? "hidden" : ""}`}
+    >
       <canvas
         ref={canvasRef}
         onWheel={onWheel}
@@ -1966,7 +1981,7 @@ export function GraphView() {
 }
 ```
 
-- [ ] **Step 2: `NoteView.tsx` 의 자리표시를 바꾼다**
+- [ ] **Step 2: `NoteView.tsx` 를 고친다**
 
 import 를 더하고:
 
@@ -1974,10 +1989,17 @@ import 를 더하고:
 import { GraphView } from "../features/graph/GraphView.tsx";
 ```
 
-Task 4 에서 넣은 두 줄을 바꾼다:
+그래프 탭이 있는 한 `<GraphView/>` 를 계속 마운트해 두고, 활성 탭이 아닐 때만 `hidden` 으로
+숨긴다 — 언마운트하면 재스캔·재배치로 pan/zoom 과 노드 위치를 잃는다(§8). `noteBody(tab)` 은
+`tab.kind === "graph"` 일 때 `null` 을 반환해 그 자리를 비워 준다.
 
 ```tsx
-if (tab.kind === "graph") return <GraphView />;
+{
+  graphOpen && <GraphView hidden={tab === null || tab.kind !== "graph"} />;
+}
+{
+  noteBody(tab);
+}
 ```
 
 - [ ] **Step 3: `Ribbon.tsx` 에 버튼을 단다**
@@ -2115,7 +2137,8 @@ git commit -F - <<'MSG'
 feat: 리본을 누르면 볼트 전체의 링크 그래프가 뜬다
 
 좌표·변환·hover 는 ref 에 둔다 — 상태로 두면 프레임마다 리렌더가 돈다.
-탭을 떠나면 시뮬을 세운다. 안 세우면 안 보이는 캔버스에 계속 힘을 푼다.
+탭을 떠나도 시뮬은 세우지 않는다. 컴포넌트를 그래프 탭이 있는 한 계속 마운트해 두고
+hidden 으로만 숨기므로, 세울 곳은 진짜 언마운트뿐이다 — alpha 가 스스로 식어 CPU 를 지킨다.
 점을 끌었다 놓으면 fx/fy 를 풀어 다시 물리에 맡긴다 — 못 박으면 그래프가 굳는다.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
