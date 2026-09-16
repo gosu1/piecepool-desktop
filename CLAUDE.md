@@ -216,7 +216,7 @@ docs: 설계문서에 파서 타입 반영
 | 스타일          | Tailwind v4 + 구 레포 `--ds-*` 토큰                                    | 2026-09-14 크롬 설계 §3.2                                |
 | 빌드 배선       | 패키징 전까지 vite 수동 설정. electron-vite 는 유예                    | [ADR-0003](docs/adr/0003-manual-vite-until-packaging.md) |
 | 마크다운 에디터 | CodeMirror 6                                                           | legacy ADR-0004                                          |
-| 그래프 렌더링   | Cytoscape.js                                                           | legacy ADR-0006                                          |
+| 그래프 렌더링   | Canvas 2D + d3-force. Cytoscape 는 안 쓴다                             | [ADR-0004](docs/adr/0004-graph-canvas-d3force.md)        |
 | LLM 공급자      | **Kimi K3** (OpenAI 호환 엔드포인트). 실험은 Gemini flash-lite 로 했다 | 2026-09-15 합의 · ADR-0002 미결                          |
 | 임베딩          | Upstage solar-embedding 과 BGE-M3 중 **우리 볼트로 재서** 고른다       | 2026-09-15 합의                                          |
 | OCR             | **v1 범위 밖.** 텍스트 0자면 `parse_failed`                            | legacy ADR-0003                                          |
