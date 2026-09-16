@@ -21,9 +21,9 @@ export function hitNode(nodes: SimNode[], v: View, sx: number, sy: number): SimN
   const { x, y } = toWorld(v, sx, sy);
   for (let i = nodes.length - 1; i >= 0; i--) {
     const n = nodes[i];
-    // 첫 tick 전에는 좌표가 없다.
+    // 손으로 만든 SimNode 를 막는 가드다 (buildLayout 산출물엔 항상 있다).
     if (n.x === undefined || n.y === undefined) continue;
-    // 작은 노드를 누르기 쉽도록 2px 여유를 준다.
+    // 작은 노드를 누르기 쉽도록 여유를 준다 — 월드 단위라 화면에서는 2 * zoom px 다.
     const r = radiusOf(n.degree) + 2;
     if ((n.x - x) ** 2 + (n.y - y) ** 2 <= r * r) return n;
   }

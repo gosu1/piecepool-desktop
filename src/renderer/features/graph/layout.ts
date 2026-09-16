@@ -2,7 +2,12 @@ import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } 
 import type { Simulation, SimulationLinkDatum, SimulationNodeDatum } from "d3-force";
 import type { GraphData, NotePath } from "../../../shared/types.ts";
 
-/** 시뮬이 좌표를 실어 주는 노드. x·y 는 첫 tick 전에는 없다. */
+/**
+ * 시뮬이 좌표를 실어 주는 노드. x·y 는 forceSimulation() 호출 시점에
+ * 동기로 채워지므로 buildLayout 이 반환한 노드엔 이미 있다.
+ * optional 인 이유는 buildLayout 을 거치지 않고 손으로 만든 SimNode 도
+ * 이 타입을 쓰기 때문이다.
+ */
 export interface SimNode extends SimulationNodeDatum {
   id: NotePath;
   title: string;

@@ -44,6 +44,7 @@ export function draw(ctx: CanvasRenderingContext2D, w: number, h: number, s: Sce
   for (const e of s.edges) {
     const a = e.source as SimNode;
     const b = e.target as SimNode;
+    // 손으로 만든 SimNode 방어용 가드.
     if (a.x === undefined || a.y === undefined || b.x === undefined || b.y === undefined) continue;
     ctx.globalAlpha = !dim || (s.lit.has(a.id) && s.lit.has(b.id)) ? 1 : DIM_EDGE;
     ctx.beginPath();
@@ -58,6 +59,7 @@ export function draw(ctx: CanvasRenderingContext2D, w: number, h: number, s: Sce
   ctx.textBaseline = "top";
 
   for (const n of s.nodes) {
+    // 노드도 마찬가지.
     if (n.x === undefined || n.y === undefined) continue;
     const on = !dim || s.lit.has(n.id);
     ctx.globalAlpha = on ? 1 : DIM_NODE;
