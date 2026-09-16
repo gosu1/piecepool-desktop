@@ -33,8 +33,21 @@ export function stripFrontmatter(raw: string): string {
   return lines.slice(i).join("\n");
 }
 
-/** 열린 탭 하나. 읽는 중에는 body·error 가 둘 다 null 이다. */
-export interface Tab {
+/** 그래프 탭은 하나뿐이라 id 가 곧 상수다. */
+export const GRAPH_TAB_ID = "graph";
+
+/**
+ * 탭 신원. NotePath 와 키 공간을 물리적으로 가른다 —
+ * NotePath 는 string 별칭이라 `path | "graph"` 로는 타입이 충돌을 못 잡는다.
+ */
+export function noteTabId(p: NotePath): string {
+  return `note:${p}`;
+}
+
+/** 열린 노트 탭 하나. 읽는 중에는 body·error 가 둘 다 null 이다. */
+export interface NoteTab {
+  kind: "note";
+  id: string;
   path: NotePath;
   title: string;
   body: string | null;
@@ -42,6 +55,15 @@ export interface Tab {
   /** 이 탭을 연 요청의 세대. 응답이 자기 세대의 탭에만 담기게 한다. */
   seq: number;
 }
+
+/** 그래프 탭. 파일이 아니라 경로가 없다. */
+export interface GraphTab {
+  kind: "graph";
+  id: "graph";
+  title: "그래프";
+}
+
+export type Tab = NoteTab | GraphTab;
 
 /** 탭 요청 세대. 닫았다가 곧바로 다시 연 탭에 옛 응답이 덮어쓰는 것을 막는다. */
 let tabSeq = 0;
@@ -64,9 +86,12 @@ interface WorkspaceState {
   pickVault: () => Promise<void>;
   loadLastVault: () => Promise<void>;
   tabs: Tab[];
-  activeTab: NotePath | null;
+  /** 활성 탭의 id. NotePath 가 아니다 — 파일이 아닌 탭이 있다. */
+  activeTab: string | null;
   openTab: (path: NotePath, title: string) => Promise<void>;
-  closeTab: (path: NotePath) => void;
+  openGraphTab: () => void;
+  focusTab: (id: string) => void;
+  closeTab: (id: string) => void;
 }
 
 /** 두 액션이 같은 응답 모양을 받는다. 해석을 한 곳에 둔다. */
@@ -134,17 +159,19 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
 
   openTab: async (path, title) => {
+    const id = noteTabId(path);
+
     // 이미 열려 있으면 다시 읽지 않는다. 파일 감시가 없어 다시 읽어도
     // 최신이라는 보장이 없고, 보던 글이 갑자기 바뀌는 쪽이 더 나쁘다.
-    if (get().tabs.some((t) => t.path === path)) {
-      set({ activeTab: path, selected: path });
+    if (get().tabs.some((t) => t.id === id)) {
+      set({ activeTab: id, selected: path });
       return;
     }
 
     const seq = ++tabSeq;
     set((s) => ({
-      tabs: [...s.tabs, { path, title, body: null, error: null, seq }],
-      activeTab: path,
+      tabs: [...s.tabs, { kind: "note", id, path, title, body: null, error: null, seq }],
+      activeTab: id,
       selected: path,
     }));
 
@@ -161,18 +188,36 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
     // 세대까지 같아야 담는다. 그 사이에 닫혔거나 다시 열렸으면 이 응답은 낡은 것이다.
     set((s) => ({
-      tabs: s.tabs.map((t) => (t.path === path && t.seq === seq ? { ...t, body, error } : t)),
+      tabs: s.tabs.map((t) =>
+        t.kind === "note" && t.id === id && t.seq === seq ? { ...t, body, error } : t,
+      ),
     }));
   },
 
-  closeTab: (path) =>
+  openGraphTab: () =>
+    set((s) => ({
+      tabs: s.tabs.some((t) => t.id === GRAPH_TAB_ID)
+        ? s.tabs
+        : [...s.tabs, { kind: "graph", id: GRAPH_TAB_ID, title: "그래프" }],
+      activeTab: GRAPH_TAB_ID,
+    })),
+
+  focusTab: (id) =>
     set((s) => {
-      const idx = s.tabs.findIndex((t) => t.path === path);
+      const t = s.tabs.find((x) => x.id === id);
+      if (t === undefined) return {};
+      // 그래프 탭에는 경로가 없다 — 트리 선택을 건드리지 않는다.
+      return t.kind === "note" ? { activeTab: id, selected: t.path } : { activeTab: id };
+    }),
+
+  closeTab: (id) =>
+    set((s) => {
+      const idx = s.tabs.findIndex((t) => t.id === id);
       if (idx === -1) return {};
-      const tabs = s.tabs.filter((t) => t.path !== path);
+      const tabs = s.tabs.filter((t) => t.id !== id);
       // 닫은 탭이 활성이었을 때만 옮긴다. 오른쪽 이웃, 없으면 왼쪽.
       const activeTab =
-        s.activeTab === path ? (tabs[idx]?.path ?? tabs[idx - 1]?.path ?? null) : s.activeTab;
+        s.activeTab === id ? (tabs[idx]?.id ?? tabs[idx - 1]?.id ?? null) : s.activeTab;
       return { tabs, activeTab };
     }),
 }));

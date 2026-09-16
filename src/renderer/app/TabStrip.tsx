@@ -9,7 +9,7 @@ import { useWorkspace } from "../store/workspace.ts";
 export function TabStrip() {
   const tabs = useWorkspace((s) => s.tabs);
   const activeTab = useWorkspace((s) => s.activeTab);
-  const openTab = useWorkspace((s) => s.openTab);
+  const focusTab = useWorkspace((s) => s.focusTab);
   const closeTab = useWorkspace((s) => s.closeTab);
 
   if (tabs.length === 0) return null;
@@ -21,17 +21,17 @@ export function TabStrip() {
       className="flex h-8 shrink-0 items-stretch border-b border-hairline bg-chrome"
     >
       {tabs.map((t) => {
-        const active = t.path === activeTab;
+        const active = t.id === activeTab;
         return (
           <div
-            key={t.path}
+            key={t.id}
             className={`app-no-drag relative z-10 flex min-w-0 max-w-[200px] items-center border-r border-hairline ${
               active ? "bg-canvas text-ink" : "text-ink-muted hover:bg-fill-subtle"
             }`}
           >
             <button
               type="button"
-              onClick={() => void openTab(t.path, t.title)}
+              onClick={() => focusTab(t.id)}
               aria-current={active ? "true" : undefined}
               className="min-w-0 flex-1 truncate px-3 text-left text-sm"
             >
@@ -39,7 +39,7 @@ export function TabStrip() {
             </button>
             <button
               type="button"
-              onClick={() => closeTab(t.path)}
+              onClick={() => closeTab(t.id)}
               aria-label={`${t.title} 닫기`}
               className="app-no-drag grid h-8 w-7 shrink-0 place-items-center text-ink-faint hover:text-ink"
             >
