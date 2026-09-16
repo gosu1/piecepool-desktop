@@ -34,10 +34,11 @@ function flatten(nodes: TreeNode[]): NotePath[] {
 /**
  * 읽다가 사라졌거나 못 읽는 파일인가.
  *
- * 경로는 방금 readTree 가 나열한 것이다. 그 사이에 지워지거나(ENOENT)
- * 권한이 막는(EACCES·EPERM) 일은 실제로 있고, 그 한 장 때문에 그래프 전체가
- * 안 뜨는 쪽이 더 나쁘다. **그 밖의 예외는 우리 버그다** — 삼키면 노트가
- * 아무 신호 없이 그래프에서 사라져 원인까지 거슬러 올라갈 단서가 남지 않는다.
+ * 경로는 방금 readTree 가 나열한 것이다. 그 사이에 지워지거나(ENOENT), 권한이
+ * 막거나(EACCES·EPERM), 경로 구성 요소가 그 사이에 모양을 바꾸는(EISDIR·ENOTDIR —
+ * 노트가 디렉터리로, 또는 부모 디렉터리가 파일로 바뀌는 경쟁 상황) 일은 실제로 있고,
+ * 그 한 장 때문에 그래프 전체가 안 뜨는 쪽이 더 나쁘다. **그 밖의 예외는 우리 버그다**
+ * — 삼키면 노트가 아무 신호 없이 그래프에서 사라져 원인까지 거슬러 올라갈 단서가 남지 않는다.
  */
 export function isUnreadable(e: unknown): boolean {
   if (typeof e !== "object" || e === null || !("code" in e)) return false;

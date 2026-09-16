@@ -18,13 +18,14 @@
 
 **헷갈리면 여기를 먼저 본다.** 이름이 같아서 엉뚱한 곳을 고치게 되는 자리들이다.
 
-| 이름        | 하나                                                    | 다른 하나                                                                                                 |
-| ----------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| **lint**    | `npm run lint` = **ESLint.** 우리 소스의 경계 규칙 검사 | `npm run wiki:lint` = **제품 기능.** 사용자 볼트의 깨진 링크·고아·중복을 보고한다 (`agent/tasks/lint.ts`) |
-| **git**     | 이 저장소                                               | **사용자 볼트**의 git. `core/git/` 은 이쪽이다 (§3)                                                       |
-| **written** | `Written` 클래스 — 툴이 쓴 경로만 모은다                | `IngestResult.written` — **툴이 쓴 것 ∪ `extraPaths`.** 둘은 같지 않다                                    |
-| **sources** | 볼트의 `sources/` 폴더 — 원본 파일                      | `Fm.sources` — 프론트매터 필드. **세션 로그(`.piecepool/sessions/`)도 여기 들어간다**                     |
-| **index**   | `src/core/index/` — 링크 색인                           | `src/main/index.ts` 같은 `index.ts` — 진입점 파일                                                         |
+| 이름         | 하나                                                                                                                   | 다른 하나                                                                                                                                                              |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **lint**     | `npm run lint` = **ESLint.** 우리 소스의 경계 규칙 검사                                                                | `npm run wiki:lint` = **제품 기능.** 사용자 볼트의 깨진 링크·고아·중복을 보고한다 (`agent/tasks/lint.ts`)                                                              |
+| **git**      | 이 저장소                                                                                                              | **사용자 볼트**의 git. `core/git/` 은 이쪽이다 (§3)                                                                                                                    |
+| **written**  | `Written` 클래스 — 툴이 쓴 경로만 모은다                                                                               | `IngestResult.written` — **툴이 쓴 것 ∪ `extraPaths`.** 둘은 같지 않다                                                                                                 |
+| **sources**  | 볼트의 `sources/` 폴더 — 원본 파일                                                                                     | `Fm.sources` — 프론트매터 필드. **세션 로그(`.piecepool/sessions/`)도 여기 들어간다**                                                                                  |
+| **index**    | `src/core/index/` — 링크 색인                                                                                          | `src/main/index.ts` 같은 `index.ts` — 진입점 파일                                                                                                                      |
+| **ADR-0004** | [`docs/adr/0004-graph-canvas-d3force.md`](docs/adr/0004-graph-canvas-d3force.md) — 그래프 렌더링(Canvas 2D + d3-force) | [`docs/adr/legacy/0004-markdown-editor-codemirror6.md`](docs/adr/legacy/0004-markdown-editor-codemirror6.md) — 마크다운 에디터(CodeMirror 6), §9 표에 남은 legacy 번호 |
 
 파일 이름은 바꾸지 않는다. 설계문서가 `lint` 로 규정했고 `agent/tasks/*` 진입점은 동결이다.
 
