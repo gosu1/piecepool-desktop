@@ -29,6 +29,11 @@ export interface Layout {
   sim: Simulation<SimNode, SimEdge>;
   nodes: SimNode[];
   edges: SimEdge[];
+  /**
+   * hover 이웃 조회용. forceLink 가 돌고 나면 edges 의 source/target 은
+   * 노드 객체로 바뀌어 문자열 형태를 못 구한다 — 아직 문자열인 g 에서 미리 구해 둔다.
+   */
+  adj: Map<NotePath, Set<NotePath>>;
 }
 
 /** 연결 수. 반지름이 이것을 쓴다. 고아 노드도 0 으로 들어 있다. */
@@ -86,5 +91,5 @@ export function buildLayout(g: GraphData, w: number, h: number): Layout {
       forceCollide<SimNode>((n) => radiusOf(n.degree) + 4),
     );
 
-  return { sim, nodes, edges };
+  return { sim, nodes, edges, adj: adjacency(g) };
 }
