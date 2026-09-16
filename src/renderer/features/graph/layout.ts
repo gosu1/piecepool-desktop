@@ -74,6 +74,9 @@ export function buildLayout(g: GraphData, w: number, h: number): Layout {
     title: n.title,
     degree: deg.get(n.id) ?? 0,
   }));
+  // forceLink 가 아래서 edges 의 source/target 을 노드 객체로 제자리에서 바꿔 넣는다 —
+  // 그 전에 아직 문자열인 g 에서 구해 둔다.
+  const adj = adjacency(g);
   const edges: SimEdge[] = g.edges.map((e) => ({ source: e.source, target: e.target }));
 
   const sim = forceSimulation<SimNode, SimEdge>(nodes)
@@ -91,5 +94,5 @@ export function buildLayout(g: GraphData, w: number, h: number): Layout {
       forceCollide<SimNode>((n) => radiusOf(n.degree) + 4),
     );
 
-  return { sim, nodes, edges, adj: adjacency(g) };
+  return { sim, nodes, edges, adj };
 }

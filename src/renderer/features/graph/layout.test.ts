@@ -74,4 +74,11 @@ describe("buildLayout", () => {
       ["A.md", "C.md"],
     ]);
   });
+
+  it("adj 는 forceLink 가 edges 를 바꿔 넣은 뒤에도 이웃을 담고 있다", () => {
+    const { sim, adj } = buildLayout(g, 800, 600);
+    sim.stop();
+    expect([...(adj.get("A.md") ?? [])].sort()).toEqual(["B.md", "C.md"]);
+    expect(adj.get("D.md")).toEqual(new Set());
+  });
 });
