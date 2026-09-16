@@ -36,6 +36,9 @@ export function stripFrontmatter(raw: string): string {
 /** 그래프 탭은 하나뿐이라 id 가 곧 상수다. */
 export const GRAPH_TAB_ID = "graph";
 
+/** 쿼리 탭도 하나뿐이다. 세션을 여럿 두는 것은 대화가 생긴 뒤의 일이다. */
+export const QUERY_TAB_ID = "query";
+
 /**
  * 탭 신원. NotePath 와 키 공간을 물리적으로 가른다 —
  * NotePath 는 string 별칭이라 `path | "graph"` 로는 타입이 충돌을 못 잡는다.
@@ -63,7 +66,14 @@ export interface GraphTab {
   title: "그래프";
 }
 
-export type Tab = NoteTab | GraphTab;
+/** 쿼리 세션 탭. 그래프처럼 경로가 없고, 아직 담는 상태도 없다. */
+export interface QueryTab {
+  kind: "query";
+  id: "query";
+  title: "쿼리";
+}
+
+export type Tab = NoteTab | GraphTab | QueryTab;
 
 /** 탭 요청 세대. 닫았다가 곧바로 다시 연 탭에 옛 응답이 덮어쓰는 것을 막는다. */
 let tabSeq = 0;
@@ -90,6 +100,7 @@ interface WorkspaceState {
   activeTab: string | null;
   openTab: (path: NotePath, title: string) => Promise<void>;
   openGraphTab: () => void;
+  openQueryTab: () => void;
   focusTab: (id: string) => void;
   closeTab: (id: string) => void;
 }
@@ -200,6 +211,14 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         ? s.tabs
         : [...s.tabs, { kind: "graph", id: GRAPH_TAB_ID, title: "그래프" }],
       activeTab: GRAPH_TAB_ID,
+    })),
+
+  openQueryTab: () =>
+    set((s) => ({
+      tabs: s.tabs.some((t) => t.id === QUERY_TAB_ID)
+        ? s.tabs
+        : [...s.tabs, { kind: "query", id: QUERY_TAB_ID, title: "쿼리" }],
+      activeTab: QUERY_TAB_ID,
     })),
 
   focusTab: (id) =>

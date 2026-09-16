@@ -6,6 +6,7 @@ import {
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
   noteTabId,
+  QUERY_TAB_ID,
   stripFrontmatter,
   useWorkspace,
 } from "./workspace.ts";
@@ -283,6 +284,75 @@ describe("그래프 탭", () => {
 
   it("볼트를 바꾸면 그래프 탭도 함께 닫힌다", () => {
     useWorkspace.getState().openGraphTab();
+    const next = applied({
+      ok: true,
+      value: { root: "/새볼트", name: "새볼트", tree: [] },
+    });
+    expect(next.tabs).toEqual([]);
+    expect(next.activeTab).toBeNull();
+  });
+});
+
+describe("쿼리 탭", () => {
+  it("연 적 없으면 새로 만들고 활성으로 둔다", () => {
+    useWorkspace.getState().openQueryTab();
+    const s = useWorkspace.getState();
+    expect(s.tabs).toEqual([{ kind: "query", id: QUERY_TAB_ID, title: "쿼리" }]);
+    expect(s.activeTab).toBe(QUERY_TAB_ID);
+  });
+
+  it("두 번 눌러도 탭이 둘이 되지 않는다", () => {
+    const { openQueryTab } = useWorkspace.getState();
+    openQueryTab();
+    openQueryTab();
+    expect(useWorkspace.getState().tabs).toHaveLength(1);
+  });
+
+  it("노트 탭·그래프 탭과 키 공간이 겹치지 않는다", () => {
+    useWorkspace.setState({
+      tabs: [
+        {
+          kind: "note",
+          id: noteTabId("query"),
+          path: "query",
+          title: "query",
+          body: "",
+          error: null,
+          seq: 1,
+        },
+        { kind: "graph", id: GRAPH_TAB_ID, title: "그래프" },
+      ],
+      activeTab: noteTabId("query"),
+    });
+    useWorkspace.getState().openQueryTab();
+    expect(useWorkspace.getState().tabs).toHaveLength(3);
+  });
+
+  it("focusTab 은 쿼리 탭에서 selected 를 건드리지 않는다", () => {
+    useWorkspace.setState({
+      tabs: [
+        {
+          kind: "note",
+          id: noteTabId("a.md"),
+          path: "a.md",
+          title: "a",
+          body: "",
+          error: null,
+          seq: 1,
+        },
+        { kind: "query", id: QUERY_TAB_ID, title: "쿼리" },
+      ],
+      activeTab: noteTabId("a.md"),
+      selected: "a.md",
+    });
+    useWorkspace.getState().focusTab(QUERY_TAB_ID);
+    const s = useWorkspace.getState();
+    expect(s.activeTab).toBe(QUERY_TAB_ID);
+    expect(s.selected).toBe("a.md");
+  });
+
+  it("볼트를 바꾸면 쿼리 탭도 함께 닫힌다", () => {
+    useWorkspace.getState().openQueryTab();
     const next = applied({
       ok: true,
       value: { root: "/새볼트", name: "새볼트", tree: [] },
