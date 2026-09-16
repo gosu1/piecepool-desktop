@@ -18,14 +18,16 @@ export function TabStrip() {
     <div
       // macOS 는 우리 버튼을 안 그린다(OS 신호등이 왼쪽 위에 있다) — 비울 것이 없다.
       style={{ paddingRight: IS_MAC ? 0 : WINDOW_CONTROLS_WIDTH }}
-      className="flex h-8 shrink-0 items-stretch border-b border-hairline bg-chrome"
+      // 탭이 넘치면 가로로 스크롤한다. 스크롤바가 나오면 32px 안에서 탭이 잘리므로 숨긴다.
+      className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto border-b border-hairline bg-chrome px-1 [scrollbar-width:none]"
     >
       {tabs.map((t) => {
         const active = t.id === activeTab;
         return (
           <div
             key={t.id}
-            className={`app-no-drag relative z-10 flex min-w-0 max-w-[200px] items-center border-r border-hairline ${
+            // 제목 길이와 무관하게 모든 탭이 같은 폭이다. 줄어들면 폭이 흔들리므로 shrink-0.
+            className={`app-no-drag relative z-10 flex h-6 w-40 shrink-0 items-center rounded-md ${
               active ? "bg-canvas text-ink" : "text-ink-muted hover:bg-fill-subtle"
             }`}
           >
@@ -33,7 +35,7 @@ export function TabStrip() {
               type="button"
               onClick={() => focusTab(t.id)}
               aria-current={active ? "true" : undefined}
-              className="min-w-0 flex-1 truncate px-3 text-left text-sm"
+              className="min-w-0 flex-1 truncate px-2 text-left text-sm"
             >
               {t.title}
             </button>
@@ -41,7 +43,7 @@ export function TabStrip() {
               type="button"
               onClick={() => closeTab(t.id)}
               aria-label={`${t.title} 닫기`}
-              className="app-no-drag grid h-8 w-7 shrink-0 place-items-center text-ink-faint hover:text-ink"
+              className="app-no-drag mr-1 grid h-5 w-5 shrink-0 place-items-center rounded text-ink-faint hover:bg-fill-subtle hover:text-ink"
             >
               <svg width="8" height="8" viewBox="0 0 8 8" stroke="currentColor" strokeWidth="1.2">
                 <path d="M1 1l6 6M7 1l-6 6" />
