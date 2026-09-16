@@ -1360,7 +1360,7 @@ Expected: FAIL — `Cannot find module './layout.ts'`
 
 ```ts
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } from "d3-force";
-import type { Simulation, SimulationNodeDatum } from "d3-force";
+import type { Simulation, SimulationLinkDatum, SimulationNodeDatum } from "d3-force";
 import type { GraphData, NotePath } from "../../../shared/types.ts";
 
 /** 시뮬이 좌표를 실어 주는 노드. x·y 는 첫 tick 전에는 없다. */
@@ -1371,8 +1371,12 @@ export interface SimNode extends SimulationNodeDatum {
   degree: number;
 }
 
-/** forceLink 가 문자열을 노드 객체로 바꿔 넣는다 — 둘 다 받는 타입이어야 한다. */
-export interface SimEdge {
+/**
+ * forceLink 가 문자열을 노드 객체로 **제자리에서 바꿔 넣는다** — 둘 다 받는 타입이어야 한다.
+ * d3 의 SimulationLinkDatum 을 명시적으로 확장한다. 모양만 맞춰 두면
+ * forceSimulation<SimNode, SimEdge> 의 제약에서 걸린다.
+ */
+export interface SimEdge extends SimulationLinkDatum<SimNode> {
   source: NotePath | SimNode;
   target: NotePath | SimNode;
 }
@@ -1657,7 +1661,6 @@ function readPalette(el: HTMLElement): Palette {
  */
 export function GraphView() {
   const openTab = useWorkspace((s) => s.openTab);
-  const selected = useWorkspace((s) => s.selected);
 
   const hostRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1666,16 +1669,12 @@ export function GraphView() {
   const adjRef = useRef(new Map<NotePath, Set<NotePath>>());
   const viewRef = useRef<View>({ zoom: 1, panX: 0, panY: 0 });
   const hoverRef = useRef<NotePath | null>(null);
-  const activeRef = useRef<NotePath | null>(null);
   const dragRef = useRef<{ node: SimNode | null; x: number; y: number; moved: boolean } | null>(
     null,
   );
 
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [message, setMessage] = useState("");
-
-  // 활성 노트 색만 스토어에서 온다. ref 로 흘려보내 프레임 루프가 읽게 한다.
-  activeRef.current = selected;
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -1749,7 +1748,9 @@ export function GraphView() {
         edges: lay.edges,
         view: viewRef.current,
         palette,
-        active: activeRef.current,
+        // 프레임마다 스토어에서 직접 읽는다. 구독하면 트리 선택이 바뀔 때마다
+        // 리렌더가 도는데, 그릴 사람은 이 루프라 얻는 것이 없다.
+        active: useWorkspace.getState().selected,
         lit:
           hover === null
             ? NOTHING_LIT
