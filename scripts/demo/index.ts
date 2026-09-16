@@ -3,6 +3,7 @@
 //   node --env-file=.env scripts/demo/index.ts --dry
 //   node --env-file=.env scripts/demo/index.ts --only "DETR"
 //   node --env-file=.env scripts/demo/index.ts --embed
+//   node --env-file=.env scripts/demo/index.ts --bm25 --top 8
 //
 // ingest 엔진의 CLI 판이다. 앱에는 아직 안 꽂혀 있다 — 4단계에서 src/core/ 로 옮겨 꽂는다.
 
@@ -36,6 +37,8 @@ type Args = {
   vault: string;
   dry: boolean;
   useEmbed: boolean;
+  /** 모델 없는 후보 추리기(BM25). --embed 와 같이 켤 수도 있다. */
+  useBm25: boolean;
   only: string | null;
   noCache: boolean;
   threshold: number;
@@ -55,6 +58,7 @@ function parseArgs(argv: string[]): Args {
     vault: "fixtures/vault",
     dry: false,
     useEmbed: false,
+    useBm25: false,
     only: null,
     noCache: false,
     // 0.65 · 5 — 캐시된 임베딩으로 오프라인 계산(2026-09-15): 0.65 에서 재현율 86% · 정밀도 34%,
@@ -71,6 +75,7 @@ function parseArgs(argv: string[]): Args {
     if (k === "--vault") a.vault = argv[++i];
     else if (k === "--dry") a.dry = true;
     else if (k === "--embed") a.useEmbed = true;
+    else if (k === "--bm25") a.useBm25 = true;
     else if (k === "--only") a.only = argv[++i];
     else if (k === "--no-cache") a.noCache = true;
     else if (k === "--threshold") a.threshold = Number(argv[++i]);
@@ -435,7 +440,7 @@ async function main(): Promise<void> {
 
   console.log(`볼트: ${args.vault}`);
   console.log(
-    `모델: ${args.dry ? "(호출 없음)" : MODELS.chat}${args.useEmbed ? ` + ${MODELS.embed}` : ""}`,
+    `모델: ${args.dry ? "(호출 없음)" : MODELS.chat}${args.useEmbed ? ` + ${MODELS.embed}` : ""}${args.useBm25 ? " + BM25" : ""}`,
   );
   console.log("");
 
@@ -523,7 +528,7 @@ async function main(): Promise<void> {
             console.log(`   다시 정리 — 기록을 걷어낸 페이지 ${stale.size}장`);
         }
 
-        // 후보 추리기 — 글자 일치는 항상, 뜻 유사도는 --embed 일 때만.
+        // 후보 추리기 — 글자 일치는 항상, 뜻 유사도는 --embed 일 때만, 낱말 겹침(BM25)은 --bm25 일 때만.
         // 임베딩이 막히면(한도 소진 등) 글자 일치만으로 계속 간다. 후보를 넓히는 보조
         // 수단 때문에 정리 자체가 멈추면 안 된다.
         let embedOpts;
@@ -553,7 +558,12 @@ async function main(): Promise<void> {
           hash: item.hash,
           date: item.date,
         };
-        const cands = pickCandidates(note, [...wiki.values()], embedOpts);
+        const cands = pickCandidates(
+          note,
+          [...wiki.values()],
+          embedOpts,
+          args.useBm25 ? { topN: args.topN } : undefined,
+        );
         if (attempt === 0) {
           if (cands.related.length) {
             const detail = cands.related

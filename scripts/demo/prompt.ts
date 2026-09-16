@@ -8,8 +8,8 @@ export type Candidates = {
   /** 전문을 프롬프트에 넣을 페이지. */
   related: WikiPage[];
   /** 왜 후보가 되었는지 — 로그로 설계를 확인하기 위해 남긴다. */
-  why: Map<string, "글자" | "뜻">;
-  /** 뜻 후보의 코사인 점수. 임계값을 고를 때 본다. */
+  why: Map<string, "글자" | "뜻" | "겹침">;
+  /** 뜻 후보의 코사인 점수 (또는 겹침 후보의 BM25 점수). 임계값을 고를 때 본다. */
   score: Map<string, number>;
   /** 고칠 수 있는 절 이름 — 다시 써도 되는 것. 해시가 일치하는 것만. */
   rewritable: string[];
@@ -58,6 +58,60 @@ function cosine(a: number[], b: number[]): number {
   return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
 }
 
+/**
+ * 모델 없는 유사도 — BM25. 페이지 본문(요약·절·기록)과 노트가 나눠 갖는 낱말을 센다.
+ * 한글은 조사가 붙어 낱말 경계가 없으므로 두 글자 조각으로, 로마자·숫자는 단어로.
+ *
+ * 7회차 정답으로 오프라인 측정(2026-09-16, 페이지를 앞선 출처 노트 본문으로 근사): 상위 5 에서
+ * 재현율 69%, 상위 8 에서 84% — 임베딩(최종 요약 기준이라 유리한 조건)의 84%(상위 5)와 같다.
+ * "러닝머신·헬스장 → 달리기" 셋은 1·1·3위. 뜻을 아는 게 아니라 페이지 뒤에 쌓인 노트가
+ * 그 낱말을 들고 있다. 키·한도·서버가 없다.
+ */
+function tokens(text: string): string[] {
+  const out: string[] = [];
+  const hay = normalizeTitle(text).replace(/\[\[|\]\]/g, " ");
+  for (const run of hay.match(/[가-힣]+|[a-z0-9]+/g) ?? []) {
+    if (!/^[가-힣]/.test(run)) out.push(run);
+    else if (run.length === 1) out.push(run);
+    else for (let i = 0; i < run.length - 1; i++) out.push(run.slice(i, i + 2));
+  }
+  return out;
+}
+
+function pageLexText(page: WikiPage): string {
+  return [
+    page.name,
+    ...(page.fm.aliases ?? []),
+    page.summary,
+    ...page.sections.map((s) => `${s.heading}\n${s.content}`),
+    ...page.records,
+  ].join("\n");
+}
+
+/** 노트에 대한 각 페이지의 BM25 점수. k1 = 1.2 · b = 0.75 (교과서 값). */
+function bm25(note: Note, wiki: WikiPage[]): Map<string, number> {
+  const docs = wiki.map((p) => tokens(pageLexText(p)));
+  const n = docs.length;
+  const avg = docs.reduce((a, d) => a + d.length, 0) / (n || 1);
+  const df = new Map<string, number>();
+  for (const d of docs) for (const t of new Set(d)) df.set(t, (df.get(t) ?? 0) + 1);
+  const q = new Set(tokens(note.body));
+  const out = new Map<string, number>();
+  docs.forEach((d, i) => {
+    const tf = new Map<string, number>();
+    for (const t of d) tf.set(t, (tf.get(t) ?? 0) + 1);
+    let score = 0;
+    for (const t of q) {
+      const f = tf.get(t);
+      if (!f) continue;
+      const idf = Math.log(1 + (n - (df.get(t) ?? 0) + 0.5) / ((df.get(t) ?? 0) + 0.5));
+      score += (idf * f * 2.2) / (f + 1.2 * (0.25 + (0.75 * d.length) / avg));
+    }
+    out.set(wiki[i].name, score);
+  });
+  return out;
+}
+
 export type EmbedOpts = {
   /** 노트와 각 위키 페이지의 벡터. 없으면 뜻 유사도를 건너뛴다. */
   noteVec: number[];
@@ -72,11 +126,27 @@ export type EmbedOpts = {
  * 후보를 추린다. 글자 일치는 무조건 포함하고, 뜻 유사도로 넓힌다.
  * ADR-0002 결정 3 — 두 방법이 서로의 빈틈을 메운다.
  */
-export function pickCandidates(note: Note, wiki: WikiPage[], embed?: EmbedOpts): Candidates {
-  const why = new Map<string, "글자" | "뜻">();
+export function pickCandidates(
+  note: Note,
+  wiki: WikiPage[],
+  embed?: EmbedOpts,
+  lexical?: { topN: number },
+): Candidates {
+  const why = new Map<string, "글자" | "뜻" | "겹침">();
   const score = new Map<string, number>();
 
   for (const name of byLiteral(note, wiki)) why.set(name, "글자");
+
+  if (lexical) {
+    const scored = [...bm25(note, wiki)]
+      .filter(([, sc]) => sc > 0)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, lexical.topN);
+    for (const [name, sc] of scored) {
+      score.set(name, sc);
+      if (!why.has(name)) why.set(name, "겹침");
+    }
+  }
 
   if (embed) {
     const scored = wiki
