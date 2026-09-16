@@ -20,7 +20,16 @@ import {
   type WikiPage,
 } from "./vault.ts";
 import { buildUserMessage, pageEmbedText, pickCandidates } from "./prompt.ts";
-import { MODELS, askJson, embed, embedStats, usage, usageSummary, writeWiki } from "./llm.ts";
+import {
+  MODELS,
+  askJson,
+  balance,
+  embed,
+  embedStats,
+  usage,
+  usageSummary,
+  writeWiki,
+} from "./llm.ts";
 import { buildMarkdown, hasChanges, nameIndex, retroLink, safeFileName, verify } from "./build.ts";
 import {
   buildSourcePage,
@@ -442,6 +451,8 @@ async function main(): Promise<void> {
   console.log(
     `모델: ${args.dry ? "(호출 없음)" : MODELS.chat}${args.useEmbed ? ` + ${MODELS.embed}` : ""}${args.useBm25 ? " + BM25" : ""}`,
   );
+  const balanceBefore = args.dry ? null : await balance();
+  if (balanceBefore !== null) console.log(`잔액: $${balanceBefore.toFixed(2)}`);
   console.log("");
 
   const systemPrompt = await readFile(args.prompt, "utf8");
@@ -756,6 +767,13 @@ async function main(): Promise<void> {
   console.log(
     `AI 호출 ${calls}회 · 캐시 ${cached}회 · 임베딩 ${embedStats.sent}항목 · 지적 ${allIssues.length}건 · ${usageSummary()}`,
   );
+  const balanceAfter = balanceBefore === null ? null : await balance();
+  if (balanceBefore !== null && balanceAfter !== null) {
+    const spent = (balanceBefore - balanceAfter).toFixed(3);
+    console.log(
+      `잔액: $${balanceBefore.toFixed(2)} → $${balanceAfter.toFixed(2)} (이번 실행 $${spent})`,
+    );
+  }
   if (finalWiki.size) {
     console.log(`\n만들어진 페이지: ${[...finalWiki.values()].map((p) => p.name).join(", ")}`);
   }

@@ -302,3 +302,22 @@ export async function askJson<T>(
 }
 
 export const MODELS = { chat: CHAT_MODEL, embed: EMBED_MODEL };
+
+/**
+ * 계정 잔액(달러). Kimi 만 있다 — 실비가 나가는 실행은 시작과 끝에 진짜 잔액을 찍는다.
+ * 어림한 비용과 청구된 비용이 어긋나면 여기서 드러난다. 없으면 null.
+ */
+export async function balance(): Promise<number | null> {
+  if (!IS_KIMI) return null;
+  try {
+    const res = await fetch(`${ENDPOINT}/users/me/balance`, {
+      headers: { authorization: `Bearer ${apiKey()}` },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) return null;
+    const raw = (await res.json()) as { data?: { available_balance?: number } };
+    return raw.data?.available_balance ?? null;
+  } catch {
+    return null;
+  }
+}
