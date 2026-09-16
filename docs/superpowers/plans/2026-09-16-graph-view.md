@@ -631,9 +631,9 @@ export function toGraph(ix: VaultIndex): GraphData {
   const edges: GraphData["edges"] = [];
   for (const l of ix.links) {
     if (l.resolved === null || l.resolved === l.from) continue;
-    // NUL 로 잇는다 — 경로에 들어갈 수 없는 문자라 두 경로가 섞이지 않는다.
+    // NUL(\0) 로 잇는다 — 경로에 들어갈 수 없는 문자라 두 경로가 섞이지 않는다.
     const [a, b] = l.from < l.resolved ? [l.from, l.resolved] : [l.resolved, l.from];
-    const key = `${a}�${b}`;
+    const key = `${a}\0${b}`;
     if (seen.has(key)) continue;
     seen.add(key);
     edges.push({ source: l.from, target: l.resolved });
