@@ -16,7 +16,7 @@ const CHAT_MODEL = process.env.PIECEPOOL_LLM_MODEL ?? "gemini-3.1-flash-lite";
 const EMBED_MODEL = process.env.PIECEPOOL_EMBED_MODEL ?? "gemini-embedding-001";
 
 function apiKey(): string {
-  const k = process.env.GEMINI_API_KEY;
+  const k = process.env.PIECEPOOL_LLM_API_KEY ?? process.env.GEMINI_API_KEY;
   if (!k) {
     throw new Error(
       "GEMINI_API_KEY 가 없습니다. .env 에 넣고 `node --env-file=.env` 로 실행하십시오.",
