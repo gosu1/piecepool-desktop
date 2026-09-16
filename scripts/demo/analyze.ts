@@ -224,7 +224,12 @@ async function main(): Promise<void> {
     };
 
     const pageHits = evalSet.must_pages.map((spec) => [spec, !!findPage(spec)] as const);
-    const notHits = evalSet.must_not_pages.map((spec) => [spec, !findPage(spec)] as const);
+    // 금지 페이지는 이름이 정확히 같을 때만 — 앞부분 일치를 쓰면 `논문` 이 정당한 `논문 초안` 을 잡는다.
+    const exact = (spec: string) =>
+      pages.some((p) =>
+        [p.name, ...(p.fm.aliases ?? [])].map(normalizeTitle).some((n) => alts(spec).includes(n)),
+      );
+    const notHits = evalSet.must_not_pages.map((spec) => [spec, !exact(spec)] as const);
     const linkHits = evalSet.must_links.map(([a, b]) => {
       const pa = findPage(a);
       const pb = findPage(b);

@@ -1,0 +1,92 @@
+hit	페이지	환각
+hit	페이지	최교수님|최 교수|교수님
+miss	페이지	현우|현우 선배
+hit	페이지	소연|소연이
+hit	페이지	SummaC
+hit	페이지	FactCC
+hit	페이지	AlignScore
+hit	페이지	QAGS|QuestEval
+hit	페이지	exp-002|exp-002 baseline 재현
+hit	페이지	exp-003|exp-003 FactCC
+hit	페이지	exp-004|exp-004 SummaC
+hit	페이지	exp-005|exp-005 사람 평가|사람 평가
+hit	페이지	exp-006|exp-006 AlignScore
+hit	페이지	exp-007|exp-007 검증 디코딩|검증 디코딩
+hit	페이지	한글 수사 정규화|수사 정규화
+hit	페이지	학회|워크숍|학회 투고|학회 논문
+miss	페이지	졸업|졸업 논문|박사 진학|진로
+hit	페이지	exp-001|exp-001 KoBART 재현|KoBART
+hit	페이지	AIHub 문서요약|AIHub|한국어 요약 데이터셋
+hit	금지	랩미팅
+hit	금지	면담
+hit	금지	일기
+hit	금지	논문
+hit	금지	실험
+hit	금지	최교수님 면담
+hit	금지	2026-09-24-랩미팅
+hit	링크	환각|추상 요약 ↔ SummaC
+hit	링크	exp-004|exp-004 SummaC ↔ SummaC
+hit	링크	exp-006|exp-006 AlignScore ↔ AlignScore
+hit	링크	exp-003|exp-003 FactCC ↔ FactCC
+miss	링크	exp-007|exp-007 검증 디코딩|검증 디코딩 ↔ 환각|숫자 환각|추상 요약
+hit	링크	최교수님|최 교수|교수님 ↔ 환각|졸업|졸업 논문|학회|학회 투고|학회 논문
+hit	링크	소연|소연이 ↔ exp-005|exp-005 사람 평가|사람 평가
+miss	링크	현우|현우 선배 ↔ 한글 수사 정규화|수사 정규화|QAGS|QuestEval
+hit	링크	exp-005|exp-005 사람 평가|사람 평가 ↔ 환각|숫자 환각
+hit	링크	SummaC ↔ AlignScore|FactCC
+hit	링크	exp-007|exp-007 검증 디코딩|검증 디코딩 ↔ SummaC
+miss	링크	exp-001|exp-001 KoBART 재현|KoBART ↔ exp-002|exp-002 baseline 재현
+miss	링크	exp-005|exp-005 사람 평가|사람 평가 ↔ SummaC
+miss	링크	exp-006|exp-006 AlignScore ↔ SummaC
+miss	링크	exp-006|exp-006 AlignScore ↔ exp-007|exp-007 검증 디코딩|검증 디코딩
+hit	링크	최교수님|최 교수|교수님 ↔ exp-007|exp-007 검증 디코딩|검증 디코딩
+hit	링크	소연|소연이 ↔ 학회|워크숍|학회 투고|학회 논문|논문 초안|논문 초안 개요
+miss	링크	소연|소연이 ↔ 졸업|졸업 논문|박사 진학|진로
+miss	링크	LLM-as-judge|세미나|LLM 신뢰성 평가 ↔ 환각|숫자 환각|exp-005|사람 평가
+miss	링크	AIHub 문서요약|AIHub|한국어 요약 데이터셋 ↔ exp-001|exp-001 KoBART 재현|KoBART|exp-002|exp-002 baseline 재현
+hit	사실	exp-005|exp-005 사람 평가|사람 평가 ⊃ "0.71"
+hit	사실	exp-007|exp-007 검증 디코딩|검증 디코딩 ⊃ "14.0|14%"
+hit	사실	환각|추상 요약|exp-005|사람 평가 ⊃ "62%"
+hit	사실	exp-003|exp-003 FactCC|FactCC ⊃ "0.58"
+hit	사실	exp-002|exp-002 baseline 재현 ⊃ "22%"
+hit	사실	exp-001|exp-002|KoBART ⊃ "토크나이저"
+hit	사실	최교수님|최 교수|교수님 ⊃ "지표를 믿지 말고|사람을 믿"
+hit	사실	학회|워크숍|학회 투고|학회 논문 ⊃ "11월 1일|4쪽"
+miss	사실	현우|현우 선배 ⊃ "세 명|수사"
+hit	사실	exp-004|exp-004 SummaC|SummaC ⊃ "0.72"
+hit	사실	exp-006|exp-006 AlignScore|AlignScore ⊃ "0.74"
+hit	사실	exp-006|exp-006 AlignScore|AlignScore ⊃ "40만|1/10"
+hit	사실	exp-007|exp-007 검증 디코딩|검증 디코딩 ⊃ "19.8"
+hit	사실	exp-007b|exp-007|exp-007 검증 디코딩|검증 디코딩 ⊃ "7분|1.75배"
+hit	사실	exp-005|exp-005 사람 평가|사람 평가|환각 ⊃ "추론 가능"
+hit	사실	exp-002|exp-002 baseline 재현 ⊃ "0.50|0.46"
+hit	사실	exp-003|exp-003 FactCC|FactCC ⊃ "2만|0.94"
+hit	사실	학회|워크숍|학회 투고|학회 논문 ⊃ "EMNLP"
+miss	사실	학회|워크숍|학회 투고|학회 논문|논문 초안|논문 초안 개요 ⊃ "Numbers Lie First"
+hit	사실	최교수님|최 교수|교수님|졸업|졸업 논문|박사 진학|진로 ⊃ "6월"
+miss	사실	현우|현우 선배 ⊃ "개체명|법률|도메인"
+hit	사실	소연|소연이 ⊃ "대화 요약"
+hit	사실	exp-004|exp-004 SummaC|SummaC ⊃ "KLUE|klue"
+page	-	AIHub 문서요약
+page	-	AlignScore
+page	-	FactCC
+page	-	LLM-as-judge
+page	-	QAGS
+page	-	QuestEval
+page	-	SummaC
+page	-	exp-001 KoBART 재현
+page	-	exp-002 baseline 재현 (토크나이저 수정)
+page	-	exp-003
+page	-	exp-004 SummaC 한국어
+page	-	exp-005 사람 평가 파일럿
+page	-	exp-006 AlignScore 한국어
+page	-	exp-007
+page	-	검증 디코딩
+page	-	나
+page	-	소연
+page	-	수영
+page	-	최교수님
+page	-	추상 요약
+page	-	학회 투고
+page	-	한글 수사 정규화
+page	-	환각

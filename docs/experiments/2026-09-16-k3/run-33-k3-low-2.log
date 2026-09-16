@@ -1,0 +1,3 @@
+볼트: C:/Users/User/AppData/Local/Temp/runs/k3-low-2
+모델: kimi-k3 + BM25
+설정: {"reasoning_effort":"low"} · 프롬프트 src/core/prompts/write.md faa1d891 · eval.json f9a171e4 · 예산 $3.5
