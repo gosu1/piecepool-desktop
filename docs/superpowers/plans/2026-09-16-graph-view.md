@@ -367,7 +367,7 @@ MSG
   - `scanVault(v: Vault): Promise<VaultIndex>`
   - `toGraph(ix: VaultIndex): GraphData`
 
-**예상 테스트 증가:** +17 (85 → 102)
+**예상 테스트 증가:** +23 (85 → 108)
 
 - [ ] **Step 1: `resolveLink` 테스트를 먼저 쓴다**
 
@@ -416,7 +416,7 @@ import { describe, expect, it } from "vitest";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { scanVault, titleOf, toGraph } from "./scan.ts";
+import { isUnreadable, scanVault, titleOf, toGraph } from "./scan.ts";
 import type { Vault } from "../../shared/types.ts";
 
 /** 픽스처 볼트. files 는 `상대경로 → 내용` 이다. */
@@ -513,7 +513,38 @@ describe("toGraph", () => {
     ]);
   });
 });
+
+describe("isUnreadable", () => {
+  it("사라진 파일은 건너뛴다", () => {
+    expect(isUnreadable({ code: "ENOENT" })).toBe(true);
+  });
+
+  it("권한이 막힌 파일은 건너뛴다", () => {
+    expect(isUnreadable({ code: "EACCES" })).toBe(true);
+  });
+
+  it("code 가 없는 평범한 에러는 버그 신호다", () => {
+    expect(isUnreadable(new Error("boom"))).toBe(false);
+  });
+
+  it("모르는 code 는 버그 신호다", () => {
+    expect(isUnreadable({ code: "EUNEXPECTED" })).toBe(false);
+  });
+
+  it("null 에서 터지지 않는다", () => {
+    expect(isUnreadable(null)).toBe(false);
+  });
+
+  it("객체가 아니면 false 다", () => {
+    expect(isUnreadable("ENOENT")).toBe(false);
+  });
+});
 ```
+
+`scanVault` 가 예외를 **올려보내는** 쪽은 통합 테스트로 덮지 않는다. 임시 폴더 픽스처만으로
+`readRaw` 에서 건너뛰지 않을 예외를 플랫폼 가리지 않고 확정적으로 일으킬 방법이 없고,
+그러자고 목을 들이면 이 레포의 테스트 방식(실제 볼트 픽스처)이 무너진다.
+판단 로직 자체는 위 여섯 케이스가 못 박는다.
 
 - [ ] **Step 3: 실패를 확인한다**
 
@@ -578,6 +609,26 @@ function flatten(nodes: TreeNode[]): NotePath[] {
 }
 
 /**
+ * 읽다가 사라졌거나 못 읽는 파일인가.
+ *
+ * 경로는 방금 readTree 가 나열한 것이다. 그 사이에 지워지거나(ENOENT)
+ * 권한이 막는(EACCES·EPERM) 일은 실제로 있고, 그 한 장 때문에 그래프 전체가
+ * 안 뜨는 쪽이 더 나쁘다. **그 밖의 예외는 우리 버그다** — 삼키면 노트가
+ * 아무 신호 없이 그래프에서 사라져 원인까지 거슬러 올라갈 단서가 남지 않는다.
+ */
+export function isUnreadable(e: unknown): boolean {
+  if (typeof e !== "object" || e === null || !("code" in e)) return false;
+  const code = (e as { code: unknown }).code;
+  return (
+    code === "ENOENT" ||
+    code === "EACCES" ||
+    code === "EPERM" ||
+    code === "EISDIR" ||
+    code === "ENOTDIR"
+  );
+}
+
+/**
  * 볼트를 훑어 링크 색인을 만든다.
  *
  * 순회는 readTree 를 그대로 쓴다 — .md 만·숨김 폴더 제외·심볼릭 링크 제외·POSIX 경로가
@@ -599,8 +650,9 @@ export async function scanVault(v: Vault): Promise<VaultIndex> {
     let body: string;
     try {
       body = await readRaw(v, p);
-    } catch {
-      // 한 장을 못 읽었다고 그래프 전체가 안 뜨는 쪽이 더 나쁘다.
+    } catch (e) {
+      // 못 읽는 한 장은 건너뛴다. 그 밖의 예외는 버그 신호라 그대로 올려보낸다.
+      if (!isUnreadable(e)) throw e;
       continue;
     }
     for (const ref of parseLinks(p, body)) {
@@ -649,7 +701,7 @@ export function toGraph(ix: VaultIndex): GraphData {
 npx vitest run src/core/index/
 ```
 
-Expected: PASS — 36 tests (links 23 + scan 13)
+Expected: PASS — 42 tests (links 23 + scan 19)
 
 - [ ] **Step 7: 전체 검증**
 
@@ -657,7 +709,7 @@ Expected: PASS — 36 tests (links 23 + scan 13)
 npx prettier --write . && npm run lint && npm run typecheck && npm test
 ```
 
-Expected: `Tests 102 passed (102)`
+Expected: `Tests 108 passed (108)`
 
 - [ ] **Step 8: 커밋**
 
@@ -691,7 +743,7 @@ MSG
 - Consumes: `scanVault`·`toGraph` (Task 2), `GraphData` (`src/shared/types.ts`), `PiecePoolError` (`src/core/errors.ts`), `wrap` (`src/main/ipc.ts` 에 이미 있다)
 - Produces: `window.piecepool.buildGraph(): Promise<Result<GraphData>>` — renderer 가 Task 6 에서 부른다
 
-**예상 테스트 증가:** +0 (102 유지)
+**예상 테스트 증가:** +0 (108 유지)
 
 - [ ] **Step 1: `shared/ipc.ts` 에 채널과 계약을 더한다**
 
@@ -775,7 +827,7 @@ ipcMain.handle(CHANNEL.graphBuild, () =>
 npx prettier --write . && npm run lint && npm run typecheck && npm test
 ```
 
-Expected: 전부 통과. `Tests 102 passed (102)`
+Expected: 전부 통과. `Tests 108 passed (108)`
 
 - [ ] **Step 5: FROZEN 변경 범위를 눈으로 확인한다**
 
@@ -820,7 +872,7 @@ MSG
   - `Tab = NoteTab | GraphTab` — `NoteTab` 은 `{ kind: "note"; id: string; path: NotePath; title: string; body: string | null; error: string | null; seq: number }`, `GraphTab` 은 `{ kind: "graph"; id: "graph"; title: "그래프" }`
   - 스토어: `activeTab: string | null` · `openTab(path, title): Promise<void>` (**시그니처 유지**) · `openGraphTab(): void` · `focusTab(id: string): void` · `closeTab(id: string): void`
 
-**예상 테스트 증가:** +5 (102 → 107). 기존 탭 테스트는 `path` → `id` 로 **고쳐 쓴다**
+**예상 테스트 증가:** +5 (108 → 113). 기존 탭 테스트는 `path` → `id` 로 **고쳐 쓴다**
 
 - [ ] **Step 1: 실패하는 테스트를 먼저 쓴다**
 
@@ -1122,7 +1174,7 @@ Expected: PASS — 기존 탭 테스트 + 새 그래프 탭 5개
 npx prettier --write . && npm run lint && npm run typecheck && npm test
 ```
 
-Expected: `Tests 107 passed (107)`
+Expected: `Tests 113 passed (113)`
 
 - [ ] **Step 8: 커밋**
 
@@ -1164,7 +1216,7 @@ MSG
   - `hit.ts` — `View` · `toWorld(v, sx, sy)` · `hitNode(nodes, v, sx, sy)`
   - `draw.ts` — `Palette` · `Scene` · `LABEL_ZOOM` · `draw(ctx, w, h, s)`
 
-**예상 테스트 증가:** +15 (107 → 122)
+**예상 테스트 증가:** +15 (113 → 128)
 
 - [ ] **Step 1: 의존성을 설치한다**
 
@@ -1597,7 +1649,7 @@ Expected: PASS — 15 tests
 npx prettier --write . && npm run lint && npm run typecheck && npm test
 ```
 
-Expected: `Tests 122 passed (122)`
+Expected: `Tests 128 passed (128)`
 
 - [ ] **Step 12: 커밋**
 
@@ -1631,7 +1683,7 @@ MSG
 - Consumes: `bridge` (`src/renderer/bridge.ts`), `useWorkspace`·`GRAPH_TAB_ID`·`RIBBON_WIDTH` (`src/renderer/store/workspace.ts`), Task 5 의 세 모듈
 - Produces: `GraphView` — 인자 없는 컴포넌트
 
-**예상 테스트 증가:** +0 (122 유지). `.tsx` 는 테스트 대상이 아니다
+**예상 테스트 증가:** +0 (128 유지). `.tsx` 는 테스트 대상이 아니다
 
 - [ ] **Step 1: `GraphView.tsx` 를 만든다**
 
@@ -2002,7 +2054,7 @@ export function Ribbon() {
 npx prettier --write . && npm run lint && npm run typecheck && npm test
 ```
 
-Expected: `Tests 122 passed (122)`
+Expected: `Tests 128 passed (128)`
 
 - [ ] **Step 5: 앱을 띄워 눈으로 본다**
 
