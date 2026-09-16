@@ -21,7 +21,9 @@ import {
 } from "./vault.ts";
 import { buildUserMessage, pageEmbedText, pickCandidates } from "./prompt.ts";
 import {
+  BudgetExceeded,
   MODELS,
+  SETTINGS,
   askJson,
   balance,
   embed,
@@ -60,6 +62,14 @@ type Args = {
   relink: boolean;
   /** `나` 요약을 이 장수마다 별도 호출로 다시 쓴다. 0 이면 안 한다. */
   meEvery: number;
+  /** 이 달러를 넘으면 다음 호출 전에 멈춘다. 실비 모델용. 0 이면 상한 없음. */
+  budget: number;
+  /** 처리할 항목 수가 이것과 다르면 호출 전에 멈춘다. 볼트에 엉뚱한 파일이 섞인 사고 방지. */
+  expect: number;
+  /** 앞의 N장만 처리한다. 이어서 돌리면 sync_state 가 다음 장부터 재개한다. */
+  limit: number;
+  /** 이미 처리한 항목도 다시 정리한다 (결정 10 의 재정리 경로 시험용). --no-cache 와 별개다. */
+  force: boolean;
 };
 
 function parseArgs(argv: string[]): Args {
@@ -78,6 +88,10 @@ function parseArgs(argv: string[]): Args {
     maxChars: 200_000,
     relink: false,
     meEvery: 20,
+    budget: 0,
+    expect: 0,
+    limit: 0,
+    force: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
@@ -93,6 +107,10 @@ function parseArgs(argv: string[]): Args {
     else if (k === "--max-chars") a.maxChars = Number(argv[++i]);
     else if (k === "--relink") a.relink = true;
     else if (k === "--me-every") a.meEvery = Number(argv[++i]);
+    else if (k === "--budget") a.budget = Number(argv[++i]);
+    else if (k === "--expect") a.expect = Number(argv[++i]);
+    else if (k === "--limit") a.limit = Number(argv[++i]);
+    else if (k === "--force") a.force = true;
   }
   return a;
 }
@@ -386,7 +404,7 @@ async function collectItems(args: Args, today: string): Promise<Item[]> {
     }
     const rawHash = await rawHashOf(args.vault, src);
     // 입력 벽 7 — 출처 페이지의 raw_hash 가 같으면 이미 처리한 원본이다. 추출도 안 한다.
-    if (!args.noCache && (await readRawHash(args.vault, src)) === rawHash) {
+    if (!args.force && (await readRawHash(args.vault, src)) === rawHash) {
       items.push({ key: src.path, name: `@${src.name}`, body: "", date: null, hash: rawHash });
       continue;
     }
@@ -451,6 +469,14 @@ async function main(): Promise<void> {
   console.log(
     `모델: ${args.dry ? "(호출 없음)" : MODELS.chat}${args.useEmbed ? ` + ${MODELS.embed}` : ""}${args.useBm25 ? " + BM25" : ""}`,
   );
+  // 어느 판으로 쟀는지가 로그에 남아야 한다 — 프롬프트·정답 세트의 지문, 샘플링, 예산.
+  const promptText = await readFile(args.prompt, "utf8");
+  const evalText = await readFile(join(args.vault, "eval.json"), "utf8").catch(() => null);
+  console.log(
+    `설정: ${JSON.stringify(SETTINGS.sampling)} · 프롬프트 ${args.prompt} ${hash8(promptText)}` +
+      `${evalText ? ` · eval.json ${hash8(evalText)}` : ""}${args.budget ? ` · 예산 $${args.budget}` : ""}`,
+  );
+  usage.limitUsd = args.budget;
   const balanceBefore = args.dry ? null : await balance();
   if (balanceBefore !== null) console.log(`잔액: $${balanceBefore.toFixed(2)}`);
   console.log("");
@@ -480,13 +506,26 @@ async function main(): Promise<void> {
     console.log("처리할 것이 없습니다.");
     return;
   }
+  if (args.expect && items.length !== args.expect) {
+    console.log(
+      `항목 ${items.length}개 — --expect ${args.expect} 와 다릅니다. 호출하지 않고 멈춥니다.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  if (args.limit > 0) items = items.slice(0, args.limit);
 
   let calls = 0;
   let cached = 0;
   let embedOk = args.useEmbed;
   const allIssues: string[] = [];
+  // 예산 상한이나 스키마 실패가 잦으면 더 부르지 않는다. 처리 못 한 항목은 상태에 남기지 않아
+  // 다음 실행이 그 장부터 이어받는다.
+  let halted = false;
+  let schemaFails = 0;
 
   for (const item of items) {
+    if (halted) break;
     console.log(`── ${item.key}`);
     if (item.wall) {
       console.log(`   ! 입력벽 ${item.wall} — 건너뜁니다\n`);
@@ -497,7 +536,9 @@ async function main(): Promise<void> {
 
     // 입력 벽 7 — 이미 처리했고 내용이 그대로면 건너뛴다.
     const prev = state.notes[item.key];
-    if (prev && prev.hash === item.hash && !args.noCache) {
+    // --no-cache 는 응답 캐시만 끈다. 재개(sync_state)까지 끄면 실비 모델에서 처리한 장을 다시
+    // 부른다 — 2026-09-16 실측, 한 장 $0.03 을 두 번 냈다. 다시 정리하려면 --force.
+    if (prev && prev.hash === item.hash && !args.force) {
       console.log("   이미 처리했습니다 (해시 동일) — 건너뜁니다\n");
       continue;
     }
@@ -507,7 +548,8 @@ async function main(): Promise<void> {
     if (chunks.length > 1)
       console.log(`   ${args.maxChars}자를 넘어 ${chunks.length}청크로 나눕니다`);
 
-    for (let ci = 0; ci < chunks.length; ci++) {
+    let itemFailed = false;
+    for (let ci = 0; ci < chunks.length && !halted && !itemFailed; ci++) {
       const body = chunks[ci];
       const part = chunks.length > 1 ? `${ci + 1}/${chunks.length}` : null;
       // 다시 읽어 빌드하는 루프 — hashes 선행조건(결정 7 의 3단계). 데모는 단일 프로세스라
@@ -525,7 +567,7 @@ async function main(): Promise<void> {
         // 기록은 출처에서 파생된 것이므로 출처가 바뀌면 다시 파생한다. 삭제(표시만)와 다르다.
         // 사용자가 기록 절을 고친 페이지는 건드리지 않는다. 청크가 여럿이면 첫 청크에서만.
         const stale = new Set<string>();
-        if (ci === 0 && prev && prev.hash !== item.hash) {
+        if (ci === 0 && prev && (prev.hash !== item.hash || args.force)) {
           const tag = sourceTag(item.name);
           for (const page of wiki.values()) {
             if (!page.recordsOurs) continue;
@@ -609,9 +651,29 @@ async function main(): Promise<void> {
         }
 
         // 같은 입력이면 캐시에서 온다 — 선행조건 재시도가 AI 를 다시 부르지 않는 이유.
-        const res = await writeWiki(systemPrompt, userMessage, {
-          noCache: args.noCache && attempt === 0,
-        });
+        let res: Awaited<ReturnType<typeof writeWiki>>;
+        try {
+          res = await writeWiki(systemPrompt, userMessage, {
+            noCache: args.noCache && attempt === 0,
+          });
+        } catch (e: unknown) {
+          if (e instanceof BudgetExceeded) {
+            console.log(`   ! ${e.message}`);
+            halted = true;
+            break;
+          }
+          // 형식 불량(JSON 아님·빈 응답)은 이 장만 건너뛴다. 한 장 때문에 서른 장 실행이 죽지 않게.
+          // 잦으면 모델이나 스키마 문제이므로 멈춘다.
+          if (e instanceof SyntaxError || (e instanceof Error && e.message.startsWith("빈 응답"))) {
+            schemaFails++;
+            console.log(`   ! 스키마-실패 — ${e.message.slice(0, 120)} → 이 노트를 건너뜁니다`);
+            allIssues.push(`${item.key} 스키마-실패`);
+            if (schemaFails > 2) halted = true;
+            itemFailed = true;
+            break;
+          }
+          throw e;
+        }
         if (attempt === 0) {
           if (res.cached) cached++;
           else calls++;
@@ -727,6 +789,10 @@ async function main(): Promise<void> {
       }
     }
 
+    if (halted || itemFailed) {
+      console.log("");
+      continue;
+    }
     if (!args.dry) {
       state.notes[item.key] = { hash: item.hash, compiledAt: new Date().toISOString() };
       // `나` 요약의 나이 — 지문이 그대로면 한 장 더 늙는다.
@@ -771,7 +837,8 @@ async function main(): Promise<void> {
   if (balanceBefore !== null && balanceAfter !== null) {
     const spent = (balanceBefore - balanceAfter).toFixed(3);
     console.log(
-      `잔액: $${balanceBefore.toFixed(2)} → $${balanceAfter.toFixed(2)} (이번 실행 $${spent})`,
+      // 차감은 몇 분 뒤에 반영되기도 한다. 다음 실행의 시작 잔액이 진짜 값이다.
+      `잔액: $${balanceBefore.toFixed(2)} → $${balanceAfter.toFixed(2)} (차감 $${spent} · 반영 지연 가능)`,
     );
   }
   if (finalWiki.size) {

@@ -1,6 +1,6 @@
 // 실험 분석 — 위키 폴더와 실행 로그를 읽어 지표를 뽑는다.
 //
-//   node scripts/demo/analyze.ts fixtures/vault-life [run.log] [--eval fixtures/vault-life/eval.json]
+//   node scripts/demo/analyze.ts fixtures/vault-life [run.log] [--eval fixtures/vault-life/eval.json] [--items out.tsv]
 //
 // 정답 세트(eval.json)가 볼트에 있거나 --eval 로 주어지면 재현율을 낸다 — 꼭 있어야 할 페이지,
 // 있으면 안 되는 페이지, 꼭 이어져야 할 링크 쌍, 꼭 남아야 할 사실. 규칙을 더하기 전에 이 숫자를 본다.
@@ -8,7 +8,7 @@
 // 재는 것: 링크 밀도 · 고립 페이지 · 절 누적 · 기록 분포 · 지적 종류별 집계 · `나` 허브 구조.
 // ADR-0002 "측정 지표" 절의 실측 도구다. 앱에는 들어가지 않는다.
 
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { normalizeTitle, readWikiPage, scanWiki, type WikiPage } from "./vault.ts";
 
@@ -37,6 +37,9 @@ async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const evalIdx = argv.indexOf("--eval");
   const evalPath = evalIdx >= 0 ? argv.splice(evalIdx, 2)[1] : join(argv[0] ?? "", "eval.json");
+  // 항목별 hit/miss 를 TSV 로 — compare.ts 가 두 회차의 안정 핵·뒤집힘을 센다.
+  const itemsIdx = argv.indexOf("--items");
+  const itemsPath = itemsIdx >= 0 ? argv.splice(itemsIdx, 2)[1] : null;
   const [vault, logPath] = argv;
   if (!vault) throw new Error("볼트 경로가 필요합니다");
 
@@ -250,6 +253,17 @@ async function main(): Promise<void> {
     if (miss(notHits).length) L.push(`### 있으면 안 되는데 있는 페이지`, ``, ...miss(notHits), ``);
     if (miss(linkHits).length) L.push(`### 안 이어진 링크`, ``, ...miss(linkHits), ``);
     if (miss(factHits).length) L.push(`### 빠진 사실`, ``, ...miss(factHits), ``);
+
+    if (itemsPath) {
+      const rows = [
+        ...pageHits.map(([k, ok]) => `${ok ? "hit" : "miss"}\t페이지\t${k}`),
+        ...notHits.map(([k, ok]) => `${ok ? "hit" : "miss"}\t금지\t${k}`),
+        ...linkHits.map(([k, ok]) => `${ok ? "hit" : "miss"}\t링크\t${k}`),
+        ...factHits.map(([k, ok]) => `${ok ? "hit" : "miss"}\t사실\t${k}`),
+        ...pages.map((p) => `page\t-\t${p.name}`),
+      ];
+      await writeFile(itemsPath, rows.join("\n") + "\n", "utf8");
+    }
   }
 
   L.push(`## 페이지 목록`, ``);

@@ -25,6 +25,7 @@ const SAMPLING = IS_KIMI
 /** 1M 토큰당 달러 — 입력(캐시 안 됨) · 입력(캐시 됨) · 출력. 없는 모델은 토큰만 센다. */
 const PRICES: Record<string, { in: number; hit: number; out: number }> = {
   "kimi-k3": { in: 3, hit: 0.3, out: 15 },
+  "kimi-k2.6": { in: 0.95, hit: 0.16, out: 4 },
 };
 
 /** 이번 실행의 토큰과 비용. 실비가 나가는 모델은 호출마다 로그에 찍는다. */
@@ -35,8 +36,23 @@ export const usage = {
   completion: 0,
   reasoning: 0,
   usd: 0,
+  /** 호출마다 걸린 ms. 중앙값을 내려고 모은다. */
+  elapsed: [] as number[],
+  /** 이 달러를 넘으면 다음 호출 전에 멈춘다. 0 이면 상한 없음. */
+  limitUsd: 0,
   last: "",
 };
+
+/** 예산 상한에 걸렸다. 호출부가 잡아서 항목 루프를 끝낸다 — 재시도할 일이 아니다. */
+export class BudgetExceeded extends Error {}
+
+function checkBudget(): void {
+  if (usage.limitUsd > 0 && usage.usd >= usage.limitUsd) {
+    throw new BudgetExceeded(
+      `예산 상한 $${usage.limitUsd} 도달 (누적 $${usage.usd.toFixed(3)}) — 호출하지 않고 멈춥니다`,
+    );
+  }
+}
 
 type Usage = {
   prompt_tokens?: number;
@@ -46,7 +62,8 @@ type Usage = {
   completion_tokens_details?: { reasoning_tokens?: number };
 };
 
-function recordUsage(raw: { usage?: Usage }): void {
+function recordUsage(raw: { usage?: Usage }, ms: number): void {
+  usage.elapsed.push(ms);
   const u = raw.usage;
   if (!u) return;
   const prompt = u.prompt_tokens ?? 0;
@@ -61,13 +78,19 @@ function recordUsage(raw: { usage?: Usage }): void {
   usage.completion += completion;
   usage.reasoning += reasoning;
   usage.usd += usd;
-  usage.last = `토큰 입력 ${prompt} (캐시 ${cached}) · 출력 ${completion} (추론 ${reasoning})${p ? ` · $${usd.toFixed(4)}` : ""}`;
+  usage.last = `토큰 입력 ${prompt} (캐시 ${cached}) · 출력 ${completion} (추론 ${reasoning})${p ? ` · $${usd.toFixed(4)}` : ""} · ${(ms / 1000).toFixed(1)}s`;
 }
 
 export function usageSummary(): string {
   const p = PRICES[CHAT_MODEL];
-  return `토큰 입력 ${usage.prompt} (캐시 ${usage.cached}) · 출력 ${usage.completion} (추론 ${usage.reasoning}) · ${p ? `$${usage.usd.toFixed(2)}` : "요금표 없음"}`;
+  const sorted = [...usage.elapsed].sort((a, b) => a - b);
+  const median = sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
+  const total = usage.elapsed.reduce((a, b) => a + b, 0);
+  return `토큰 입력 ${usage.prompt} (캐시 ${usage.cached}) · 출력 ${usage.completion} (추론 ${usage.reasoning}) · ${p ? `$${usage.usd.toFixed(2)}` : "요금표 없음"} · 호출 중앙값 ${(median / 1000).toFixed(1)}s 합계 ${Math.round(total / 1000)}s`;
 }
+
+/** 실행 설정을 로그 머리에 남기려고 밖에 보인다. */
+export const SETTINGS = { model: CHAT_MODEL, sampling: SAMPLING };
 
 function apiKey(): string {
   const k = process.env.PIECEPOOL_LLM_API_KEY ?? process.env.GEMINI_API_KEY;
@@ -167,9 +190,17 @@ function keyOf(...parts: string[]): string {
   return createHash("sha256").update(parts.join("\0"), "utf8").digest("hex").slice(0, 16);
 }
 
-/** 429·5xx 만 재시도한다. 400·401 은 다시 불러도 같은 답이다. */
+/**
+ * 429·5xx 만 재시도한다. 400·401 은 다시 불러도 같은 답이다.
+ *
+ * 시간 초과는 다르다 — 클라이언트가 끊어도 서버는 생성을 마치고 과금할 수 있다. 무료 모델은
+ * 열 번 재시도해도 잃는 게 없지만 실비 모델은 이중 과금이다. Kimi 는 추론이 길어 600초까지
+ * 기다리고, 그래도 넘으면 한 번만 다시 부른다.
+ */
 async function postJson(path: string, body: unknown): Promise<unknown> {
   const url = `${ENDPOINT}${path}`;
+  const timeoutMs = IS_KIMI ? 600_000 : 120_000;
+  const maxNetRetries = IS_KIMI ? 1 : 10;
   for (let attempt = 0; ; attempt++) {
     let res: Response;
     try {
@@ -177,13 +208,15 @@ async function postJson(path: string, body: unknown): Promise<unknown> {
         method: "POST",
         headers: { authorization: `Bearer ${apiKey()}`, "content-type": "application/json" },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (e: unknown) {
       // 시간 초과와 네트워크 오류도 잠시 뒤에는 풀린다. 응답이 느려진 날 60초에서 죽었다.
-      if (attempt >= 10) throw e;
+      if (attempt >= maxNetRetries) throw e;
       const wait = Math.min(2000 * 2 ** attempt, 120_000);
-      console.warn(`  ! ${e instanceof Error ? e.name : "fetch"} — ${wait / 1000}s 뒤 재시도`);
+      console.warn(
+        `  ! ${e instanceof Error ? e.name : "fetch"} — ${wait / 1000}s 뒤 재시도${IS_KIMI ? " (이중 과금 가능)" : ""}`,
+      );
       await new Promise((r) => setTimeout(r, wait));
       continue;
     }
@@ -212,12 +245,15 @@ export async function writeWiki(
   userMessage: string,
   opts: { noCache?: boolean } = {},
 ): Promise<{ pages: LlmPage[]; cached: boolean }> {
-  const key = keyOf("chat", CHAT_MODEL, systemPrompt, userMessage);
+  // 샘플링 설정도 키에 든다 — effort 가 빠지면 high 회차가 low 의 캐시를 재생해 "차이 없음" 이 된다.
+  const key = keyOf("chat", CHAT_MODEL, JSON.stringify(SAMPLING), systemPrompt, userMessage);
   if (!opts.noCache) {
     const hit = await cacheGet<{ pages: LlmPage[] }>(key);
     if (hit) return { pages: hit.pages, cached: true };
   }
 
+  checkBudget();
+  const t0 = Date.now();
   const raw = (await postJson("/chat/completions", {
     model: CHAT_MODEL,
     messages: [
@@ -228,9 +264,11 @@ export async function writeWiki(
       type: "json_schema",
       json_schema: { name: "wiki_pages", strict: true, schema: PAGES_SCHEMA },
     },
+    // 폭주 벽. 추론 토큰까지 세므로 넉넉히 — 정상 출력은 2k 안팎이다.
+    max_tokens: 32_000,
     ...SAMPLING,
   })) as { choices?: { message?: { content?: string } }[]; usage?: Usage };
-  recordUsage(raw);
+  recordUsage(raw, Date.now() - t0);
 
   const content = raw.choices?.[0]?.message?.content;
   if (!content) throw new Error(`빈 응답: ${JSON.stringify(raw).slice(0, 300)}`);
@@ -281,9 +319,11 @@ export async function askJson<T>(
   schema: Record<string, unknown>,
   name: string,
 ): Promise<{ value: T; cached: boolean }> {
-  const key = keyOf("json", name, CHAT_MODEL, systemPrompt, userMessage);
+  const key = keyOf("json", name, CHAT_MODEL, JSON.stringify(SAMPLING), systemPrompt, userMessage);
   const hit = await cacheGet<T>(key);
   if (hit) return { value: hit, cached: true };
+  checkBudget();
+  const t0 = Date.now();
   const raw = (await postJson("/chat/completions", {
     model: CHAT_MODEL,
     messages: [
@@ -291,9 +331,10 @@ export async function askJson<T>(
       { role: "user", content: userMessage },
     ],
     response_format: { type: "json_schema", json_schema: { name, strict: true, schema } },
+    max_tokens: 32_000,
     ...SAMPLING,
   })) as { choices?: { message?: { content?: string } }[]; usage?: Usage };
-  recordUsage(raw);
+  recordUsage(raw, Date.now() - t0);
   const content = raw.choices?.[0]?.message?.content;
   if (!content) throw new Error(`빈 응답: ${JSON.stringify(raw).slice(0, 300)}`);
   const value = JSON.parse(content) as T;

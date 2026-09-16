@@ -128,6 +128,28 @@ describe("기록", () => {
     expect(run("데이터는")).toBe(0);
   });
 
+  it("원문의 마크다운 강조 표시는 quote 대조에서 무시한다", () => {
+    const src = "- 환각 비율: 23.5% → **14.0%**\n- _속도_ 5배";
+    const run = (quote: string) =>
+      verify({
+        llmPages: [
+          {
+            name: "exp-007",
+            aliases_to_add: [],
+            summary: null,
+            new_sections: [],
+            replace_sections: [],
+            new_records: [{ fact: "f", quote }],
+          },
+        ],
+        sourceBody: src,
+        names: { files: new Set(), aliases: new Map() },
+        existing: new Map(),
+      }).pages[0].records.length;
+    expect(run("환각 비율: 23.5% → 14.0%")).toBe(1);
+    expect(run("속도 5배")).toBe(1);
+  });
+
   it("`나` 의 기록은 같은 호출의 다른 페이지에 같은 구절이 있으면 뺀다", () => {
     const src = "모두테크 서류 붙었다. 장조림 반 먹음.";
     const out = verify({

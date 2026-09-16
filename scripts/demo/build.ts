@@ -43,11 +43,15 @@ export type VerifyResult = {
   issues: VerifyIssue[];
 };
 
-/** quote 대조용 정규화. 공백과 구두점을 지운다. 조사나 어미를 다듬은 정도는 통과시킨다. */
+/**
+ * quote 대조용 정규화. 공백과 구두점, 마크다운 강조 표시를 지운다. 조사나 어미를 다듬은 정도는
+ * 통과시킨다. 강조 표시를 안 지우면 노트의 `23.5% → **14.0%**` 와 quote `23.5% → 14.0%` 가
+ * 안 맞아 정답 사실이 버려진다 (연구자 볼트 28·30회차 실측).
+ */
 function normQuote(s: string): string {
   return s
     .normalize("NFC")
-    .replace(/[\s.,!?"'`·…—\-()[\]{}]/g, "")
+    .replace(/[\s.,!?"'`·…—\-()[\]{}*_~>#|]/g, "")
     .toLowerCase();
 }
 
