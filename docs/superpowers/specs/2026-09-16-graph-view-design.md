@@ -212,11 +212,11 @@ export type Tab =
 
 파급은 세 파일이다.
 
-| 파일           | 바뀌는 것                                                                           |
-| -------------- | ----------------------------------------------------------------------------------- |
-| `TabStrip.tsx` | `t.path` → `t.id`. 다시 누르는 동작이 `openTab(path)` 에서 `focusTab(id)` 로 갈린다 |
-| `NoteView.tsx` | 활성 탭의 `kind` 로 분기 — `"note"` 면 지금 그대로, `"graph"` 면 `<GraphView/>`     |
-| `workspace.ts` | `openTab` · `closeTab` · `applied` · 새 `openGraphTab` · `focusTab`                 |
+| 파일           | 바뀌는 것                                                                                               |
+| -------------- | ------------------------------------------------------------------------------------------------------- |
+| `TabStrip.tsx` | `t.path` → `t.id`. 다시 누르는 동작이 `openTab(path)` 에서 `focusTab(id)` 로 갈린다                     |
+| `NoteView.tsx` | 그래프 탭이 있으면 `<GraphView/>` 를 **계속 마운트**하고 활성이 아닐 때 숨긴다. 노트 내용은 지금 그대로 |
+| `workspace.ts` | `openTab` · `closeTab` · `applied` · 새 `openGraphTab` · `focusTab`                                     |
 
 `FileTree.tsx` 는 안 바뀐다 — `openTab(path, label)` 시그니처를 유지한다.
 
