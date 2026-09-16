@@ -23,7 +23,9 @@ export interface LinkTargets {
  * 구 레포 PIE-64: "교착상태" 와 "교착 상태" 로 위키가 두 장 생겼다.
  */
 export function normalizeTitle(t: string): string {
-  throw new Error("unimplemented: core/index/links.normalizeTitle");
+  // NFC 를 먼저 태운다 — macOS 는 파일명을 NFD 로 저장하므로 안 하면
+  // 같은 한글 제목이 플랫폼마다 다른 키가 된다.
+  return t.normalize("NFC").trim().toLowerCase().replace(/\s+/g, "");
 }
 
 /**
@@ -39,8 +41,72 @@ export function normalizeTitle(t: string): string {
  * 여기는 raw 문자열을 받으므로 직접 걸러야 한다. 놓치면 마크다운 문법을
  * 설명하는 위키 페이지마다 유령 깨진 링크가 lint 에 영구히 남는다.
  */
+/**
+ * 코드 펜스와 인라인 코드를 **같은 길이의 공백**으로 지운다.
+ * 길이를 유지하는 이유: 나중에 링크 위치(offset)가 필요해질 때 통째로 밀리지 않는다.
+ */
+function blankCode(body: string): string {
+  const lines = body.split("\n");
+  let fence: string | null = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const m = /^\s*(`{3,}|~{3,})/.exec(line);
+
+    if (fence === null) {
+      if (m !== null) {
+        fence = m[1][0];
+        lines[i] = " ".repeat(line.length);
+        continue;
+      }
+      // 백틱 런의 길이가 같은 쌍만 인라인 코드다.
+      lines[i] = line.replace(/(`+)[^\n]*?\1/g, (s) => " ".repeat(s.length));
+      continue;
+    }
+
+    // 펜스 안이다. 같은 문자로 시작하는 줄이 닫는다. 닫는 줄도 함께 지운다.
+    if (m !== null && m[1][0] === fence) fence = null;
+    lines[i] = " ".repeat(line.length);
+  }
+
+  return lines.join("\n");
+}
+
+/** `!` 여부 + `[[…]]` 안쪽. 대괄호와 줄바꿈은 안쪽에 들어올 수 없다. */
+const LINK = /(!?)\[\[([^\]\n]+)\]\]/g;
+
 export function parseLinks(from: NotePath, body: string): LinkRef[] {
-  throw new Error("unimplemented: core/index/links.parseLinks");
+  const refs: LinkRef[] = [];
+
+  for (const m of blankCode(body).matchAll(LINK)) {
+    const embed = m[1] === "!";
+
+    // 별칭을 먼저 가른다 — 표시 텍스트에 # 가 있어도 fragment 로 오해하지 않는다.
+    const bar = m[2].indexOf("|");
+    const aliasRaw = bar === -1 ? "" : m[2].slice(bar + 1).trim();
+    let to = (bar === -1 ? m[2] : m[2].slice(0, bar)).trim();
+
+    let page: number | undefined;
+    const hash = to.indexOf("#");
+    if (hash !== -1) {
+      const pm = /^page=(\d+)$/.exec(to.slice(hash + 1));
+      if (pm !== null) page = Number(pm[1]);
+      to = to.slice(0, hash).trim();
+    }
+
+    if (to === "") continue;
+
+    refs.push({
+      from,
+      to,
+      embed,
+      ...(aliasRaw === "" ? {} : { alias: aliasRaw }),
+      ...(page === undefined ? {} : { page }),
+      resolved: null,
+    });
+  }
+
+  return refs;
 }
 
 /**
