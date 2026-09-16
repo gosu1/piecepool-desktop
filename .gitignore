@@ -21,3 +21,6 @@ fixtures/vault-lab/.piecepool/
 fixtures/vault-lab/sources/
 fixtures/vault-pm/wiki/
 fixtures/vault-pm/.piecepool/
+
+# 사업계획서 작업 파일 — 코드 레포에 넣지 않는다 (2026-09-16)
+docs/사업계획서/
