@@ -17,10 +17,15 @@ const EMBED_MODEL = process.env.PIECEPOOL_EMBED_MODEL ?? "gemini-embedding-001";
 
 // Kimi 는 temperature 등을 고정값으로 요구한다("omit them from requests"). 추론 깊이만 고른다 —
 // 기본 max 는 출력($15/1M)이 가장 많이 나온다. 실비이므로 낮은 것부터 잰다.
+// k2.6 은 reasoning_effort 를 모른다 — 보내면 조용히 받고 8.6k 토큰을 생각한 뒤 답을 거의 안 냈다
+// (2026-09-16 실측). k2.6 은 `thinking` 스위치로 끄고, 문서가 권하는 기본 온도를 쓴다.
 const IS_KIMI = CHAT_MODEL.startsWith("kimi");
-const SAMPLING = IS_KIMI
-  ? { reasoning_effort: process.env.PIECEPOOL_REASONING_EFFORT ?? "low" }
-  : { temperature: 0.2 };
+const SAMPLING =
+  CHAT_MODEL === "kimi-k3"
+    ? { reasoning_effort: process.env.PIECEPOOL_REASONING_EFFORT ?? "low" }
+    : IS_KIMI
+      ? { thinking: { type: "disabled" } }
+      : { temperature: 0.2 };
 
 /** 1M 토큰당 달러 — 입력(캐시 안 됨) · 입력(캐시 됨) · 출력. 없는 모델은 토큰만 센다. */
 const PRICES: Record<string, { in: number; hit: number; out: number }> = {
@@ -239,6 +244,12 @@ async function postJson(path: string, body: unknown): Promise<unknown> {
   }
 }
 
+/** k2.6 은 strict 스키마에도 가끔 ```json 울타리를 두른다 (문서가 "벗기고 파싱하라" 고 한다). */
+function unfence(content: string): string {
+  const m = /^\s*```(?:json)?\s*([\s\S]*?)\s*```\s*$/.exec(content);
+  return m ? m[1] : content;
+}
+
 /** 위키 작성 호출. 캐시가 있으면 부르지 않는다. */
 export async function writeWiki(
   systemPrompt: string,
@@ -273,7 +284,7 @@ export async function writeWiki(
   const content = raw.choices?.[0]?.message?.content;
   if (!content) throw new Error(`빈 응답: ${JSON.stringify(raw).slice(0, 300)}`);
 
-  const parsed = JSON.parse(content) as { pages: LlmPage[] };
+  const parsed = JSON.parse(unfence(content)) as { pages: LlmPage[] };
   await cacheSet(key, parsed);
   return { pages: parsed.pages, cached: false };
 }
@@ -337,7 +348,7 @@ export async function askJson<T>(
   recordUsage(raw, Date.now() - t0);
   const content = raw.choices?.[0]?.message?.content;
   if (!content) throw new Error(`빈 응답: ${JSON.stringify(raw).slice(0, 300)}`);
-  const value = JSON.parse(content) as T;
+  const value = JSON.parse(unfence(content)) as T;
   await cacheSet(key, value);
   return { value, cached: false };
 }
