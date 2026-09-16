@@ -787,10 +787,12 @@ buildGraph: () => Promise<Result<GraphData>>;
     buildGraph: () => ipcRenderer.invoke(CHANNEL.graphBuild),
 ```
 
-같은 파일의 주석 한 줄을 사실에 맞춘다:
+같은 파일의 주석 **두 줄**을 사실에 맞춘다. 숫자가 둘 다 들어 있다 — 하나만 고치면 다른 하나가 거짓으로 남는다.
 
 ```ts
  * 지금 열어 주는 것은 여덟이다.
+ *
+ * `readRaw` 만 renderer 에서 경로를 받는다 — 나머지 일곱은 인자가 없다.
 ```
 
 - [ ] **Step 3: main 핸들러를 단다**
