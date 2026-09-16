@@ -1,10 +1,47 @@
+import type { ReactNode } from "react";
 import { IS_MAC } from "../bridge.ts";
-import { RIBBON_WIDTH, useWorkspace } from "../store/workspace.ts";
+import { GRAPH_TAB_ID, RIBBON_WIDTH, useWorkspace } from "../store/workspace.ts";
 
-/** 좌측 아이콘 바. 동작하는 아이콘은 사이드바 토글 하나뿐이다. */
+/**
+ * 리본 아이콘 하나.
+ * `app-no-drag` 가 필요한 이유: 상단 32px 이 창을 끄는 띠라 안 붙이면 눌러도 창만 끌린다.
+ * `relative z-10` 은 부모 <nav> 가 이미 갖고 있다.
+ */
+function RibbonButton({
+  label,
+  active,
+  onClick,
+  children,
+}: {
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      aria-current={active === true ? "true" : undefined}
+      className={`app-no-drag grid h-8 w-8 place-items-center rounded ${
+        active === true
+          ? "bg-fill-subtle text-ink"
+          : "text-ink-muted hover:bg-fill-subtle hover:text-ink"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** 좌측 아이콘 바. 사이드바 토글과 그래프 둘이다. */
 export function Ribbon() {
   const sidebarOpen = useWorkspace((s) => s.sidebarOpen);
   const toggleSidebar = useWorkspace((s) => s.toggleSidebar);
+  const openGraphTab = useWorkspace((s) => s.openGraphTab);
+  const graphActive = useWorkspace((s) => s.activeTab === GRAPH_TAB_ID);
 
   return (
     <nav
@@ -15,11 +52,9 @@ export function Ribbon() {
         IS_MAC ? "pt-10" : "pt-2"
       }`}
     >
-      <button
-        type="button"
+      <RibbonButton
+        label={sidebarOpen ? "사이드바 접기" : "사이드바 펼치기"}
         onClick={toggleSidebar}
-        aria-label={sidebarOpen ? "사이드바 접기" : "사이드바 펼치기"}
-        className="app-no-drag grid h-8 w-8 place-items-center rounded text-ink-muted hover:bg-fill-subtle hover:text-ink"
       >
         <svg
           width="16"
@@ -32,7 +67,24 @@ export function Ribbon() {
           <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
           <line x1="6" y1="2.5" x2="6" y2="13.5" />
         </svg>
-      </button>
+      </RibbonButton>
+
+      <RibbonButton label="그래프" active={graphActive} onClick={openGraphTab}>
+        {/* 구 레포 GraphIcon — 점 셋과 잇는 선. */}
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+        >
+          <circle cx="4" cy="4.2" r="1.8" />
+          <circle cx="12" cy="5" r="1.8" />
+          <circle cx="8" cy="12" r="1.8" />
+          <path d="M5.4 5.5 7.2 10.2M10.9 6.4 9 10.4M5.8 4.4h4.4" />
+        </svg>
+      </RibbonButton>
     </nav>
   );
 }
