@@ -12,11 +12,16 @@
 //
 // Windows 에서 완전한 원자성은 없다. 목표는 "실패를 감지하고 되돌릴 수 있다"다.
 
+// scripts/demo/tx.ts 를 옮겨 왔다 (2026-09-17, 4단계).
+
 import { copyFile, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
+import type { NotePath, Vault } from "../../shared/types.ts";
+import { assertAgentWritable } from "../vault/paths.ts";
 
 export type FileWrite = {
-  path: string;
+  /** 볼트 기준 상대경로. 쓰기 전에 assertAgentWritable 을 통과한다. */
+  path: NotePath;
   content: string;
   /** true 면 대상이 이미 있어야 한다(갱신). 없으면 사라진 것이므로 취소한다. */
   mustExist?: boolean;
@@ -49,7 +54,11 @@ async function renameWithBackoff(from: string, to: string): Promise<void> {
  * 파일들을 한 트랜잭션으로 쓴다. 하나라도 실패하면 이미 바꾼 것을 .bak 에서 되돌린다.
  * 되돌리기까지 실패하면 그 사실을 오류에 담는다 — 그때는 볼트 git 이 마지막 그물이다.
  */
-export async function commitFiles(files: FileWrite[]): Promise<void> {
+export async function commitFiles(v: Vault, writes: FileWrite[]): Promise<void> {
+  // 출력 벽 4 — 경로 제한. 하나라도 벗어나면 아무것도 안 쓴다.
+  for (const w of writes) await assertAgentWritable(v, w.path);
+  const files = writes.map((w) => ({ ...w, path: join(v.root, w.path) }));
+
   // 2. 존재 확인 — 쓰기 전에 전부 본다. 하나라도 사라졌으면 아무것도 안 쓴다.
   for (const f of files) {
     if (f.mustExist && !(await exists(f.path))) {

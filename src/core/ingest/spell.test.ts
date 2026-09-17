@@ -1,6 +1,4 @@
 // 깨진 낱말 되돌리기 — 원문이 사전이다.
-//
-//   npx vitest run scripts/demo
 
 import { describe, expect, it } from "vitest";
 import { buildVocab, restoreTypos, restoreWord } from "./spell.ts";

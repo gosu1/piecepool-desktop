@@ -2,7 +2,10 @@
 //
 // 코드가 볼트를 좁혀 후보 몇 장으로 만들고, AI 가 그중에서 고른다.
 
-import { normalizeTitle, type Note, type WikiPage } from "./vault.ts";
+// scripts/demo/prompt.ts 를 옮겨 왔다 (2026-09-17, 4단계).
+
+import { normalizeTitle } from "../index/links.ts";
+import type { Item, WikiPage } from "./wiki.ts";
 
 export type Candidates = {
   /** 전문을 프롬프트에 넣을 페이지. */
@@ -23,7 +26,7 @@ export type Candidates = {
  * 글자 일치 — 자료에 페이지의 제목이나 별칭이 그대로 등장하는가.
  * 비용이 0 이고 확실하다. 정확한 이름이 나왔을 때 반드시 잡아야 한다.
  */
-function byLiteral(note: Note, wiki: WikiPage[]): Set<string> {
+function byLiteral(note: Item, wiki: WikiPage[]): Set<string> {
   const hay = normalizeTitle(note.body);
   const hit = new Set<string>();
   for (const page of wiki) {
@@ -89,7 +92,7 @@ function pageLexText(page: WikiPage): string {
 }
 
 /** 노트에 대한 각 페이지의 BM25 점수. k1 = 1.2 · b = 0.75 (교과서 값). */
-function bm25(note: Note, wiki: WikiPage[]): Map<string, number> {
+function bm25(note: Item, wiki: WikiPage[]): Map<string, number> {
   const docs = wiki.map((p) => tokens(pageLexText(p)));
   const n = docs.length;
   const avg = docs.reduce((a, d) => a + d.length, 0) / (n || 1);
@@ -127,7 +130,7 @@ export type EmbedOpts = {
  * ADR-0002 결정 3 — 두 방법이 서로의 빈틈을 메운다.
  */
 export function pickCandidates(
-  note: Note,
+  note: Item,
   wiki: WikiPage[],
   embed?: EmbedOpts,
   lexical?: { topN: number },
@@ -221,7 +224,7 @@ function renderPage(page: WikiPage, hint?: string): string {
  * 시스템 프롬프트(write.md)가 설명하는 네 블록을 그대로 만든다.
  */
 export function buildUserMessage(
-  note: Note,
+  note: Item,
   c: Candidates,
   part: string | null = null,
   hints: Map<string, string> = new Map(),

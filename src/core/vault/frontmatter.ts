@@ -59,5 +59,8 @@ export function stringify(
  * 덮어쓰는 함수를 아예 두지 않는 것으로 막는다.
  */
 export function addSource(fm: Fm, source: string): Fm {
-  throw new Error("unimplemented: core/vault/frontmatter.addSource");
+  const s = source.trim();
+  const sources = [...(fm.sources ?? [])];
+  if (s && !sources.includes(s)) sources.push(s);
+  return { ...fm, sources };
 }

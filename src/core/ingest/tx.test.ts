@@ -1,16 +1,20 @@
 // 트랜잭션·출처 페이지·별칭 해석 — API 없이 확인한다.
 
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { Vault } from "../../shared/types.ts";
 import { commitFiles } from "./tx.ts";
 import { buildSourcePage } from "./source.ts";
-import { verify } from "./build.ts";
+import { nameIndex, verify } from "./build.ts";
 
 let dir: string;
+let v: Vault;
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "piecepool-tx-"));
+  v = { root: dir, agentWriteRoots: ["wiki", "sources", ".piecepool"] };
+  await mkdir(join(dir, "wiki"));
 });
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
@@ -18,39 +22,48 @@ afterEach(async () => {
 
 describe("트랜잭션", () => {
   it("여러 파일을 쓰고 .bak·.tmp 를 남기지 않는다", async () => {
-    await writeFile(join(dir, "a.md"), "old a", "utf8");
-    await commitFiles([
-      { path: join(dir, "a.md"), content: "new a", mustExist: true },
-      { path: join(dir, "sub", "b.md"), content: "new b" },
+    await writeFile(join(dir, "wiki", "a.md"), "old a", "utf8");
+    await commitFiles(v, [
+      { path: "wiki/a.md", content: "new a", mustExist: true },
+      { path: "wiki/sub/b.md", content: "new b" },
     ]);
-    expect(await readFile(join(dir, "a.md"), "utf8")).toBe("new a");
-    expect(await readFile(join(dir, "sub", "b.md"), "utf8")).toBe("new b");
-    expect((await readdir(dir)).sort()).toEqual(["a.md", "sub"]);
+    expect(await readFile(join(dir, "wiki", "a.md"), "utf8")).toBe("new a");
+    expect(await readFile(join(dir, "wiki", "sub", "b.md"), "utf8")).toBe("new b");
+    expect((await readdir(join(dir, "wiki"))).sort()).toEqual(["a.md", "sub"]);
   });
 
   it("갱신 대상이 사라졌으면 아무것도 쓰지 않는다", async () => {
     await expect(
-      commitFiles([
-        { path: join(dir, "new.md"), content: "x" },
-        { path: join(dir, "gone.md"), content: "y", mustExist: true },
+      commitFiles(v, [
+        { path: "wiki/new.md", content: "x" },
+        { path: "wiki/gone.md", content: "y", mustExist: true },
       ]),
     ).rejects.toThrow("사라졌습니다");
-    expect(await readdir(dir)).toEqual([]);
+    expect(await readdir(join(dir, "wiki"))).toEqual([]);
   });
 
   it("중간에 실패하면 이미 바꾼 파일을 되돌린다", async () => {
-    await writeFile(join(dir, "a.md"), "old a", "utf8");
+    await writeFile(join(dir, "wiki", "a.md"), "old a", "utf8");
     // 두 번째 대상을 디렉터리로 만들어 rename 이 실패하게 한다.
-    const { mkdir } = await import("node:fs/promises");
-    await mkdir(join(dir, "b.md"));
+    await mkdir(join(dir, "wiki", "b.md"));
     await expect(
-      commitFiles([
-        { path: join(dir, "a.md"), content: "new a", mustExist: true },
-        { path: join(dir, "b.md"), content: "new b" },
+      commitFiles(v, [
+        { path: "wiki/a.md", content: "new a", mustExist: true },
+        { path: "wiki/b.md", content: "new b" },
       ]),
     ).rejects.toThrow("되돌렸습니다");
-    expect(await readFile(join(dir, "a.md"), "utf8")).toBe("old a");
-    expect((await readdir(dir)).sort()).toEqual(["a.md", "b.md"]);
+    expect(await readFile(join(dir, "wiki", "a.md"), "utf8")).toBe("old a");
+    expect((await readdir(join(dir, "wiki"))).sort()).toEqual(["a.md", "b.md"]);
+  });
+
+  it("에이전트 쓰기 루트 밖이면 하나도 쓰지 않는다 — 출력 벽 4", async () => {
+    await expect(
+      commitFiles(v, [
+        { path: "wiki/ok.md", content: "x" },
+        { path: "노트.md", content: "사용자 노트를 덮으려 함" },
+      ]),
+    ).rejects.toMatchObject({ kind: "path_escape" });
+    expect(await readdir(join(dir, "wiki"))).toEqual([]);
   });
 });
 
@@ -83,6 +96,11 @@ describe("별칭 해석", () => {
     records: [],
     recordsOurs: true,
   });
+  const existing = new Map([
+    ["러너스니", page("러너스 니", ["장경인대 증후군"])],
+    ["김대리", page("김 대리", ["영업 김씨"])],
+    ["김대리(영업)", page("김대리 (영업)", ["영업 김씨"])],
+  ]);
   const run = (content: string, aliasesToAdd: string[] = []) =>
     verify({
       llmPages: [
@@ -96,26 +114,18 @@ describe("별칭 해석", () => {
         },
       ],
       sourceBody: "",
-      names: {
-        files: new Set(["러너스 니", "김 대리"]),
-        aliases: new Map([
-          ["장경인대 증후군", ["러너스 니"]],
-          ["김대리", ["김 대리", "김대리 (영업)"]],
-        ]),
-      },
-      existing: new Map([
-        ["러너스 니", page("러너스 니", ["장경인대 증후군"])],
-        ["김 대리", page("김 대리", ["김대리"])],
-      ]),
+      // 이름 목록은 제품과 같은 길로 만든다 — 정규화 규칙이 한 곳(index/links.normalizeTitle)이어야 한다.
+      names: nameIndex(existing.values()),
+      existing,
     });
 
   it("파일명은 그대로, 단일 별칭도 그대로, 두 페이지에 걸린 별칭은 해제한다", () => {
-    const out = run("[[러너스 니]] [[장경인대 증후군]] [[김대리]] [[없는 것]]");
+    const out = run("[[러너스 니]] [[장경인대 증후군]] [[영업 김씨]] [[없는 것]]");
     expect(out.pages[0].newSections[0].content).toBe(
-      "[[러너스 니]] [[장경인대 증후군]] 김대리 없는 것",
+      "[[러너스 니]] [[장경인대 증후군]] 영업 김씨 없는 것",
     );
     expect(out.issues.map((i) => i.detail)).toEqual([
-      "[[김대리]] — 별칭이 두 페이지에 걸립니다",
+      "[[영업 김씨]] — 별칭이 두 페이지에 걸립니다",
       "[[없는 것]] — 목록에 없습니다",
     ]);
   });

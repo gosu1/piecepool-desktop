@@ -1,6 +1,11 @@
 // FROZEN: commit() 만 동결 — A↔B 경계면 (0단계 설계 §3.3·§8)
 // sealUserEdits 는 등급 밖이다.
+import fs from "node:fs";
+import { join } from "node:path";
+import git from "isomorphic-git";
 import type { Author, NotePath, Vault } from "../../shared/types.ts";
+import { PiecePoolError } from "../errors.ts";
+import { dirtyPaths, repo } from "./repo.ts";
 
 /**
  * 넘겨받은 경로만 add 하고 커밋한다.
@@ -11,6 +16,9 @@ import type { Author, NotePath, Vault } from "../../shared/types.ts";
  *
  * 경로 배열을 그대로 받는 이유: 세션 로그와 .gitignore 는 에이전트 툴이 아니라
  * 호출부가 쓰므로 Written 에 자동으로 들어오지 않는다. 합집합은 호출부가 만든다.
+ *
+ * 커밋은 스테이지 전체를 담는다. 다른 도구가 스테이지만 하고 커밋하지 않은 것이
+ * 있으면 함께 들어간다 — 봉인 커밋이 먼저 스테이지를 비우므로 우리 흐름 안에서는 없다.
  */
 export async function commit(
   v: Vault,
@@ -18,7 +26,11 @@ export async function commit(
   author: Author,
   message: string,
 ): Promise<string> {
-  throw new Error("unimplemented: core/git/commit.commit");
+  if (paths.length === 0) {
+    throw new PiecePoolError("git_failed", "커밋할 경로가 없다");
+  }
+  await stage(v, paths);
+  return await git.commit({ ...repo(v), message, author });
 }
 
 /**
@@ -26,6 +38,24 @@ export async function commit(
  * 작성자는 볼트의 git config 를 따른다 — 사용자가 쓴 것을 에이전트 명의로
  * 남기면 자기 볼트 이력에서 자기 작업이 남의 것으로 보인다.
  */
-export async function sealUserEdits(v: Vault, author: Author): Promise<string | null> {
-  throw new Error("unimplemented: core/git/commit.sealUserEdits");
+export async function sealUserEdits(
+  v: Vault,
+  author: Author,
+  /** 봉인에서 뺄 경로 — 우리가 방금 쓴 것(.gitignore · 세션 로그)은 사용자 편집이 아니다. */
+  except: NotePath[] = [],
+): Promise<string | null> {
+  const dirty = (await dirtyPaths(v)).filter((p) => !except.includes(p));
+  if (dirty.length === 0) return null;
+  return await commit(v, dirty, author, "chore(vault): 사용자 편집 봉인");
+}
+
+/** 있는 파일은 add, 없는 파일은 remove — 삭제도 커밋에 담긴다. */
+async function stage(v: Vault, paths: NotePath[]): Promise<void> {
+  for (const filepath of paths) {
+    if (fs.existsSync(join(v.root, filepath))) {
+      await git.add({ ...repo(v), filepath });
+    } else {
+      await git.remove({ ...repo(v), filepath });
+    }
+  }
 }

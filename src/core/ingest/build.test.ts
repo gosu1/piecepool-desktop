@@ -1,10 +1,8 @@
 // 검문·빌더의 보호 규칙 — API 없이 확인한다.
 //
-//   npx vitest run scripts/demo
-
 import { describe, expect, it } from "vitest";
 import { buildMarkdown, verify } from "./build.ts";
-import { hash8, type WikiPage } from "./vault.ts";
+import { hash8, type WikiPage } from "./wiki.ts";
 
 function page(
   name: string,

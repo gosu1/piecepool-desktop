@@ -2,15 +2,18 @@
 //
 // 코드가 조립하고 AI 는 부르지 않는다. 전문을 보존하기로 했으므로 판단할 것이 없다.
 // PDF 는 `## N페이지` 헤딩으로 나눈다 — 기록 줄의 `[[@원본#3페이지]]` 가 그 자리로 간다.
+// scripts/demo/source.ts 를 옮겨 왔다 (2026-09-17, 4단계).
 
 import { readFile, readdir, stat } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
-import { pathToFileURL } from "node:url";
-import { hash8Bytes, localDate } from "./vault.ts";
+import type { NotePath, Vault } from "../../shared/types.ts";
+import { extractMarkdownText } from "./markdown.ts";
+import { extractPdfText, pdfMetaDate } from "./pdf.ts";
+import { hash8Bytes, localDate } from "./wiki.ts";
 
 export type SourceFile = {
   /** 볼트 기준 상대경로. `sources/DETR (2020).pdf` 또는 `.piecepool/sessions/<id>.md` */
-  path: string;
+  path: NotePath;
   /** 확장자를 뗀 파일명. 출처 페이지 이름은 `@` + 이것. 세션은 `@session-<id>`. */
   name: string;
   /** 세션 로그인가. 로그는 `## N턴 (사용자)` · `## N턴 (AI)` 헤딩으로 나뉜다. */
@@ -24,11 +27,11 @@ const MAX_BYTES = 50 * 1024 * 1024;
  * `sources/` 안의 원본 파일과 `.piecepool/sessions/` 의 세션 로그. 출처 페이지(`@*.md`)와 숨김 파일은 뺀다.
  * 세션 로그는 수확(상위 §8.1)의 입력이다 — 대화 로그를 자료 하나로 보고 같은 파이프라인을 탄다.
  */
-export async function scanSources(root: string): Promise<SourceFile[]> {
+export async function scanSources(v: Vault): Promise<SourceFile[]> {
   const out: SourceFile[] = [];
   const list = async (dir: string) => {
     try {
-      return await readdir(join(root, dir), { withFileTypes: true });
+      return await readdir(join(v.root, dir), { withFileTypes: true });
     } catch {
       return [];
     }
@@ -56,12 +59,12 @@ export function isAiTurn(anchor: string | null): boolean {
 }
 
 /** 입력 벽 4·5·6 — 크기, 빈 파일, UTF-8. 통과하면 null, 아니면 이유. */
-export async function inputWall(root: string, path: string): Promise<string | null> {
-  const st = await stat(join(root, path));
+export async function inputWall(v: Vault, path: NotePath): Promise<string | null> {
+  const st = await stat(join(v.root, path));
   if (st.size > MAX_BYTES) return `50MB 초과 (${(st.size / 1024 / 1024).toFixed(0)}MB)`;
   if (st.size === 0) return "빈 파일";
   if (extname(path) !== ".pdf") {
-    const buf = await readFile(join(root, path));
+    const buf = await readFile(join(v.root, path));
     try {
       new TextDecoder("utf-8", { fatal: true }).decode(buf);
     } catch {
@@ -72,12 +75,6 @@ export async function inputWall(root: string, path: string): Promise<string | nu
   return null;
 }
 
-/** PDF 메타데이터의 `D:20200529002147Z` → `2020-05-29`. */
-function pdfDate(v: unknown): string | null {
-  const m = typeof v === "string" ? /^D:(\d{4})(\d{2})(\d{2})/.exec(v) : null;
-  return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
-}
-
 export type Extracted = {
   /** 페이지별 텍스트. PDF 가 아니면 원문 하나. */
   pages: string[];
@@ -85,43 +82,14 @@ export type Extracted = {
   metaDate: string | null;
 };
 
-/** pdfjs legacy 빌드로 페이지마다 텍스트를 뽑는다. CMap 자산은 한글 PDF 에 필수다. */
-export async function extractPdf(file: string): Promise<Extracted> {
-  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const base = pathToFileURL(join(process.cwd(), "node_modules/pdfjs-dist/")).href;
-  const doc = await getDocument({
-    data: new Uint8Array(await readFile(file)),
-    cMapUrl: base + "cmaps/",
-    cMapPacked: true,
-    standardFontDataUrl: base + "standard_fonts/",
-    useSystemFonts: false,
-    verbosity: 0,
-  }).promise;
-  const pages: string[] = [];
-  for (let i = 1; i <= doc.numPages; i++) {
-    const page = await doc.getPage(i);
-    const tc = await page.getTextContent();
-    pages.push(
-      tc.items
-        .map((it) => ("str" in it ? it.str + (it.hasEOL ? "\n" : "") : ""))
-        .join("")
-        .trim(),
-    );
+export async function extract(v: Vault, src: SourceFile): Promise<Extracted> {
+  const full = join(v.root, src.path);
+  if (extname(src.path) === ".pdf") {
+    return { pages: await extractPdfText(full), metaDate: await pdfMetaDate(full) };
   }
-  const meta = await doc.getMetadata().catch(() => null);
-  const info = (meta?.info ?? {}) as Record<string, unknown>;
-  return { pages, metaDate: pdfDate(info.CreationDate) ?? pdfDate(info.ModDate) };
-}
-
-export async function extract(root: string, src: SourceFile): Promise<Extracted> {
-  const full = join(root, src.path);
-  if (extname(src.path) === ".pdf") return extractPdf(full);
   // 볼트 밖 .md/.txt 와 세션 로그 — 원문의 헤딩을 그대로 살린다. 페이지 개념이 없다.
-  const raw = (await readFile(full, "utf8")).trim();
-  // 세션 로그의 프론트매터(date 등)는 본문이 아니다.
-  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw);
-  const date = m ? (/^date:\s*(\d{4}-\d{2}-\d{2})/m.exec(m[1])?.[1] ?? null) : null;
-  return { pages: [m ? raw.slice(m[0].length).trim() : raw], metaDate: date };
+  const { text, date } = await extractMarkdownText(full);
+  return { pages: [text], metaDate: date };
 }
 
 export type SourcePageInput = {
@@ -152,9 +120,9 @@ export function buildSourcePage(input: SourcePageInput): string {
 }
 
 /** 이미 있는 출처 페이지의 raw_hash. 없으면 null. 입력 벽 7(중복)의 기준. */
-export async function readRawHash(root: string, src: SourceFile): Promise<string | null> {
+export async function readRawHash(v: Vault, src: SourceFile): Promise<string | null> {
   try {
-    const raw = await readFile(join(root, "sources", `@${src.name}.md`), "utf8");
+    const raw = await readFile(join(v.root, "sources", `@${src.name}.md`), "utf8");
     return /^raw_hash:\s*([0-9a-f]{8})/m.exec(raw)?.[1] ?? null;
   } catch {
     return null;
@@ -162,19 +130,15 @@ export async function readRawHash(root: string, src: SourceFile): Promise<string
 }
 
 /** 원본 파일의 지문. sha256 앞 8자리 — `hashes` 와 같은 규칙. */
-export async function rawHashOf(root: string, src: SourceFile): Promise<string> {
-  return hash8Bytes(await readFile(join(root, src.path)));
+export async function rawHashOf(v: Vault, src: SourceFile): Promise<string> {
+  return hash8Bytes(await readFile(join(v.root, src.path)));
 }
 
 /** 결정 8 — 파일명 패턴 → 내부 메타데이터 → 수정 시각. 연도만 있는 `(2017)` 은 안 쓴다. */
-export async function sourceDate(
-  root: string,
-  src: SourceFile,
-  meta: string | null,
-): Promise<string> {
+export async function sourceDate(v: Vault, src: SourceFile, meta: string | null): Promise<string> {
   const m =
     /(20\d{2})[-._](\d{2})[-._](\d{2})/.exec(src.name) ?? /(20\d{2})(\d{2})(\d{2})/.exec(src.name);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   if (meta) return meta;
-  return localDate((await stat(join(root, src.path))).mtime);
+  return localDate((await stat(join(v.root, src.path))).mtime);
 }

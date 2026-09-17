@@ -9,8 +9,9 @@
 // ADR-0002 "측정 지표" 절의 실측 도구다. 앱에는 들어가지 않는다.
 
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { normalizeTitle, readWikiPage, scanWiki, type WikiPage } from "./vault.ts";
+import { join, resolve } from "node:path";
+import { normalizeTitle } from "../../src/core/index/links.ts";
+import { readWikiPage, scanWiki, type WikiPage } from "../../src/core/ingest/wiki.ts";
 
 type EvalSet = {
   must_pages: string[];
@@ -43,8 +44,9 @@ async function main(): Promise<void> {
   const [vault, logPath] = argv;
   if (!vault) throw new Error("볼트 경로가 필요합니다");
 
+  const v = { root: resolve(vault), agentWriteRoots: ["wiki", "sources", ".piecepool"] };
   const pages: WikiPage[] = [];
-  for (const p of await scanWiki(vault)) pages.push(await readWikiPage(vault, p));
+  for (const p of await scanWiki(v)) pages.push(await readWikiPage(v, p));
   const byName = new Map(pages.map((p) => [normalizeTitle(p.name), p]));
 
   // 링크 그래프
