@@ -3,6 +3,7 @@
 //   node --env-file=.env scripts/demo/index.ts --dry
 //   node --env-file=.env scripts/demo/index.ts --only "DETR"
 //   node --env-file=.env scripts/demo/index.ts --embed
+//   node --env-file=.env scripts/demo/index.ts --bm25 --top 8
 //
 // ingest 엔진의 CLI 판이다. 앱에는 아직 안 꽂혀 있다 — 4단계에서 src/core/ 로 옮겨 꽂는다.
 
@@ -19,8 +20,19 @@ import {
   type WikiPage,
 } from "./vault.ts";
 import { buildUserMessage, pageEmbedText, pickCandidates } from "./prompt.ts";
-import { MODELS, embed, embedStats, writeWiki } from "./llm.ts";
-import { buildMarkdown, hasChanges, nameIndex, safeFileName, verify } from "./build.ts";
+import {
+  BudgetExceeded,
+  MODELS,
+  SETTINGS,
+  askJson,
+  balance,
+  embed,
+  embedStats,
+  usage,
+  usageSummary,
+  writeWiki,
+} from "./llm.ts";
+import { buildMarkdown, hasChanges, nameIndex, retroLink, safeFileName, verify } from "./build.ts";
 import {
   buildSourcePage,
   extract,
@@ -31,11 +43,14 @@ import {
   sourceDate,
 } from "./source.ts";
 import { commitFiles, type FileWrite } from "./tx.ts";
+import { loadDictionary } from "./spell.ts";
 
 type Args = {
   vault: string;
   dry: boolean;
   useEmbed: boolean;
+  /** 모델 없는 후보 추리기(BM25). --embed 와 같이 켤 수도 있다. */
+  useBm25: boolean;
   only: string | null;
   noCache: boolean;
   threshold: number;
@@ -44,6 +59,18 @@ type Args = {
   prompt: string;
   /** 이 글자 수까지는 통째로 한 번에 넘긴다. 넘으면 헤딩 경계로 나눠 청크마다 부른다. */
   maxChars: number;
+  /** 정리 없이 소급 링크만 — 기존 위키 전체에 대해 한 번. */
+  relink: boolean;
+  /** `나` 요약을 이 장수마다 별도 호출로 다시 쓴다. 0 이면 안 한다. */
+  meEvery: number;
+  /** 이 달러를 넘으면 다음 호출 전에 멈춘다. 실비 모델용. 0 이면 상한 없음. */
+  budget: number;
+  /** 처리할 항목 수가 이것과 다르면 호출 전에 멈춘다. 볼트에 엉뚱한 파일이 섞인 사고 방지. */
+  expect: number;
+  /** 앞의 N장만 처리한다. 이어서 돌리면 sync_state 가 다음 장부터 재개한다. */
+  limit: number;
+  /** 이미 처리한 항목도 다시 정리한다 (결정 10 의 재정리 경로 시험용). --no-cache 와 별개다. */
+  force: boolean;
 };
 
 function parseArgs(argv: string[]): Args {
@@ -51,31 +78,51 @@ function parseArgs(argv: string[]): Args {
     vault: "fixtures/vault",
     dry: false,
     useEmbed: false,
+    useBm25: false,
     only: null,
     noCache: false,
-    threshold: 0.6,
-    topN: 8,
+    // 0.65 · 5 — 캐시된 임베딩으로 오프라인 계산(2026-09-15): 0.65 에서 재현율 86% · 정밀도 34%,
+    // 0.70 에서 62% · 67%. "러닝머신·헬스장 → 달리기" 가 0.67~0.76 에 있어 0.70 이면 하나를 놓친다.
+    threshold: 0.65,
+    topN: 5,
     prompt: "src/core/prompts/write.md",
     maxChars: 200_000,
+    relink: false,
+    meEvery: 20,
+    budget: 0,
+    expect: 0,
+    limit: 0,
+    force: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     if (k === "--vault") a.vault = argv[++i];
     else if (k === "--dry") a.dry = true;
     else if (k === "--embed") a.useEmbed = true;
+    else if (k === "--bm25") a.useBm25 = true;
     else if (k === "--only") a.only = argv[++i];
     else if (k === "--no-cache") a.noCache = true;
     else if (k === "--threshold") a.threshold = Number(argv[++i]);
     else if (k === "--top") a.topN = Number(argv[++i]);
     else if (k === "--prompt") a.prompt = argv[++i];
     else if (k === "--max-chars") a.maxChars = Number(argv[++i]);
+    else if (k === "--relink") a.relink = true;
+    else if (k === "--me-every") a.meEvery = Number(argv[++i]);
+    else if (k === "--budget") a.budget = Number(argv[++i]);
+    else if (k === "--expect") a.expect = Number(argv[++i]);
+    else if (k === "--limit") a.limit = Number(argv[++i]);
+    else if (k === "--force") a.force = true;
   }
   return a;
 }
 
 /** 처리한 항목의 지문. `missing` 은 원본이 사라져 기록에 `(출처 삭제됨)` 을 붙인 상태. */
 type SyncEntry = { hash: string; compiledAt: string; missing?: true };
-type SyncState = { notes: Record<string, SyncEntry> };
+type SyncState = {
+  notes: Record<string, SyncEntry>;
+  /** `나` 요약의 지문과, 그 지문이 유지된 동안 처리한 항목 수. 요약이 낡았는지 AI 에게 알리는 데 쓴다. */
+  me?: { summaryHash: string; age: number };
+};
 
 async function readSyncState(vault: string): Promise<SyncState> {
   try {
@@ -240,6 +287,87 @@ async function markDeletedSources(vault: string, state: SyncState, today: string
   await writeSyncState(vault, state);
 }
 
+/**
+ * `나` 요약을 다시 쓴다 — 노트 한 장의 호출로는 "지금의 나" 를 쓸 재료가 없다 (87장 뒤에도
+ * 첫 노트의 요약이 그대로였고, 힌트를 줘도 null 을 냈다). 그래서 N장마다 한 번, `나` 가 가리키는
+ * 페이지들의 요약을 모아 작은 별도 호출로 쓴다. 소스당 1회 원칙에 1/N 을 얹는다.
+ */
+async function refreshMeSummary(vault: string, today: string): Promise<boolean> {
+  const wiki = await loadWiki(vault);
+  const me = wiki.get("나");
+  if (!me) return false;
+  const sumSec = me.sections.find((s) => s.heading === "요약");
+  if (sumSec && !sumSec.ours) return false; // 사용자가 고친 요약은 건드리지 않는다
+  const linked = new Set(
+    me.sections
+      .flatMap((s) => s.content.match(/\[\[[^\]|#]+/g) ?? [])
+      .map((l) => normalizeTitle(l.slice(2))),
+  );
+  const lines = [...wiki.values()]
+    .filter((p) => linked.has(normalizeTitle(p.name)) && p.summary)
+    .map((p) => `- ${p.name}: ${p.summary}`);
+  const user = [
+    `<옛 요약>\n${me.summary}\n</옛 요약>`,
+    `<나에 관한 페이지들>\n${lines.join("\n")}\n</나에 관한 페이지들>`,
+    `<최근 기록>\n${me.records.slice(-10).join("\n")}\n</최근 기록>`,
+  ].join("\n\n");
+  const sys = await readFile("scripts/demo/me-summary.md", "utf8");
+  const { value } = await askJson<{ summary: string }>(
+    sys,
+    user,
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["summary"],
+      properties: { summary: { type: "string" } },
+    },
+    "me_summary",
+  );
+  const summary = value.summary.trim();
+  if (!summary || summary === me.summary) return false;
+  const md = buildMarkdown({
+    page: { name: "나", aliasesToAdd: [], summary, newSections: [], replaces: [], records: [] },
+    existing: me,
+    sourceName: null,
+    date: null,
+    today,
+  });
+  await commitFiles([{ path: wikiPath(vault, "나"), content: md, mustExist: true }]);
+  return true;
+}
+
+/** 새 페이지 이름들을 기존 페이지 본문에 소급해서 링크한다. 바뀐 파일 수를 돌려준다. */
+async function applyRetroLinks(
+  vault: string,
+  wiki: Map<string, WikiPage>,
+  newNames: string[],
+  skip: Set<string>,
+  today: string,
+): Promise<number> {
+  const targets = [...wiki.values()].filter((p) => !skip.has(normalizeTitle(p.name)));
+  const hits = retroLink(targets, newNames);
+  const writes: FileWrite[] = hits.map(({ page, content, summary }) => ({
+    path: wikiPath(vault, page.name),
+    content: buildMarkdown({
+      page: {
+        name: page.name,
+        aliasesToAdd: [],
+        summary,
+        newSections: [],
+        replaces: [...content].map(([heading, c]) => ({ heading, content: c })),
+        records: [],
+      },
+      existing: page,
+      sourceName: null,
+      date: null,
+      today,
+    }),
+    mustExist: true,
+  }));
+  await commitFiles(writes);
+  return writes.length;
+}
+
 /** 정리할 항목 하나 — 볼트 노트이거나 `sources/` 의 원본이다. */
 type Item = {
   /** sync_state 의 키. 볼트 기준 상대경로. */
@@ -277,7 +405,7 @@ async function collectItems(args: Args, today: string): Promise<Item[]> {
     }
     const rawHash = await rawHashOf(args.vault, src);
     // 입력 벽 7 — 출처 페이지의 raw_hash 가 같으면 이미 처리한 원본이다. 추출도 안 한다.
-    if (!args.noCache && (await readRawHash(args.vault, src)) === rawHash) {
+    if (!args.force && (await readRawHash(args.vault, src)) === rawHash) {
       items.push({ key: src.path, name: `@${src.name}`, body: "", date: null, hash: rawHash });
       continue;
     }
@@ -340,13 +468,32 @@ async function main(): Promise<void> {
 
   console.log(`볼트: ${args.vault}`);
   console.log(
-    `모델: ${args.dry ? "(호출 없음)" : MODELS.chat}${args.useEmbed ? ` + ${MODELS.embed}` : ""}`,
+    `모델: ${args.dry ? "(호출 없음)" : MODELS.chat}${args.useEmbed ? ` + ${MODELS.embed}` : ""}${args.useBm25 ? " + BM25" : ""}`,
   );
+  // 어느 판으로 쟀는지가 로그에 남아야 한다 — 프롬프트·정답 세트의 지문, 샘플링, 예산.
+  const promptText = await readFile(args.prompt, "utf8");
+  const evalText = await readFile(join(args.vault, "eval.json"), "utf8").catch(() => null);
+  console.log(
+    `설정: ${JSON.stringify(SETTINGS.sampling)} · 프롬프트 ${args.prompt} ${hash8(promptText)}` +
+      `${evalText ? ` · eval.json ${hash8(evalText)}` : ""}${args.budget ? ` · 예산 $${args.budget}` : ""}`,
+  );
+  usage.limitUsd = args.budget;
+  const balanceBefore = args.dry ? null : await balance();
+  if (balanceBefore !== null) console.log(`잔액: $${balanceBefore.toFixed(2)}`);
   console.log("");
 
   const systemPrompt = await readFile(args.prompt, "utf8");
   if (args.prompt !== "src/core/prompts/write.md") console.log(`프롬프트: ${args.prompt}`);
   const state = await readSyncState(args.vault);
+
+  // 소급 링크만 — 기존 볼트에 한 번 돌린다. 정리는 하지 않는다.
+  if (args.relink) {
+    const wiki = await loadWiki(args.vault);
+    const names = [...wiki.values()].map((p) => p.name);
+    const n = await applyRetroLinks(args.vault, wiki, names, new Set(), today);
+    console.log(`소급 링크: ${n}장 갱신`);
+    return;
+  }
 
   // 출처가 사라졌으면 기록에 표시한다. 돌아왔으면 뗀다.
   if (!args.dry) await markDeletedSources(args.vault, state, today);
@@ -360,13 +507,30 @@ async function main(): Promise<void> {
     console.log("처리할 것이 없습니다.");
     return;
   }
+  if (args.expect && items.length !== args.expect) {
+    console.log(
+      `항목 ${items.length}개 — --expect ${args.expect} 와 다릅니다. 호출하지 않고 멈춥니다.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  if (args.limit > 0) items = items.slice(0, args.limit);
+
+  // 맞춤법 사전 — 깨진 낱말 되돌리기의 두 번째 겹. 못 열면 인용만 되돌린다.
+  const isWord = args.dry ? undefined : await loadDictionary().catch(() => undefined);
+  if (!args.dry && !isWord) console.log("! 맞춤법 사전을 못 열어 본문의 오타는 되돌리지 않습니다");
 
   let calls = 0;
   let cached = 0;
   let embedOk = args.useEmbed;
   const allIssues: string[] = [];
+  // 예산 상한이나 스키마 실패가 잦으면 더 부르지 않는다. 처리 못 한 항목은 상태에 남기지 않아
+  // 다음 실행이 그 장부터 이어받는다.
+  let halted = false;
+  let schemaFails = 0;
 
   for (const item of items) {
+    if (halted) break;
     console.log(`── ${item.key}`);
     if (item.wall) {
       console.log(`   ! 입력벽 ${item.wall} — 건너뜁니다\n`);
@@ -377,7 +541,9 @@ async function main(): Promise<void> {
 
     // 입력 벽 7 — 이미 처리했고 내용이 그대로면 건너뛴다.
     const prev = state.notes[item.key];
-    if (prev && prev.hash === item.hash && !args.noCache) {
+    // --no-cache 는 응답 캐시만 끈다. 재개(sync_state)까지 끄면 실비 모델에서 처리한 장을 다시
+    // 부른다 — 2026-09-16 실측, 한 장 $0.03 을 두 번 냈다. 다시 정리하려면 --force.
+    if (prev && prev.hash === item.hash && !args.force) {
       console.log("   이미 처리했습니다 (해시 동일) — 건너뜁니다\n");
       continue;
     }
@@ -387,7 +553,8 @@ async function main(): Promise<void> {
     if (chunks.length > 1)
       console.log(`   ${args.maxChars}자를 넘어 ${chunks.length}청크로 나눕니다`);
 
-    for (let ci = 0; ci < chunks.length; ci++) {
+    let itemFailed = false;
+    for (let ci = 0; ci < chunks.length && !halted && !itemFailed; ci++) {
       const body = chunks[ci];
       const part = chunks.length > 1 ? `${ci + 1}/${chunks.length}` : null;
       // 다시 읽어 빌드하는 루프 — hashes 선행조건(결정 7 의 3단계). 데모는 단일 프로세스라
@@ -405,7 +572,7 @@ async function main(): Promise<void> {
         // 기록은 출처에서 파생된 것이므로 출처가 바뀌면 다시 파생한다. 삭제(표시만)와 다르다.
         // 사용자가 기록 절을 고친 페이지는 건드리지 않는다. 청크가 여럿이면 첫 청크에서만.
         const stale = new Set<string>();
-        if (ci === 0 && prev && prev.hash !== item.hash) {
+        if (ci === 0 && prev && (prev.hash !== item.hash || args.force)) {
           const tag = sourceTag(item.name);
           for (const page of wiki.values()) {
             if (!page.recordsOurs) continue;
@@ -419,7 +586,7 @@ async function main(): Promise<void> {
             console.log(`   다시 정리 — 기록을 걷어낸 페이지 ${stale.size}장`);
         }
 
-        // 후보 추리기 — 글자 일치는 항상, 뜻 유사도는 --embed 일 때만.
+        // 후보 추리기 — 글자 일치는 항상, 뜻 유사도는 --embed 일 때만, 낱말 겹침(BM25)은 --bm25 일 때만.
         // 임베딩이 막히면(한도 소진 등) 글자 일치만으로 계속 간다. 후보를 넓히는 보조
         // 수단 때문에 정리 자체가 멈추면 안 된다.
         let embedOpts;
@@ -449,11 +616,19 @@ async function main(): Promise<void> {
           hash: item.hash,
           date: item.date,
         };
-        const cands = pickCandidates(note, [...wiki.values()], embedOpts);
+        const cands = pickCandidates(
+          note,
+          [...wiki.values()],
+          embedOpts,
+          args.useBm25 ? { topN: args.topN } : undefined,
+        );
         if (attempt === 0) {
           if (cands.related.length) {
             const detail = cands.related
-              .map((p) => `${p.name}(${cands.why.get(p.name)})`)
+              .map((p) => {
+                const sc = cands.score.get(p.name);
+                return `${p.name}(${cands.why.get(p.name)}${sc === undefined ? "" : ` ${sc.toFixed(2)}`})`;
+              })
               .join(", ");
             console.log(`   후보 ${cands.related.length}장: ${detail}`);
           } else {
@@ -461,7 +636,17 @@ async function main(): Promise<void> {
           }
         }
 
-        const userMessage = buildUserMessage(note, cands, part);
+        // `나` 의 요약이 오래됐으면 알린다. "큰 그림이 바뀔 때만 고쳐라" 를 AI 는 "절대 고치지
+        // 마라" 로 받는다 — 87장 뒤에도 첫 노트의 요약이 그대로였다(23회차). 낡은 요약은
+        // 페이지를 열어도 안 보이는 오류라 코드가 세어서 보이게 한다.
+        const hints = new Map<string, string>();
+        if ((state.me?.age ?? 0) >= 15) {
+          hints.set(
+            "나",
+            `이 요약은 노트 ${state.me!.age}장 전에 쓴 것입니다. 지금의 나와 맞지 않으면 다시 쓰십시오`,
+          );
+        }
+        const userMessage = buildUserMessage(note, cands, part, hints);
 
         if (args.dry) {
           console.log("\n" + "─".repeat(70));
@@ -471,15 +656,36 @@ async function main(): Promise<void> {
         }
 
         // 같은 입력이면 캐시에서 온다 — 선행조건 재시도가 AI 를 다시 부르지 않는 이유.
-        const res = await writeWiki(systemPrompt, userMessage, {
-          noCache: args.noCache && attempt === 0,
-        });
+        let res: Awaited<ReturnType<typeof writeWiki>>;
+        try {
+          res = await writeWiki(systemPrompt, userMessage, {
+            noCache: args.noCache && attempt === 0,
+          });
+        } catch (e: unknown) {
+          if (e instanceof BudgetExceeded) {
+            console.log(`   ! ${e.message}`);
+            halted = true;
+            break;
+          }
+          // 형식 불량(JSON 아님·빈 응답)은 이 장만 건너뛴다. 한 장 때문에 서른 장 실행이 죽지 않게.
+          // 잦으면 모델이나 스키마 문제이므로 멈춘다.
+          if (e instanceof SyntaxError || (e instanceof Error && e.message.startsWith("빈 응답"))) {
+            schemaFails++;
+            console.log(`   ! 스키마-실패 — ${e.message.slice(0, 120)} → 이 노트를 건너뜁니다`);
+            allIssues.push(`${item.key} 스키마-실패`);
+            if (schemaFails > 2) halted = true;
+            itemFailed = true;
+            break;
+          }
+          throw e;
+        }
         if (attempt === 0) {
           if (res.cached) cached++;
           else calls++;
           console.log(
             `   AI ${res.cached ? "(캐시)" : "호출"} (입력 ${userMessage.length}자) → 페이지 ${res.pages.length}장`,
           );
+          if (!res.cached && usage.last) console.log(`   ${usage.last}`);
         }
 
         const verified = verify({
@@ -487,6 +693,8 @@ async function main(): Promise<void> {
           sourceBody: body,
           names: nameIndex(wiki.values()),
           existing: wiki,
+          vocabTexts: items.map((it) => it.body),
+          isWord,
         });
 
         if (attempt === 0) {
@@ -533,6 +741,12 @@ async function main(): Promise<void> {
           stale.delete(normalizeTitle(page.name));
         }
         // 기록을 걷어냈는데 이번 결과에 없는 페이지 — 걷어낸 상태 그대로 써서 남긴다.
+        // 단 AI 가 아무것도 안 냈으면(페이지 0장) 걷어내지 않는다 — 옛 기록만 사라지고 새
+        // 기록은 안 들어온다 (2026-09-17 실측: 다시 정리한 노트에서 기록 3줄이 그냥 없어졌다).
+        if (verified.pages.length === 0 && stale.size) {
+          logs.push(`   AI 가 낸 것이 없어 옛 기록 ${stale.size}장을 그대로 둡니다`);
+          stale.clear();
+        }
         for (const key of stale) {
           const existing = wiki.get(key)!;
           writes.push({
@@ -574,12 +788,44 @@ async function main(): Promise<void> {
 
         await commitFiles(writes);
         for (const l of logs) console.log(l);
+
+        // 이번 호출에서 새로 생긴 페이지 — 이미 쓰인 페이지 본문에 글자로 있으면 링크로 바꾼다.
+        const created = verified.pages
+          .filter((pg) => !wiki.has(normalizeTitle(pg.name)) && hasChanges(pg))
+          .map((pg) => pg.name);
+        if (created.length) {
+          const written = new Set(verified.pages.map((pg) => normalizeTitle(pg.name)));
+          const n = await applyRetroLinks(args.vault, wiki, created, written, today);
+          if (n) console.log(`   소급 링크 ${n}장 (${created.join(", ")})`);
+        }
         break;
       }
     }
 
+    if (halted || itemFailed) {
+      console.log("");
+      continue;
+    }
     if (!args.dry) {
       state.notes[item.key] = { hash: item.hash, compiledAt: new Date().toISOString() };
+      // `나` 요약의 나이 — 지문이 그대로면 한 장 더 늙는다.
+      const me = (await loadWiki(args.vault)).get("나");
+      const h = me ? hash8(me.summary) : "";
+      state.me =
+        state.me?.summaryHash === h
+          ? { summaryHash: h, age: state.me.age + 1 }
+          : { summaryHash: h, age: 0 };
+      if (args.meEvery > 0 && state.me.age >= args.meEvery) {
+        if (await refreshMeSummary(args.vault, today)) {
+          calls++;
+          const fresh = (await loadWiki(args.vault)).get("나");
+          state.me = { summaryHash: fresh ? hash8(fresh.summary) : "", age: 0 };
+          console.log(`   나 요약 갱신: ${fresh?.summary.slice(0, 80)}`);
+          if (usage.last) console.log(`   ${usage.last}`);
+        } else {
+          state.me = { summaryHash: h, age: 0 };
+        }
+      }
       // 항목마다 저장한다. 끝에서 한 번만 쓰면 중간에 죽었을 때 위키는 바뀌었는데
       // 상태는 안 남아, 다음 실행이 같은 노트를 다시 정리해 기록이 두 번 쌓인다.
       await writeSyncState(args.vault, state);
@@ -598,8 +844,23 @@ async function main(): Promise<void> {
   console.log("═".repeat(70));
   console.log(`위키 ${finalWiki.size}장 · 링크 ${links}개 · 문서당 ${density} (기준선 1.5)`);
   console.log(
-    `AI 호출 ${calls}회 · 캐시 ${cached}회 · 임베딩 ${embedStats.sent}항목 · 지적 ${allIssues.length}건`,
+    `AI 호출 ${calls}회 · 캐시 ${cached}회 · 임베딩 ${embedStats.sent}항목 · 지적 ${allIssues.length}건 · ${usageSummary()}`,
   );
+  // 지적을 종류별로 — 오타-되돌림 수가 곧 모델이 깨뜨린 낱말 수다.
+  const byKind = new Map<string, number>();
+  for (const line of allIssues) {
+    const kind = line.split(" ")[1] ?? "?";
+    byKind.set(kind, (byKind.get(kind) ?? 0) + 1);
+  }
+  if (byKind.size) console.log(`지적: ${[...byKind].map(([k, n]) => `${k} ${n}`).join(" · ")}`);
+  const balanceAfter = balanceBefore === null ? null : await balance();
+  if (balanceBefore !== null && balanceAfter !== null) {
+    const spent = (balanceBefore - balanceAfter).toFixed(3);
+    console.log(
+      // 차감은 몇 분 뒤에 반영되기도 한다. 다음 실행의 시작 잔액이 진짜 값이다.
+      `잔액: $${balanceBefore.toFixed(2)} → $${balanceAfter.toFixed(2)} (차감 $${spent} · 반영 지연 가능)`,
+    );
+  }
   if (finalWiki.size) {
     console.log(`\n만들어진 페이지: ${[...finalWiki.values()].map((p) => p.name).join(", ")}`);
   }

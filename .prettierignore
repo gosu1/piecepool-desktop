@@ -8,3 +8,4 @@ docs/superpowers/specs/2026-09-05-electron-rebuild-design.md
 
 # 실험 산출물은 바이트 그대로 둔다 — 파이프라인이 낸 결과의 스냅숏이다
 docs/experiments/*/wiki-snapshot/
+docs/experiments/*/wiki-*/

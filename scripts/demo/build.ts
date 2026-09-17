@@ -5,6 +5,7 @@
 
 import { hash8, normalizeTitle, type Fm5, type WikiPage } from "./vault.ts";
 import type { LlmPage } from "./llm.ts";
+import { buildVocab, restoreTypos } from "./spell.ts";
 
 export type VerifyIssue = {
   page: string;
@@ -16,6 +17,8 @@ export type VerifyIssue = {
     | "절-보호"
     | "이름-비었음"
     | "나-기록-중복"
+    | "기록-중복"
+    | "오타-되돌림"
     | "별칭-차단";
   detail: string;
 };
@@ -43,11 +46,15 @@ export type VerifyResult = {
   issues: VerifyIssue[];
 };
 
-/** quote 대조용 정규화. 공백과 구두점을 지운다. 조사나 어미를 다듬은 정도는 통과시킨다. */
+/**
+ * quote 대조용 정규화. 공백과 구두점, 마크다운 강조 표시를 지운다. 조사나 어미를 다듬은 정도는
+ * 통과시킨다. 강조 표시를 안 지우면 노트의 `23.5% → **14.0%**` 와 quote `23.5% → 14.0%` 가
+ * 안 맞아 정답 사실이 버려진다 (연구자 볼트 28·30회차 실측).
+ */
 function normQuote(s: string): string {
   return s
     .normalize("NFC")
-    .replace(/[\s.,!?"'`·…—\-()[\]{}]/g, "")
+    .replace(/[\s.,!?"'`·…—\-()[\]{}*_~>#|]/g, "")
     .toLowerCase();
 }
 
@@ -60,13 +67,14 @@ function findQuote(sourceBody: string, quote: string): { found: boolean; anchor:
   if (needle.length < 4) return { found: false, anchor: null };
 
   // 헤딩으로 구간을 나눈다. 헤딩이 없으면 구간이 하나뿐이고 anchor 는 null 이다.
+  // 헤딩의 강조 표시(`**총평**`)는 앵커에서 뺀다 — 옵시디언 링크 `#**총평**` 은 안 열린다 (41회차).
   const lines = sourceBody.split(/\r?\n/);
   let current: string | null = null;
   const segments: { anchor: string | null; text: string }[] = [{ anchor: null, text: "" }];
   for (const line of lines) {
     const h = /^#{1,6}\s+(.*)$/.exec(line);
     if (h) {
-      current = h[1].trim();
+      current = h[1].replace(/[*_`]/g, "").trim();
       segments.push({ anchor: current, text: "" });
     } else {
       segments[segments.length - 1].text += line + "\n";
@@ -80,6 +88,21 @@ function findQuote(sourceBody: string, quote: string): { found: boolean; anchor:
   for (const seg of segments) {
     const hay = normQuote(seg.text);
     if (needles.some((n) => hay.includes(n))) return { found: true, anchor: seg.anchor };
+  }
+
+  // 구간 하나에서 못 찾으면 문서 전체에서 찾는다 — 쪽 경계에 걸친 문장("probabil-" 과
+  // 다음 쪽의 "ities")과 줄 끝 하이픈이 여기 걸린다 (40·41회차: 논문 10건, 실물 9건).
+  // 벽은 그대로다: 원문에 글자 그대로 있어야 한다. 앵커는 인용이 시작하는 구간.
+  const hays = segments.map((seg) => normQuote(seg.text));
+  const whole = hays.join("");
+  for (const n of needles) {
+    const at = whole.indexOf(n);
+    if (at < 0) continue;
+    let offset = 0;
+    for (let i = 0; i < segments.length; i++) {
+      if (at < offset + hays[i].length) return { found: true, anchor: segments[i].anchor };
+      offset += hays[i].length;
+    }
   }
   return { found: false, anchor: null };
 }
@@ -129,20 +152,41 @@ function autoLink(text: string, names: string[], selfName: string): string {
     .sort((a, b) => b.length - a.length);
 
   // 이미 링크된 구간은 건드리지 않는다. 홀수 인덱스가 링크다.
-  const parts = text.split(/(\[\[[^\]]+\]\])/);
-  const done = new Set<string>();
-
-  for (let i = 0; i < parts.length; i += 2) {
-    for (const name of targets) {
-      const key = normalizeTitle(name);
-      if (done.has(key)) continue;
+  // 이름 하나를 감쌀 때마다 다시 나눈다 — 한 번만 나누면 방금 만든 `[[부산 여행]]` 안에서
+  // 짧은 이름 `여행` 을 또 찾아 `[[부산 [[여행]]]]` 이 된다 (10회차 실측, 깨진 링크 1).
+  let out = text;
+  for (const name of targets) {
+    const parts = out.split(/(\[\[[^\]]+\]\])/);
+    for (let i = 0; i < parts.length; i += 2) {
       const idx = parts[i].indexOf(name);
       if (idx < 0) continue;
       parts[i] = parts[i].slice(0, idx) + `[[${name}]]` + parts[i].slice(idx + name.length);
-      done.add(key);
+      break;
     }
+    out = parts.join("");
   }
-  return parts.join("");
+  return out;
+}
+
+/**
+ * 한 절 안에서 같은 이름의 링크는 첫 등장만 남기고 나머지는 글자로 푼다.
+ * K3 는 이름이 나올 때마다 `[[환각]]` 을 걸어 한 문단에 다섯 번씩 들어갔다 — 86장 볼트의
+ * 본문 링크 755개 중 275개가 이런 반복이었다 (40회차). 정답 세트(두 페이지가 이어졌나)에는
+ * 영향이 없고 읽기만 편해진다.
+ */
+function dedupeLinks(text: string): string {
+  const seen = new Set<string>();
+  return text.replace(
+    /\[\[([^\]|#]+)(#[^\]|]*)?(\|[^\]]+)?\]\]/g,
+    (whole, name: string, _anchor?: string, alias?: string) => {
+      const key = normalizeTitle(name);
+      if (!seen.has(key)) {
+        seen.add(key);
+        return whole;
+      }
+      return alias ? alias.slice(1) : name;
+    },
+  );
 }
 
 /** content 안의 `##` 는 `###` 으로 강등한다. 절 구조가 깨지는 것을 막되 내용은 살린다. */
@@ -180,6 +224,13 @@ export type VerifyInput = {
   names: NameIndex;
   /** 기존 위키. 절 매칭과 해시 확인에 쓴다. */
   existing: Map<string, WikiPage>;
+  /**
+   * 깨진 낱말을 되돌릴 때 쓰는 어휘의 출처 — 볼트의 노트 본문 전부. 위키 본문은 넣지 않는다:
+   * 앞 호출이 깨뜨린 낱말이 어휘에 들어가면 그 낱말은 영영 "맞는 낱말" 이 된다.
+   */
+  vocabTexts?: string[];
+  /** 맞춤법 사전 — 낱말이면 true. 없으면 본문·사실의 오타는 되돌리지 않는다 (인용은 원문이 검증). */
+  isWord?: (run: string) => boolean;
 };
 
 export function verify(input: VerifyInput): VerifyResult {
@@ -194,17 +245,44 @@ export function verify(input: VerifyInput): VerifyResult {
     files: new Set(input.names.files),
     aliases: new Map(input.names.aliases),
   };
+
+  // 출력 벽 6 — 파일 이름에 못 쓰는 글자를 뗀다. 프롬프트가 금지해도 AI 는
+  // "Numbers Lie First: …" 처럼 넣는다 (16회차). 이름만 떼고 링크를 안 고치면 파일은
+  // 콜론 없는 이름인데 링크는 콜론 있는 이름을 가리켜 깨진다. 이름을 고치고 본문의
+  // 링크도 같은 이름으로 바꾼다.
+  const rename = new Map<string, string>();
+  const llmPages = input.llmPages.map((p) => {
+    const raw = p.name?.trim() ?? "";
+    const safe = safeFileName(raw);
+    if (raw && safe !== raw) rename.set(normalizeTitle(raw), safe);
+    return { ...p, name: safe };
+  });
+  const fixLinks = (text: string) =>
+    rename.size === 0
+      ? text
+      : text.replace(/\[\[([^\]|#]+)([|#][^\]]*)?\]\]/g, (whole, name: string, rest?: string) => {
+          const to = rename.get(normalizeTitle(name));
+          return to ? `[[${to}${rest ?? ""}]]` : whole;
+        });
+
   // 자동 링크 대상 — 실재하는 페이지의 **표시 이름**이 필요하다.
   // `names` 는 정규화된 소문자라 본문에 그대로 끼울 수 없다.
   const displayNames = [
     ...[...input.existing.values()].map((w) => w.name),
-    ...input.llmPages.map((x) => x.name?.trim()).filter((x): x is string => !!x),
+    ...llmPages.map((x) => x.name).filter((x) => !!x),
   ];
-  for (const p of input.llmPages) {
-    if (p.name?.trim()) names.files.add(normalizeTitle(p.name.trim()));
+  for (const p of llmPages) {
+    if (p.name) names.files.add(normalizeTitle(p.name));
   }
 
-  for (const p of input.llmPages) {
+  // 깨진 낱말의 사전 — 이번 자료, 볼트의 노트들, 페이지 이름. 모델이 옮긴 낱말은 여기 있던 것이다.
+  const vocab = buildVocab([
+    input.sourceBody,
+    ...(input.vocabTexts ?? []),
+    ...[...input.existing.values()].map((w) => w.name),
+  ]);
+
+  for (const p of llmPages) {
     if (!p.name?.trim()) {
       issues.push({ page: "(이름 없음)", kind: "이름-비었음", detail: "페이지를 버렸습니다" });
       continue;
@@ -226,8 +304,32 @@ export function verify(input: VerifyInput): VerifyResult {
               : `[[${name}]] — 목록에 없습니다`,
       });
 
+    // 깨진 낱말은 링크를 걸기 전에 되돌린다 — 링크 대상 이름도 낱말이다.
+    // 인용은 원문이 검증하므로 사전 없이 되돌리고, 본문·사실은 사전이 "낱말 아님" 이라 할 때만.
+    const fixTypos = (text: string, where: "본문" | "사실" | "인용") =>
+      where === "인용" || input.isWord
+        ? restoreTypos(
+            text,
+            vocab,
+            (from, to) =>
+              issues.push({
+                page: p.name,
+                kind: "오타-되돌림",
+                detail: `${from}→${to} (${where})`,
+              }),
+            where === "인용" ? undefined : input.isWord,
+          )
+        : text;
     const clean = (text: string) =>
-      demoteHeadings(autoLink(stripUnknownLinks(text, names, p.name, strip), displayNames, p.name));
+      demoteHeadings(
+        dedupeLinks(
+          autoLink(
+            stripUnknownLinks(fixLinks(fixTypos(text, "본문")), names, p.name, strip),
+            displayNames,
+            p.name,
+          ),
+        ),
+      );
 
     // 별칭 차단 — 다른 페이지의 제목이나 별칭이면 넣지 않는다 (결정 9 의 예방 2겹째).
     // 넣으면 그 이름의 링크가 두 페이지에 걸려 해제된다.
@@ -307,10 +409,32 @@ export function verify(input: VerifyInput): VerifyResult {
       }
     }
 
+    // 이미 이 페이지에 있는 기록 — 같은 사실을 또 넣지 않는다. 관련 위키를 보낼 때 기록 절을
+    // 빼므로(프롬프트 크기) AI 는 이미 기록된 사실을 모른다. 그 몫을 코드가 맡는다.
+    const existingFacts = new Set(
+      (target?.records ?? []).map((line) =>
+        normQuote(
+          line
+            .replace(/^- (\d{4}-\d{2}-\d{2}|\(날짜 미상\))?\s*/, "")
+            .replace(/\s*←.*$/, "")
+            .replace(/\s*\(AI\)\s*$/, ""),
+        ),
+      ),
+    );
+
     const records: VerifiedRecord[] = [];
     for (const r of p.new_records ?? []) {
-      const { found, anchor } = findQuote(input.sourceBody, r.quote);
-      if (!found) {
+      let quote = r.quote;
+      let hit = findQuote(input.sourceBody, quote);
+      if (!hit.found) {
+        // 인용의 받침 오타 — 원문으로 되돌린 인용이 원문에 있으면 통과. 기록 줄에는 원문 글자.
+        const restored = fixTypos(quote, "인용");
+        if (restored !== quote) {
+          hit = findQuote(input.sourceBody, restored);
+          quote = restored;
+        }
+      }
+      if (!hit.found) {
         issues.push({
           page: p.name,
           kind: "quote-없음",
@@ -318,7 +442,18 @@ export function verify(input: VerifyInput): VerifyResult {
         });
         continue;
       }
-      records.push({ fact: r.fact.trim(), quote: r.quote, anchor });
+      const fact = fixTypos(r.fact.trim(), "사실");
+      const key = normQuote(fact);
+      if (existingFacts.has(key)) {
+        issues.push({
+          page: p.name,
+          kind: "기록-중복",
+          detail: `"${fact.slice(0, 40)}" 은 이미 있습니다`,
+        });
+        continue;
+      }
+      existingFacts.add(key);
+      records.push({ fact, quote, anchor: hit.anchor });
     }
 
     // 요약이 사용자 편집이면 덮지 않는다.
@@ -423,6 +558,16 @@ export function buildMarkdown(input: BuildInput): string {
       const before = existing?.sections.find((x) => x.heading === s.heading)?.content ?? "";
       s.content = linkSet(before + "\n" + s.content);
     }
+    // 링크 집합이 다른 절과 똑같은 절은 버린다. AI 가 `공부` 를 `공유` 로 잘못 내면 같은 링크
+    // 42개가 두 절에 들어가고, 합집합은 절 사이 중복을 못 잡는다 (7·11회차 실측). 뒤에 생긴
+    // 쪽을 버린다. 부분집합(`여행` ⊂ `공부`)은 분류이므로 둔다. 잠긴 절은 건드리지 않는다.
+    const linksOf = (c: string) => (c.match(/\[\[[^\]]+\]\]/g) ?? []).sort().join(" ");
+    for (let i = sections.length - 1; i >= 0; i--) {
+      const me = sections[i];
+      if (!me.ours || !me.content) continue;
+      const dup = sections.some((o, j) => j < i && linksOf(o.content) === linksOf(me.content));
+      if (dup) sections.splice(i, 1);
+    }
   }
 
   // 기록: append-only. 중복은 date + fact + source 로 판정한다.
@@ -508,6 +653,40 @@ export function buildMarkdown(input: BuildInput): string {
  * 갱신을 빈 깡통으로 오판했다 (2026-09-15 실측). Structured Outputs 로 JSON 이
  * 강제되고 `#` 을 코드가 찍는 지금은 글자 수를 볼 이유가 없다.
  */
+/**
+ * 소급 링크 — 페이지가 새로 생겼을 때, **이미 쓰인** 페이지 본문에 그 이름이 글자로 있는 자리를
+ * 링크로 바꾼다. `exp-007` 이 만들어질 때 `환각` 은 아직 절이어서 링크할 대상이 없었고, 나중에
+ * `환각` 이 페이지가 되어도 exp-007 은 다시 쓰이지 않는다 (연구자 볼트 실측). AI 없이 코드가
+ * 흡수한다. 우리 글인 절만 건드리고, 요약도 포함한다. 바뀐 페이지만 돌려준다.
+ */
+export function retroLink(
+  pages: Iterable<WikiPage>,
+  newNames: string[],
+): { page: WikiPage; content: Map<string, string>; summary: string | null }[] {
+  const targets = newNames.filter((n) => n.trim().length >= 2);
+  if (!targets.length) return [];
+  const out: { page: WikiPage; content: Map<string, string>; summary: string | null }[] = [];
+  for (const page of pages) {
+    const mine = normalizeTitle(page.name);
+    const names = targets.filter((n) => normalizeTitle(n) !== mine);
+    if (!names.length) continue;
+    const changed = new Map<string, string>();
+    let summary: string | null = null;
+    for (const s of page.sections) {
+      if (!s.ours) continue;
+      // 이 절에 이미 그 링크가 있으면 또 걸지 않는다.
+      const fresh = names.filter((n) => !s.content.toLowerCase().includes(`[[${n.toLowerCase()}`));
+      if (!fresh.length) continue;
+      const next = autoLink(s.content, fresh, page.name);
+      if (next === s.content) continue;
+      if (s.heading === "요약") summary = next;
+      else changed.set(s.heading, next);
+    }
+    if (changed.size || summary !== null) out.push({ page, content: changed, summary });
+  }
+  return out;
+}
+
 export function hasChanges(page: VerifiedPage): boolean {
   return (
     page.summary !== null ||

@@ -30,6 +30,8 @@
     "vitest": "^5.0.0"
   },
   "dependencies": {
+    "dictionary-ko": "^2.0.0",
+    "hunspell-asm": "^4.0.2",
     "pdfjs-dist": "^6.3.289"
   }
 }

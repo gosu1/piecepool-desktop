@@ -16,3 +16,11 @@ fixtures/vault-life/wiki/
 # 옵시디언 설정 — 사람마다 다르다. 픽스처 볼트를 열면 생긴다
 .obsidian/
 
+fixtures/vault-lab/wiki/
+fixtures/vault-lab/.piecepool/
+fixtures/vault-lab/sources/
+fixtures/vault-pm/wiki/
+fixtures/vault-pm/.piecepool/
+
+# 사업계획서 작업 파일 — 코드 레포에 넣지 않는다 (2026-09-16)
+docs/사업계획서/
