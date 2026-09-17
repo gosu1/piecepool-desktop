@@ -29,7 +29,22 @@
 - `reasoning_effort: "high"` did not change the rate (17 spots / 36 pages).
 - `kimi-k2.6` (thinking disabled) on the same 30 notes: 1 spot. Gemini flash-lite on the same notes: 0.
 
-**Reproduction.** A single-turn request that asks the model to quote the input verbatim reproduces it. For example, with system prompt "Return JSON `{ \"quote\": string }` where `quote` is a phrase copied exactly from the user message" and user message containing `졸업: 내년 6월. 해법을 찾는다.`, we observed `"quote": "졸업: 낸년 6월"` and `"해법을" → "핵법을"` across runs (not deterministic; roughly one word in ten of copied text).
+**Minimal reproduction (run 2026-09-17, 6 requests, ~$0.03).** System prompt: `Return JSON { "quotes": string[] } where each item is a phrase copied exactly, character for character, from the user message. Copy all sentences.` User message (8 short Korean sentences): `졸업: 내년 6월. 해법을 찾는다. 아무도 안 잰 것 같다. 운동을 시작했다. 자르면 정확도 0.72. 파운데이션 모델을 쓴다. 이해도가 높다. 싱클레어의 인생이 나와 닮았다.` — `reasoning_effort: "low"`, strict `json_schema`.
+
+Result: **48 of 48 copied sentences were altered** (6 runs × 8 sentences; not one came back verbatim). Every run broke the same words, each in a slightly different way:
+
+| Input      | Outputs observed (count)                   |
+| ---------- | ------------------------------------------ |
+| 내년       | 난년 (1) · 낮년 (1) · 남년 (2) · 난 (1)    |
+| 해법을     | 핫법을 (1) · 핸법을 (2) · 핵법을 (2)       |
+| 아무도     | 아묻도 (5)                                 |
+| 운동을     | 울동을 (5)                                 |
+| 자르면     | 자륵면 (2) · 자륾면 (1) · 자륨면 (2)       |
+| 파운데이션 | 파울데이션 (5)                             |
+| 이해도가   | 이핻도가 (2) · 이핸도가 (1)                |
+| 싱클레어   | 싱큌레어 (1) · 싱큝레어 (1) · 싱큸레어 (1) |
+
+The pattern is consistent with the model emitting a wrong final-consonant (jamo) code point for an open syllable — the initial consonant and usually the vowel survive, the final consonant is invented. The same request against `kimi-k2.6` (thinking disabled) returns the sentences verbatim.
 
 **Why it matters.** Any product that lets K3 write Korean prose ships visible typos in ~40–70% of pages. We have added a client-side repair step (restoring corrupted words from the source vocabulary, gated by a Korean spell-checker), but this is a decoding-level defect that only the model side can fix properly.
 
