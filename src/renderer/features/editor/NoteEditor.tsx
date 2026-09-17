@@ -27,6 +27,8 @@ import { refreshWikiTerms, wikiTermExtension } from "./cmWikiTerm.ts";
 
 const theme = EditorView.theme({
   "&": { color: "var(--ds-ink)", fontSize: "15px", backgroundColor: "transparent" },
+  // CM 기본 테마가 .cm-scroller 에 monospace 를 박는다 — 한글이 타자기 글꼴로 나온다. 앱 글꼴을 물려받는다.
+  ".cm-scroller": { fontFamily: "inherit" },
   ".cm-content": {
     fontFamily: "inherit",
     caretColor: "var(--ds-ink)",
