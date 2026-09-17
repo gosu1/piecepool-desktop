@@ -18,13 +18,14 @@
 
 **헷갈리면 여기를 먼저 본다.** 이름이 같아서 엉뚱한 곳을 고치게 되는 자리들이다.
 
-| 이름        | 하나                                                    | 다른 하나                                                                                                 |
-| ----------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| **lint**    | `npm run lint` = **ESLint.** 우리 소스의 경계 규칙 검사 | `npm run wiki:lint` = **제품 기능.** 사용자 볼트의 깨진 링크·고아·중복을 보고한다 (`agent/tasks/lint.ts`) |
-| **git**     | 이 저장소                                               | **사용자 볼트**의 git. `core/git/` 은 이쪽이다 (§3)                                                       |
-| **written** | `Written` 클래스 — 툴이 쓴 경로만 모은다                | `IngestResult.written` — **툴이 쓴 것 ∪ `extraPaths`.** 둘은 같지 않다                                    |
-| **sources** | 볼트의 `sources/` 폴더 — 원본 파일                      | `Fm.sources` — 프론트매터 필드. **세션 로그(`.piecepool/sessions/`)도 여기 들어간다**                     |
-| **index**   | `src/core/index/` — 링크 색인                           | `src/main/index.ts` 같은 `index.ts` — 진입점 파일                                                         |
+| 이름         | 하나                                                                                                                   | 다른 하나                                                                                                                                                              |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **lint**     | `npm run lint` = **ESLint.** 우리 소스의 경계 규칙 검사                                                                | `npm run wiki:lint` = **제품 기능.** 사용자 볼트의 깨진 링크·고아·중복을 보고한다 (`agent/tasks/lint.ts`)                                                              |
+| **git**      | 이 저장소                                                                                                              | **사용자 볼트**의 git. `core/git/` 은 이쪽이다 (§3)                                                                                                                    |
+| **written**  | `Written` 클래스 — 툴이 쓴 경로만 모은다                                                                               | `IngestResult.written` — **툴이 쓴 것 ∪ `extraPaths`.** 둘은 같지 않다                                                                                                 |
+| **sources**  | 볼트의 `sources/` 폴더 — 원본 파일                                                                                     | `Fm.sources` — 프론트매터 필드. **세션 로그(`.piecepool/sessions/`)도 여기 들어간다**                                                                                  |
+| **index**    | `src/core/index/` — 링크 색인                                                                                          | `src/main/index.ts` 같은 `index.ts` — 진입점 파일                                                                                                                      |
+| **ADR-0004** | [`docs/adr/0004-graph-canvas-d3force.md`](docs/adr/0004-graph-canvas-d3force.md) — 그래프 렌더링(Canvas 2D + d3-force) | [`docs/adr/legacy/0004-markdown-editor-codemirror6.md`](docs/adr/legacy/0004-markdown-editor-codemirror6.md) — 마크다운 에디터(CodeMirror 6), §9 표에 남은 legacy 번호 |
 
 파일 이름은 바꾸지 않는다. 설계문서가 `lint` 로 규정했고 `agent/tasks/*` 진입점은 동결이다.
 
@@ -46,15 +47,15 @@
 
 ## 1. 손대도 되는 곳 / 안 되는 곳
 
-| 폴더                         |                                                                     |
-| ---------------------------- | ------------------------------------------------------------------- |
-| `src/core/` · `src/cli/`     | 작업 구역. 단 **본인 담당 구간만** 손댄다                           |
-| `src/shared/`                | **동결.** 합의 없이 고치지 않는다                                   |
-| `src/main/` · `src/preload/` | **7단계까지 스텁 유지.** 지금 채우지 않는다                         |
-| `src/renderer/`              | **8단계까지 스텁 유지.** 지금 채우지 않는다                         |
-| `docs/adr/legacy/`           | **읽기 전용.** 구 레포 원문 보존용이다. 내용도 포맷도 바꾸지 않는다 |
-| `docs/superpowers/specs/`    | 설계문서. **합의 없이 고치지 않는다**                               |
-| `docs/adr/`                  | 새 ADR 추가는 가능. 기존 ADR 수정은 합의                            |
+| 폴더                         |                                                                            |
+| ---------------------------- | -------------------------------------------------------------------------- |
+| `src/core/` · `src/cli/`     | 작업 구역. 단 **본인 담당 구간만** 손댄다                                  |
+| `src/shared/`                | **동결.** 합의 없이 고치지 않는다                                          |
+| `src/main/` · `src/preload/` | `index.ts`·`ipc.ts`·`preload/` 가 채워졌다. `keys.ts` 는 스텁 유지         |
+| `src/renderer/`              | **8단계 진행 중.** `app/`·`store/`·`features/` 가 있다. `ds/` 는 아직 없다 |
+| `docs/adr/legacy/`           | **읽기 전용.** 구 레포 원문 보존용이다. 내용도 포맷도 바꾸지 않는다        |
+| `docs/superpowers/specs/`    | 설계문서. **합의 없이 고치지 않는다**                                      |
+| `docs/adr/`                  | 새 ADR 추가는 가능. 기존 ADR 수정은 합의                                   |
 
 담당 구간은 두 갈래다. **A = 문서 → wiki**(`ingest/` · `agent/tasks/ingest.ts`), **B = wiki → query**(`agent/tasks/query.ts` · 수확 · 세션 로그).
 `vault/` · `index/` · `git/` · `agent/` · `llm/` 은 공유 구역이다.
@@ -95,7 +96,8 @@ PR 상태 · CI 결과 · 브랜치 · 파일 존재 · 머지 여부. 이전 �
 | `// OWNER:`  | 가배치. 소유자가 자유롭게 바꾼다                 |
 | 둘 다 없음   | 내부 구현. 소유자 단독                           |
 
-동결은 14곳이고 **일부는 파일 전체가 아니라 특정 함수만**이다. 마커에 적힌 범위를 읽어라.
+동결은 15곳이고 **일부는 파일 전체가 아니라 특정 함수만**이다. 마커에 적힌 범위를 읽어라.
+목록은 두 곳에 나뉘어 있다 — 0단계 설계 §8 에 14곳, `shared/ipc.ts` 는 [ADR-0005](docs/adr/0005-ipc-contract-and-renderer-state.md) 에 있다.
 
 ### 볼트의 git 과 이 레포의 git 을 혼동하지 마라
 
@@ -143,6 +145,12 @@ addSource(fm, "...")       // 이렇게
 
 맵을 만드는 쪽과 조회하는 쪽이 다른 정규화를 쓰면 **볼트 전체가 깨진 링크**가 되는데, 타입은 아무것도 안 잡아 준다.
 
+### ESM 엔트리에서 top-level `await` 을 쓰지 마라
+
+`src/main/index.ts` 는 Electron 의 엔트리다. Electron 은 **엔트리 모듈의 평가가 끝난 뒤에** `ready` 를 emit 하는데, `bootstrap()` 이 `app.whenReady()` 를 기다리므로 top-level `await` 을 걸면 서로를 기다린다.
+
+에러도 없고 종료도 안 한다. **창 없는 프로세스 하나로 조용히 멈춘다.** `void bootstrap()` 인 이유다.
+
 ---
 
 ## 5. 스텁을 만났을 때
@@ -151,8 +159,9 @@ addSource(fm, "...")       // 이렇게
 throw new Error("unimplemented: core/vault/notes.readNote");
 ```
 
-**버그가 아니다.** 0단계의 정상 상태이고 45곳이 그렇다.
-실동작하는 것은 `core/assets.ts` · `core/prompts/load.ts` · `main/ipc.ts` 의 `wrap()` 세 곳뿐이다.
+**버그가 아니다.** `src/core` 는 아직 36곳이 이 상태다 (`main` 3 · `preload` 0 · `cli` 0).
+`core/assets.ts` · `core/prompts/load.ts` 외에,
+`main/index.ts` · `main/ipc.ts` · `preload/` 와 `renderer/` 전체는 이제 실동작한다 (7·8단계 진행 중).
 
 - **요청받지 않은 스텁을 채우지 마라.** 지나가다 구현하지 않는다
 - 실행이 `unimplemented` 로 죽는 것이 현재의 통과 조건이다. 성공이 아니다
@@ -202,16 +211,19 @@ docs: 설계문서에 파서 타입 반영
 
 이미 정해진 것이 있고, 값을 치르고 얻은 결론이다. 다른 것을 설치하기 전에 근거를 확인한다.
 
-| 무엇            | 정해진 것                                                                                                                        | 어디                               |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| PDF 텍스트 추출 | `pdfjs-dist` **legacy 빌드** 단독. CMap 자산 필수                                                                                | 상위 §7.1 · legacy ADR-0005 · 0010 |
-| 볼트 git        | `isomorphic-git`. 네이티브 의존성 없음                                                                                           | 상위 §4.3                          |
-| 마크다운 에디터 | CodeMirror 6                                                                                                                     | legacy ADR-0004                    |
-| 그래프 렌더링   | Cytoscape.js                                                                                                                     | legacy ADR-0006                    |
-| LLM 공급자      | **Kimi K3**, `reasoning_effort: low` (OpenAI 호환 엔드포인트). 실측 `docs/experiments/2026-09-16-k3/`                            | 2026-09-15 합의 · 09-17 실측       |
-| 임베딩          | **당장 안 쓴다.** 후보 추리기는 BM25(모델 없음). 정답 세트에서 BM25 가 놓치는 것이 드러나면 Upstage/BGE-M3 를 볼트로 재서 고른다 | ADR-0002 결정 3 (2026-09-16 개정)  |
-| 한국어 맞춤법   | `hunspell-asm` + `dictionary-ko` — K3 가 깨뜨린 낱말을 되돌리는 두 번째 그물. 본문 표시는 안 한다                                | ADR-0002 결정 4 (2026-09-17 추가)  |
-| OCR             | **v1 범위 밖.** 텍스트 0자면 `parse_failed`                                                                                      | legacy ADR-0003                    |
+| 무엇            | 정해진 것                                                                                                                        | 어디                                                         |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| PDF 텍스트 추출 | `pdfjs-dist` **legacy 빌드** 단독. CMap 자산 필수                                                                                | 상위 §7.1 · legacy ADR-0005 · 0010                           |
+| 볼트 git        | `isomorphic-git`. 네이티브 의존성 없음                                                                                           | 상위 §4.3                                                    |
+| 스타일          | Tailwind v4 + 구 레포 `--ds-*` 토큰                                                                                              | 2026-09-14 크롬 설계 §3.2                                    |
+| 빌드 배선       | 패키징 전까지 vite 수동 설정. electron-vite 는 유예                                                                              | [ADR-0003](docs/adr/0003-manual-vite-until-packaging.md)     |
+| 마크다운 에디터 | CodeMirror 6                                                                                                                     | legacy ADR-0004                                              |
+| 그래프 렌더링   | Canvas 2D + d3-force. Cytoscape 는 안 쓴다                                                                                       | [ADR-0004](docs/adr/0004-graph-canvas-d3force.md)            |
+| LLM 공급자      | **Kimi K3**, `reasoning_effort: low` (OpenAI 호환 엔드포인트). 실측 `docs/experiments/2026-09-16-k3/`                            | 2026-09-15 합의 · 09-17 실측                                 |
+| 임베딩          | **당장 안 쓴다.** 후보 추리기는 BM25(모델 없음). 정답 세트에서 BM25 가 놓치는 것이 드러나면 Upstage/BGE-M3 를 볼트로 재서 고른다 | ADR-0002 결정 3 (2026-09-16 개정)                            |
+| 한국어 맞춤법   | `hunspell-asm` + `dictionary-ko` — K3 가 깨뜨린 낱말을 되돌리는 두 번째 그물. 본문 표시는 안 한다                                | ADR-0002 결정 4 (2026-09-17 추가)                            |
+| 상태 관리       | zustand. renderer 는 `core`·`main` 을 import 할 수 없어(eslint zone) 스토어 뒤에 IPC 를 둔다                                     | [ADR-0005](docs/adr/0005-ipc-contract-and-renderer-state.md) |
+| OCR             | **v1 범위 밖.** 텍스트 0자면 `parse_failed`                                                                                      | legacy ADR-0003                                              |
 
 ### 정해진 것 — ADR-0002
 

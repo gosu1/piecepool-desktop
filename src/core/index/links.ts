@@ -23,8 +23,47 @@ export interface LinkTargets {
  * 구 레포 PIE-64: "교착상태" 와 "교착 상태" 로 위키가 두 장 생겼다.
  */
 export function normalizeTitle(t: string): string {
-  throw new Error("unimplemented: core/index/links.normalizeTitle");
+  // NFC 를 먼저 태운다 — macOS 는 파일명을 NFD 로 저장하므로 안 하면
+  // 같은 한글 제목이 플랫폼마다 다른 키가 된다.
+  return t.normalize("NFC").trim().toLowerCase().replace(/\s+/g, "");
 }
+
+/**
+ * 코드 펜스와 인라인 코드를 **같은 길이의 공백**으로 지운다.
+ * 길이를 유지하는 이유: 나중에 링크 위치(offset)가 필요해질 때 통째로 밀리지 않는다.
+ */
+function blankCode(body: string): string {
+  const lines = body.split("\n");
+  let fenceChar: string | null = null;
+  let fenceLen = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const m = /^\s*(`{3,}|~{3,})/.exec(line);
+
+    if (fenceChar === null) {
+      if (m !== null) {
+        fenceChar = m[1][0];
+        fenceLen = m[1].length;
+        lines[i] = " ".repeat(line.length);
+        continue;
+      }
+      // 백틱 런의 길이가 같은 쌍만 인라인 코드다.
+      lines[i] = line.replace(/(`+)[^\n]*?\1/g, (s) => " ".repeat(s.length));
+      continue;
+    }
+
+    // 펜스 안이다. 닫으려면 같은 문자에 길이가 여는 쪽 이상이어야 한다 —
+    // 백틱 넷으로 연 블록 안의 백틱 셋짜리 예제는 그 블록을 닫지 못한다(CommonMark).
+    if (m !== null && m[1][0] === fenceChar && m[1].length >= fenceLen) fenceChar = null;
+    lines[i] = " ".repeat(line.length);
+  }
+
+  return lines.join("\n");
+}
+
+/** `!` 여부 + `[[…]]` 안쪽. 대괄호와 줄바꿈은 안쪽에 들어올 수 없다. */
+const LINK = /(!?)\[\[([^\]\n]+)\]\]/g;
 
 /**
  * 옵시디언 규칙 그대로다.
@@ -40,7 +79,37 @@ export function normalizeTitle(t: string): string {
  * 설명하는 위키 페이지마다 유령 깨진 링크가 lint 에 영구히 남는다.
  */
 export function parseLinks(from: NotePath, body: string): LinkRef[] {
-  throw new Error("unimplemented: core/index/links.parseLinks");
+  const refs: LinkRef[] = [];
+
+  for (const m of blankCode(body).matchAll(LINK)) {
+    const embed = m[1] === "!";
+
+    // 별칭을 먼저 가른다 — 표시 텍스트에 # 가 있어도 fragment 로 오해하지 않는다.
+    const bar = m[2].indexOf("|");
+    const aliasRaw = bar === -1 ? "" : m[2].slice(bar + 1).trim();
+    let to = (bar === -1 ? m[2] : m[2].slice(0, bar)).trim();
+
+    let page: number | undefined;
+    const hash = to.indexOf("#");
+    if (hash !== -1) {
+      const pm = /^page=(\d+)$/.exec(to.slice(hash + 1));
+      if (pm !== null) page = Number(pm[1]);
+      to = to.slice(0, hash).trim();
+    }
+
+    if (to === "") continue;
+
+    refs.push({
+      from,
+      to,
+      embed,
+      ...(aliasRaw === "" ? {} : { alias: aliasRaw }),
+      ...(page === undefined ? {} : { page }),
+      resolved: null,
+    });
+  }
+
+  return refs;
 }
 
 /**
@@ -49,9 +118,12 @@ export function parseLinks(from: NotePath, body: string): LinkRef[] {
  * from 을 받는 이유: 옵시디언은 동명 노트가 있을 때 링크가 놓인 노트에
  * 가까운 후보를 우선한다. from 이 없으면 그 규칙도 상대경로도 구현할 수 없다.
  * 모호성 자체를 사용자에게 보고하는 것은 lint 규칙의 몫이다.
+ *
+ * 지금은 `from` 을 쓰지 않는다. 동명 노트는 맵에 먼저 들어온 것이 이기고,
+ * 모호성 보고는 lint 규칙의 몫이다 (2026-09-16 그래프 뷰 설계 §4.3).
  */
 export function resolveLink(from: NotePath, to: string, t: LinkTargets): NotePath | null {
-  throw new Error("unimplemented: core/index/links.resolveLink");
+  return t.titles.get(normalizeTitle(to)) ?? (t.files.has(to) ? to : null);
 }
 
 export function backlinksOf(p: NotePath, all: LinkRef[]): NotePath[] {
