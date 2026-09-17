@@ -159,7 +159,7 @@ addSource(fm, "...")       // 이렇게
 throw new Error("unimplemented: core/vault/notes.readNote");
 ```
 
-**버그가 아니다.** `src/core` 는 아직 36곳이 이 상태다 (`main` 3 · `preload` 0 · `cli` 0).
+**버그가 아니다.** `src/core` 는 아직 25곳이 이 상태다 (`main` 3 · `preload` 0 · `cli` 0).
 `core/assets.ts` · `core/prompts/load.ts` 외에,
 `main/index.ts` · `main/ipc.ts` · `preload/` 와 `renderer/` 전체는 이제 실동작한다 (7·8단계 진행 중).
 
