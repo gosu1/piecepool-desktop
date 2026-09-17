@@ -75,3 +75,23 @@
 - **renderer 상태를 Context 로**: 위 근거 참조. 드래그 중 전체 리렌더가 값이다
 - **상태 라이브러리 없이 `useState` 만**: 사이드바 너비·탭 목록·칸 구조를 props 로 내리면
   `Shell → Pane → TabStrip` 3단 prop drilling 이 된다
+
+## 추가 — 정리 채널 (2026-09-17)
+
+3·4단계가 끝나 정리와 되돌리기를 화면에 잇는 채널이 필요해졌다. `shared/ipc.ts` 에 일곱을 더한다 —
+`vault:tree` · `ingest:pending` · `ingest:sync` · `ingest:progress`(main → renderer 이벤트) · `restore:plan` ·
+`restore:apply` · `key:has` · `key:set`. 타입은 `RestorePlan` · `IngestCommit` · `IngestSummary`.
+왕민이 프론트를 넘긴 뒤(09-17)라 합의는 인계로 갈음한다.
+
+- **renderer 가 경로를 보내는 두 번째 자리가 생겼다.** `restore:apply` 의 경로 목록이다. main 은
+  문자열인지만 보고, 그 커밋이 건드린 경로인지는 `core/git/restore` 가 확인해 아니면 거부한다
+- **키는 한 방향이다.** `key:set` 은 값을 main 으로 보내고 safeStorage 에 두며, 되읽는 채널은 없다.
+  renderer 는 `key:has` 의 불리언만 안다. 과금을 앱이 맡는 방식이 정해지면 이 둘은 사라진다
+- **진행은 요청한 창으로만 보낸다.** `ingest:sync` 를 부른 `webContents` 에 `ingest:progress` 를 쏜다.
+  창이 여럿이어도 엉뚱한 창에 진행이 가지 않는다
+- **git 신원은 묻지 않는다.** 처음 안은 `git:identity` 채널로 이름을 받는 것이었으나 사용자가
+  "무슨 이름을 넣으라는 건가" 로 거부했다(09-17). 봉인 커밋의 작성자는 볼트에 git 이름이 있으면 그것,
+  없으면 OS 계정 이름이다. 상위 §4.3 의 "앱이 임의 신원을 지어내지 않는다" 는 "지어내지 않되 묻지도 않는다"
+  로 읽는다 — 로그인한 이름은 지어낸 것이 아니다
+- 트리거는 명시적 [정리하기] 버튼이다. 편집기가 생기면 "노트가 식었을 때" 자동으로 바꾸는 안을 벤치마킹으로
+  검토했다(Notion autofill 의 편집 뒤 5분, Smart Connections 의 일시정지). 결과는 OS 알림 + 앱 안 토스트

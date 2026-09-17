@@ -1,6 +1,12 @@
 import type { ReactNode } from "react";
 import { IS_MAC } from "../bridge.ts";
-import { GRAPH_TAB_ID, QUERY_TAB_ID, RIBBON_WIDTH, useWorkspace } from "../store/workspace.ts";
+import {
+  GRAPH_TAB_ID,
+  INGEST_TAB_ID,
+  QUERY_TAB_ID,
+  RIBBON_WIDTH,
+  useWorkspace,
+} from "../store/workspace.ts";
 
 /**
  * 리본 아이콘 하나.
@@ -36,7 +42,7 @@ function RibbonButton({
   );
 }
 
-/** 좌측 아이콘 바. 사이드바 토글 · 그래프 · 쿼리 셋이다. */
+/** 좌측 아이콘 바. 사이드바 토글 · 그래프 · 쿼리 · 정리 넷이다. */
 export function Ribbon() {
   const sidebarOpen = useWorkspace((s) => s.sidebarOpen);
   const toggleSidebar = useWorkspace((s) => s.toggleSidebar);
@@ -44,6 +50,8 @@ export function Ribbon() {
   const graphActive = useWorkspace((s) => s.panes.some((p) => p.activeTab === GRAPH_TAB_ID));
   const openQueryTab = useWorkspace((s) => s.openQueryTab);
   const queryActive = useWorkspace((s) => s.panes.some((p) => p.activeTab === QUERY_TAB_ID));
+  const openIngestTab = useWorkspace((s) => s.openIngestTab);
+  const ingestActive = useWorkspace((s) => s.panes.some((p) => p.activeTab === INGEST_TAB_ID));
 
   return (
     <nav
@@ -103,6 +111,21 @@ export function Ribbon() {
           <circle cx="5.5" cy="7" r="0.5" fill="currentColor" stroke="none" />
           <circle cx="8" cy="7" r="0.5" fill="currentColor" stroke="none" />
           <circle cx="10.5" cy="7" r="0.5" fill="currentColor" stroke="none" />
+        </svg>
+      </RibbonButton>
+
+      <RibbonButton label="정리" active={ingestActive} onClick={openIngestTab}>
+        {/* 화살표 둘이 도는 모양 — 노트를 위키로 돌린다. */}
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+        >
+          <path d="M13 8a5 5 0 0 0-8.7-3.4M3 8a5 5 0 0 0 8.7 3.4" />
+          <path d="M4.3 1.8v2.9h2.9M11.7 14.2v-2.9H8.8" />
         </svg>
       </RibbonButton>
     </nav>

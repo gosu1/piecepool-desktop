@@ -45,10 +45,19 @@
     "zustand": "^5.0.15"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "^6.20.3",
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/state": "^6.7.5",
+    "@codemirror/view": "^6.43.12",
+    "@lezer/highlight": "^1.2.3",
+    "@uiw/react-codemirror": "^4.25.11",
     "d3-force": "^3.0.0",
     "dictionary-ko": "^2.0.0",
     "hunspell-asm": "^4.0.2",
     "isomorphic-git": "^1.42.2",
+    "katex": "^0.17.0",
     "pdfjs-dist": "^6.3.289"
   }
 }

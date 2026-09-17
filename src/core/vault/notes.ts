@@ -1,6 +1,6 @@
 // FROZEN: retitleNote 를 뺀 전체 (0단계 설계 §8)
 // retitleNote 는 가배치 5단계.
-import { readFile } from "node:fs/promises";
+import { readFile, rename, writeFile } from "node:fs/promises";
 import type { Note, NotePath, Vault } from "../../shared/types.ts";
 import { resolveInVault } from "./paths.ts";
 
@@ -19,8 +19,14 @@ export async function readNote(v: Vault, p: NotePath): Promise<Note> {
   throw new Error("unimplemented: core/vault/notes.readNote");
 }
 
+/**
+ * 글자 그대로 쓴다. 옆에 tmp 를 쓰고 rename 한다 — 도중에 죽어도 반쪽 파일이 남지 않는다.
+ * 프론트매터를 보존하는 책임은 호출부(vault/edit.saveBody)에 있다. 여기는 경로 방어와 원자 쓰기뿐이다.
+ */
 export async function writeNote(v: Vault, p: NotePath, content: string): Promise<void> {
-  throw new Error("unimplemented: core/vault/notes.writeNote");
+  const abs = await resolveInVault(v, p);
+  await writeFile(abs + ".tmp", content, "utf8");
+  await rename(abs + ".tmp", abs);
 }
 
 /** 링크를 따라 고친다 — 이 문서를 가리키는 [[링크]] 를 전부 갱신한다. */

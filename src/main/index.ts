@@ -17,6 +17,9 @@ const IS_MAC = process.platform === "darwin";
 export async function bootstrap(): Promise<void> {
   await app.whenReady();
 
+  // Windows 토스트 알림은 AppUserModelID 가 있어야 뜬다. 패키징 전 개발 실행에서는 이 값으로 충분하다.
+  if (process.platform === "win32") app.setAppUserModelId("dev.piecepool");
+
   // Electron 기본 메뉴(File·Edit·View·Window·Help)를 쓰지 않는다.
   // DevTools 단축키도 저 기본 메뉴가 달아 주던 것이라 함께 사라진다.
   Menu.setApplicationMenu(null);

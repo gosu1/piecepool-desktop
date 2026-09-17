@@ -6,6 +6,7 @@ import {
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
   noteTabId,
+  INGEST_TAB_ID,
   QUERY_TAB_ID,
   stripFrontmatter,
   useWorkspace,
@@ -261,6 +262,8 @@ describe("그래프 탭", () => {
               body: "",
               error: null,
               seq: 1,
+              dirty: false,
+              saveError: null,
             },
           ],
           activeTab: noteTabId("graph"),
@@ -286,6 +289,8 @@ describe("그래프 탭", () => {
               body: "",
               error: null,
               seq: 1,
+              dirty: false,
+              saveError: null,
             },
             { kind: "graph", id: GRAPH_TAB_ID, title: "그래프" },
           ],
@@ -316,6 +321,11 @@ describe("쿼리 탭", () => {
     useWorkspace.getState().openQueryTab();
     expect(tabs0()).toEqual([{ kind: "query", id: QUERY_TAB_ID, title: "쿼리" }]);
     expect(active0()).toBe(QUERY_TAB_ID);
+    // 정리 탭도 같은 길이다 — 상수 id, 한 칸에 하나.
+    useWorkspace.getState().openIngestTab();
+    useWorkspace.getState().openIngestTab();
+    expect(tabs0().map((t) => t.id)).toEqual([QUERY_TAB_ID, INGEST_TAB_ID]);
+    expect(active0()).toBe(INGEST_TAB_ID);
   });
 
   it("두 번 눌러도 탭이 둘이 되지 않는다", () => {
@@ -339,6 +349,8 @@ describe("쿼리 탭", () => {
               body: "",
               error: null,
               seq: 1,
+              dirty: false,
+              saveError: null,
             },
             { kind: "graph", id: GRAPH_TAB_ID, title: "그래프" },
           ],
@@ -365,6 +377,8 @@ describe("쿼리 탭", () => {
               body: "",
               error: null,
               seq: 1,
+              dirty: false,
+              saveError: null,
             },
             { kind: "query", id: QUERY_TAB_ID, title: "쿼리" },
           ],
@@ -400,6 +414,8 @@ function note(name: string): Tab {
     body: "",
     error: null,
     seq: 1,
+    dirty: false,
+    saveError: null,
   };
 }
 

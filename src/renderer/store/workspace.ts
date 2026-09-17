@@ -44,6 +44,9 @@ export const GRAPH_TAB_ID = "graph";
 /** 쿼리 탭도 하나뿐이다. 세션을 여럿 두는 것은 대화가 생긴 뒤의 일이다. */
 export const QUERY_TAB_ID = "query";
 
+/** 정리 탭. 볼트마다 하나이고 진행 상태는 store/ingest.ts 가 쥔다. */
+export const INGEST_TAB_ID = "ingest";
+
 /**
  * 탭 신원. NotePath 와 키 공간을 물리적으로 가른다 —
  * NotePath 는 string 별칭이라 `path | "graph"` 로는 타입이 충돌을 못 잡는다.
@@ -62,6 +65,10 @@ export interface NoteTab {
   error: string | null;
   /** 이 탭을 연 요청의 세대. 응답이 자기 세대의 탭에만 담기게 한다. */
   seq: number;
+  /** 편집했는데 아직 저장 안 됨. */
+  dirty: boolean;
+  /** 마지막 저장 실패 사유. 본문은 그대로 보이고 이것만 옆에 뜬다. */
+  saveError: string | null;
 }
 
 /** 그래프 탭. 파일이 아니라 경로가 없다. */
@@ -78,7 +85,14 @@ export interface QueryTab {
   title: "쿼리";
 }
 
-export type Tab = NoteTab | GraphTab | QueryTab;
+/** 정리 탭. 경로가 없고, 상태는 별도 스토어에 있다. */
+export interface IngestTab {
+  kind: "ingest";
+  id: "ingest";
+  title: "정리";
+}
+
+export type Tab = NoteTab | GraphTab | QueryTab | IngestTab;
 
 /** 탭 요청 세대. 닫았다가 곧바로 다시 연 탭에 옛 응답이 덮어쓰는 것을 막는다. */
 let tabSeq = 0;
@@ -115,7 +129,10 @@ function firstPane(): Pane {
  * 그래프·쿼리처럼 id 가 상수인 탭을 연다.
  * 어느 칸에든 이미 있으면 그 칸으로 포커스하고, 없으면 activePane 에 붙인다.
  */
-function openFixed(s: WorkspaceState, tab: GraphTab | QueryTab): Partial<WorkspaceState> {
+function openFixed(
+  s: WorkspaceState,
+  tab: GraphTab | QueryTab | IngestTab,
+): Partial<WorkspaceState> {
   const found = paneOf(s.panes, tab.id);
   if (found !== -1) {
     return {
@@ -152,8 +169,15 @@ interface WorkspaceState {
   /** 새 탭이 열릴 칸. */
   activePane: number;
   openTab: (path: NotePath, title: string) => Promise<void>;
+  /** 편집기가 글자를 바꿀 때마다. 저장은 saveNote 가 따로 한다. */
+  editBody: (id: string, body: string) => void;
+  /** dirty 인 탭을 저장한다. 프론트매터는 main 이 원문에서 붙인다. */
+  saveNote: (id: string) => Promise<void>;
   openGraphTab: () => void;
   openQueryTab: () => void;
+  openIngestTab: () => void;
+  /** 트리만 다시 읽는다. 정리가 wiki/ 에 페이지를 만든 뒤 부른다 — 탭과 칸은 그대로 둔다. */
+  refreshTree: () => Promise<void>;
   focusTab: (id: string) => void;
   closeTab: (id: string) => void;
   moveTabToPane: (id: string, to: number) => void;
@@ -240,7 +264,17 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
     const seq = ++tabSeq;
     // 먼저 타입을 붙여 둔다. map 안에서 리터럴로 쓰면 kind 가 string 으로 넓어진다.
-    const tab: Tab = { kind: "note", id, path, title, body: null, error: null, seq };
+    const tab: Tab = {
+      kind: "note",
+      id,
+      path,
+      title,
+      body: null,
+      error: null,
+      seq,
+      dirty: false,
+      saveError: null,
+    };
     set((s) => ({
       panes: s.panes.map((p, i) =>
         i === s.activePane ? { ...p, tabs: [...p.tabs, tab], activeTab: id } : p,
@@ -271,10 +305,58 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     }));
   },
 
+  editBody: (id, body) =>
+    set((s) => ({
+      panes: s.panes.map((p) => ({
+        ...p,
+        tabs: p.tabs.map((t) =>
+          t.kind === "note" && t.id === id ? { ...t, body, dirty: true } : t,
+        ),
+      })),
+    })),
+
+  saveNote: async (id) => {
+    const tab = get()
+      .panes.flatMap((p) => p.tabs)
+      .find((t): t is NoteTab => t.kind === "note" && t.id === id);
+    if (tab === undefined || !tab.dirty || tab.body === null) return;
+    const body = tab.body;
+    let saveError: string | null = null;
+    try {
+      const r = await window.piecepool.writeBody(tab.path, body);
+      if (!r.ok) saveError = r.error.message;
+    } catch (e) {
+      saveError = `앱 내부 연결이 끊겼다: ${String(e)}`;
+    }
+    // 저장하는 동안 더 쳤으면 아직 dirty 다 — 보낸 본문과 같을 때만 깨끗해진다.
+    set((s) => ({
+      panes: s.panes.map((p) => ({
+        ...p,
+        tabs: p.tabs.map((t) =>
+          t.kind === "note" && t.id === id
+            ? { ...t, dirty: saveError === null ? t.body !== body : true, saveError }
+            : t,
+        ),
+      })),
+    }));
+  },
+
   openGraphTab: () =>
     set((s) => openFixed(s, { kind: "graph", id: GRAPH_TAB_ID, title: "그래프" })),
 
   openQueryTab: () => set((s) => openFixed(s, { kind: "query", id: QUERY_TAB_ID, title: "쿼리" })),
+
+  openIngestTab: () =>
+    set((s) => openFixed(s, { kind: "ingest", id: INGEST_TAB_ID, title: "정리" })),
+
+  refreshTree: async () => {
+    try {
+      const r = await window.piecepool.readTree();
+      if (r.ok) set({ tree: r.value });
+    } catch {
+      // 연결이 끊긴 것이다. 트리는 옛것으로 남지만 화면이 죽을 일은 아니다.
+    }
+  },
 
   focusTab: (id) =>
     set((s) => {

@@ -4,6 +4,7 @@ import { Pane } from "./Pane.tsx";
 import { Ribbon } from "./Ribbon.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { DragLayer } from "../features/split/DragLayer.tsx";
+import { Toast } from "./Toast.tsx";
 import { WindowControls } from "./WindowControls.tsx";
 import {
   MAX_SIDEBAR_WIDTH,
@@ -106,6 +107,7 @@ export function Shell() {
         ))}
       </main>
       <DragLayer />
+      <Toast />
     </div>
   );
 }

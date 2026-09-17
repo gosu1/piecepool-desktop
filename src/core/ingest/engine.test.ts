@@ -1,7 +1,7 @@
 // 엔진을 끝까지 관통한다 — 가짜 AI 로 API 없이. 임시 폴더에 진짜 볼트와 진짜 .git 을 만든다.
 import { describe, expect, it } from "vitest";
 import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tmpdir, userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import git from "isomorphic-git";
 import type { Vault } from "../../shared/types.ts";
@@ -109,15 +109,13 @@ describe("ingest.run — 볼트 노트 한 장", () => {
     expect(again).toEqual({ written: [], commitOid: "" });
   });
 
-  it("미커밋 변경이 있는데 git 신원이 없으면 시작하지 않는다", async () => {
+  it("git 이름이 없으면 OS 계정 이름으로 봉인한다 — 사용자에게 묻지 않는다", async () => {
     const v = await tempVault();
     await write(v.root, "일기/2026-10-08.md", NOTE);
     const llm = fakeLlm();
-    await expect(
-      ingestSource(v, { kind: "file", path: join(v.root, "일기/2026-10-08.md") }, { llm }),
-    ).rejects.toMatchObject({ kind: "git_failed" });
-    expect(llm.calls).toBe(0);
-    expect(await exists(v.root, "wiki")).toBe(false);
+    await ingestSource(v, { kind: "file", path: join(v.root, "일기/2026-10-08.md") }, { llm });
+    const log = await git.log({ ...repo(v) });
+    expect(log.map((e) => e.commit.author.name)).toEqual(["PiecePool Agent", userInfo().username]);
   });
 });
 

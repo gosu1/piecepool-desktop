@@ -1,15 +1,19 @@
 // OWNER: 7단계 — 채널명과 요청/응답 타입은 shared/ipc.ts 에 둔다.
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Notification } from "electron";
 import type { IpcMainEvent } from "electron";
 import { basename, join } from "node:path";
-import type { AppError, ErrorKind, Result, Vault } from "../shared/types.ts";
-import type { VaultPayload } from "../shared/ipc.ts";
+import type { AppError, ErrorKind, NotePath, Result, Vault } from "../shared/types.ts";
+import type { IngestSummary, VaultPayload } from "../shared/ipc.ts";
 import { CHANNEL } from "../shared/ipc.ts";
 import { PiecePoolError } from "../core/errors.ts";
 import { openVault } from "../core/vault/open.ts";
 import { readTree } from "../core/vault/tree.ts";
 import { readRaw } from "../core/vault/notes.ts";
+import { saveBody } from "../core/vault/edit.ts";
 import { scanVault, toGraph } from "../core/index/scan.ts";
+import { planRestore, restorePaths } from "../core/git/restore.ts";
+import { countPending, syncVault } from "../core/ingest/sync.ts";
+import { hasKey, readKey, setKey } from "./keys.ts";
 import { readLastVault, writeLastVault } from "./recent.ts";
 
 /**
@@ -40,6 +44,31 @@ export function toAppError(e: unknown): AppError {
  * renderer 가 보낸 경로를 이것 없이 검증할 방법이 없다 — 재구축 설계 §3 이 지시한 자리다.
  */
 let opened: Vault | null = null;
+
+function requireVault(): Vault {
+  if (opened === null) throw new PiecePoolError("vault_not_found", "볼트가 열려 있지 않다");
+  return opened;
+}
+
+/** renderer 가 보낸 값이다. 타입은 경계를 못 건너오므로 여기서 직접 본다. */
+function str(x: unknown, what: string): string {
+  if (typeof x !== "string") throw new PiecePoolError("path_escape", `${what}가 문자열이 아니다`);
+  return x;
+}
+
+/** 정리는 한 번에 하나만 돈다 (v1 은 순차, ADR-0002 결정 7). */
+let syncing = false;
+
+/** 정리가 끝나면 OS 알림 하나. 창을 보고 있지 않아도 안다 — 몇십 분 걸리는 일이다. */
+function notifyDone(s: IngestSummary): void {
+  if (!Notification.isSupported()) return;
+  const pages = new Set(s.commits.flatMap((c) => c.paths.filter((p) => p.startsWith("wiki/"))));
+  const body =
+    s.commits.length === 0
+      ? "새로 정리할 노트가 없었다."
+      : `노트 ${s.commits.length}장 → 위키 ${pages.size}장 갱신${s.halted ? " · 중간에 멈춤" : ""}`;
+  new Notification({ title: "PiecePool 정리 끝", body }).show();
+}
 
 /** 앱이 디스크에 남기는 유일한 상태. */
 function stateFile(): string {
@@ -108,6 +137,61 @@ export function registerHandlers(): void {
       }
       return toGraph(await scanVault(opened));
     }),
+  );
+
+  ipcMain.handle(CHANNEL.noteWrite, (_e, path: unknown, body: unknown) =>
+    wrap(async () => await saveBody(requireVault(), str(path, "경로"), str(body, "본문"))),
+  );
+
+  ipcMain.handle(CHANNEL.vaultTree, () => wrap(async () => await readTree(requireVault())));
+  ipcMain.handle(CHANNEL.ingestPending, () => wrap(async () => await countPending(requireVault())));
+
+  // 정리 — 오래 걸리므로 진행은 요청한 창으로 이벤트로 흘린다. 결과는 커밋 목록이다.
+  ipcMain.handle(CHANNEL.ingestSync, (e) =>
+    wrap(async (): Promise<IngestSummary> => {
+      const v = requireVault();
+      if (syncing) throw new PiecePoolError("unknown", "정리가 이미 돌고 있다");
+      syncing = true;
+      try {
+        // core 는 환경 변수를 읽는다. 앱에서는 safeStorage 의 키를 여기서 올린다.
+        if (!process.env.PIECEPOOL_LLM_API_KEY) {
+          const key = await readKey();
+          if (key !== null) process.env.PIECEPOOL_LLM_API_KEY = key;
+        }
+        const r = await syncVault(v, {
+          onProgress: (p) => {
+            if (!e.sender.isDestroyed()) e.sender.send(CHANNEL.ingestProgress, p);
+          },
+        });
+        const summary: IngestSummary = {
+          commits: r.commits.map((c) => ({ oid: c.commitOid, label: c.label, paths: c.written })),
+          issues: r.issues,
+          halted: r.halted,
+        };
+        notifyDone(summary);
+        return summary;
+      } finally {
+        syncing = false;
+      }
+    }),
+  );
+
+  ipcMain.handle(CHANNEL.restorePlan, (_e, oid: unknown) =>
+    wrap(async () => await planRestore(requireVault(), str(oid, "커밋"))),
+  );
+
+  ipcMain.handle(CHANNEL.restoreApply, (_e, oid: unknown, paths: unknown) =>
+    wrap(async () => {
+      if (!Array.isArray(paths)) throw new PiecePoolError("path_escape", "경로 목록이 아니다");
+      const list: NotePath[] = paths.map((p) => str(p, "경로"));
+      // 그 커밋이 건드린 경로인지는 restorePaths 가 확인한다 — 아니면 거부한다.
+      return await restorePaths(requireVault(), str(oid, "커밋"), list);
+    }),
+  );
+
+  ipcMain.handle(CHANNEL.keyHas, () => wrap(hasKey));
+  ipcMain.handle(CHANNEL.keySet, (_e, value: unknown) =>
+    wrap(async () => await setKey(str(value, "키"))),
   );
 
   // invoke 가 아니라 on 이다 — 돌려줄 값이 없다는 것을 API 선택으로 드러낸다.

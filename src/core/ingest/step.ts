@@ -4,12 +4,12 @@
 //
 // 봉인은 항목마다 한다 — 앞 항목을 정리하는 60초 사이에 사용자가 옵시디언으로 고친 것이
 // 다음 에이전트 커밋에 섞이면 되돌리기가 그 편집을 삼킨다.
+import { userInfo } from "node:os";
 import { AGENT_AUTHOR, type NotePath, type OnProgress, type Vault } from "../../shared/types.ts";
 import type { IngestResult } from "../agent/tasks/ingest.ts";
 import type { Written } from "../agent/written.ts";
-import { PiecePoolError } from "../errors.ts";
 import { commit, sealUserEdits } from "../git/commit.ts";
-import { dirtyPaths, ensureRepo, readIdentity } from "../git/repo.ts";
+import { dirtyPaths, ensureRepo, readIdentity, writeIdentity } from "../git/repo.ts";
 
 /**
  * 저장소를 준비하고 사용자 편집을 봉인한다. 돌려주는 것은 준비 중 새로 쓴 경로(.gitignore)다.
@@ -23,13 +23,13 @@ export async function prepareRepo(
   const created = await ensureRepo(v);
   const except = [...created, ...ours];
   if ((await dirtyPaths(v)).some((p) => !except.includes(p))) {
-    const who = await readIdentity(v);
+    // 봉인 커밋의 작성자. 볼트에 git 이름이 있으면 그것, 없으면 OS 계정 이름을 적어 둔다 —
+    // 사용자에게 "git 이름" 을 묻는 것은 내부 사정을 들이미는 것이다 (2026-09-17 결정).
+    // 지어낸 이름이 아니라 이 컴퓨터에 로그인한 그 이름이다.
+    let who = await readIdentity(v);
     if (who === null) {
-      // 안전망 문서이므로 "일단 진행하고 나중에 수습" 이 아니라 "분리할 수 없으면 시작하지 않는다".
-      throw new PiecePoolError(
-        "git_failed",
-        "볼트에 git 신원이 없어 기존 변경을 분리할 수 없습니다. 이름을 설정해 주세요.",
-      );
+      who = { name: userInfo().username, email: "" };
+      await writeIdentity(v, who);
     }
     const oid = await sealUserEdits(v, who, except);
     if (oid)
