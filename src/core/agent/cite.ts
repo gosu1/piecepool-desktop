@@ -31,6 +31,7 @@ export function checkCitations(
 
   let text = ""; // 반환용 — 코드 내용은 원문 그대로 살린다
   let last = 0;
+  const dropSpans: Array<[number, number]> = []; // 떨어진 링크의 [시작, 끝) — blanked 기준
 
   for (const m of blanked.matchAll(LINK)) {
     const whole = m[0];
@@ -52,11 +53,25 @@ export function checkCitations(
     const replaced = heading === undefined ? name : `${name}#${heading}`;
 
     text += ok ? whole : replaced;
-    if (!ok) dropped.push(replaced);
+    if (!ok) {
+      dropped.push(replaced);
+      dropSpans.push([start, end]);
+    }
 
     last = end;
   }
   text += answer.slice(last);
+
+  // unsourced 집계 전용 판: blanked 위에 떨어진 링크의 구간도 같은 길이의
+  // 공백으로 덮는다. 떨어진 링크는 대괄호가 blanked 에 그대로 남아 있어
+  // "근거 있음" 으로 잘못 잡히는데, 열지 않은 절을 가리킨 문단은 근거가
+  // 아예 없는 문단보다 오히려 더 의심스러우므로 unsourced 로 세야 한다.
+  // text/dropped 는 이 판을 쓰지 않는다 — 사용자에게 나가는 text 는 원문 기준이다.
+  const countChars = blanked.split("");
+  for (const [s, e] of dropSpans) {
+    for (let i = s; i < e; i++) countChars[i] = " ";
+  }
+  const blankedForCount = countChars.join("");
 
   // 문단 경계는 answer(원문) 기준 오프셋으로 찾는다 — text 기준으로 가르면 안
   // 된다. 뗀 링크는 대괄호가 빠지며 text 를 answer 보다 짧게 만들어, text 의
@@ -75,7 +90,7 @@ export function checkCitations(
   // match() 는 전역(g) 정규식이라도 호출마다 lastIndex 를 0 으로 되돌리고
   // 시작한다 — test()/exec() 로 문단마다 이어 쓰면 이전 위치를 물고 가 상태가 샌다.
   const isUnsourced = (from: number, to: number): boolean =>
-    answer.slice(from, to).trim() !== "" && blanked.slice(from, to).match(LINK) === null;
+    answer.slice(from, to).trim() !== "" && blankedForCount.slice(from, to).match(LINK) === null;
 
   let unsourced = 0;
   let pStart = 0;

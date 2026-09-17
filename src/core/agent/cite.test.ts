@@ -24,12 +24,15 @@ describe("checkCitations", () => {
     const r = checkCitations("졸리다. [[무릎 통증#재활]]", opened, resolve);
     expect(r.text).toBe("졸리다. 무릎 통증#재활");
     expect(r.dropped).toEqual(["무릎 통증#재활"]);
+    // 회귀: 문단의 유일한 인용이 떨어졌으면 그 문단은 근거가 없는 것이다.
+    expect(r.unsourced).toBe(1);
   });
 
   it("볼트에 없는 페이지의 링크도 뗀다", () => {
     const r = checkCitations("음. [[없는페이지]]", opened, resolve);
     expect(r.text).toBe("음. 없는페이지");
     expect(r.dropped).toEqual(["없는페이지"]);
+    expect(r.unsourced).toBe(1);
   });
 
   it("링크 없는 문단을 unsourced 로 센다", () => {
