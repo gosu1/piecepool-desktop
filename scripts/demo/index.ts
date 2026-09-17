@@ -741,6 +741,12 @@ async function main(): Promise<void> {
           stale.delete(normalizeTitle(page.name));
         }
         // 기록을 걷어냈는데 이번 결과에 없는 페이지 — 걷어낸 상태 그대로 써서 남긴다.
+        // 단 AI 가 아무것도 안 냈으면(페이지 0장) 걷어내지 않는다 — 옛 기록만 사라지고 새
+        // 기록은 안 들어온다 (2026-09-17 실측: 다시 정리한 노트에서 기록 3줄이 그냥 없어졌다).
+        if (verified.pages.length === 0 && stale.size) {
+          logs.push(`   AI 가 낸 것이 없어 옛 기록 ${stale.size}장을 그대로 둡니다`);
+          stale.clear();
+        }
         for (const key of stale) {
           const existing = wiki.get(key)!;
           writes.push({
