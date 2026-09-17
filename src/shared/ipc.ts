@@ -1,7 +1,7 @@
 // FROZEN: 파일 전체. 변경 시 상대 개발자와 합의 (IPC 경계 계약 — main·preload·renderer 3자)
 // IPC 경계의 계약이다. main·preload·renderer 가 같은 문자열과 같은 모양을 쓰게 하는 유일한 출처다.
 // shared 규칙 그대로 — 타입과 순수 상수만 둔다. node:* 도 electron 도 여기 없다.
-import type { Author, GraphData, NotePath, Progress, Result } from "./types.ts";
+import type { GraphData, NotePath, Progress, Result } from "./types.ts";
 
 /** 채널명. 문자열을 양쪽에 각각 적으면 오타가 런타임까지 간다. */
 export const CHANNEL = {
@@ -13,13 +13,12 @@ export const CHANNEL = {
   windowMinimize: "window:minimize",
   windowToggleMaximize: "window:toggleMaximize",
   windowClose: "window:close",
-  // 정리(4단계)와 안전망(3단계)을 화면에 잇는 여덟 (2026-09-17, ADR-0005 추가 절).
+  // 정리(4단계)와 안전망(3단계)을 화면에 잇는 일곱 (2026-09-17, ADR-0005 추가 절).
+  ingestPending: "ingest:pending",
   ingestSync: "ingest:sync",
   ingestProgress: "ingest:progress",
   restorePlan: "restore:plan",
   restoreApply: "restore:apply",
-  gitIdentity: "git:identity",
-  gitSetIdentity: "git:setIdentity",
   keyHas: "key:has",
   keySet: "key:set",
 } as const;
@@ -92,6 +91,8 @@ export interface PiecePoolApi {
   buildGraph: () => Promise<Result<GraphData>>;
   /** 열린 볼트의 트리만 다시 읽는다. 정리가 wiki/ 에 페이지를 만든 뒤 사이드바를 맞춘다. */
   readTree: () => Promise<Result<TreeNode[]>>;
+  /** 아직 정리하지 않은 노트·원본 수. 정리 화면의 첫 문장이다. */
+  pendingIngest: () => Promise<Result<number>>;
   /**
    * 볼트 전체 정리. 아직 안 한 노트·원본을 날짜순으로, 자료 하나가 커밋 하나다.
    * 오래 걸린다 — 진행은 onIngestProgress 로 온다. 한 번에 하나만 돈다.
@@ -106,9 +107,6 @@ export interface PiecePoolApi {
    * core/git/restore 가 그 커밋이 건드린 경로인지 확인하고 아니면 거부한다.
    */
   restorePaths: (commitOid: string, paths: NotePath[]) => Promise<Result<string>>;
-  /** 볼트 git 신원. 없으면 null — 봉인을 못 하므로 정리 전에 받아야 한다. */
-  gitIdentity: () => Promise<Result<Author | null>>;
-  setGitIdentity: (author: Author) => Promise<Result<void>>;
   /** LLM 키는 main 에만 있다. renderer 는 "설정됨" 만 안다. */
   hasKey: () => Promise<Result<boolean>>;
   setKey: (value: string) => Promise<Result<void>>;

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Author, NotePath, Progress } from "../../shared/types.ts";
+import type { NotePath, Progress } from "../../shared/types.ts";
 import type { IngestCommit, RestorePlan } from "../../shared/ipc.ts";
 import { useWorkspace } from "./workspace.ts";
 
@@ -12,24 +12,39 @@ export function appendLog(log: Progress[], p: Progress): Progress[] {
   return next;
 }
 
+/** 정리가 끝났을 때 화면에 한 줄. OS 알림과 같은 내용이다 — 알림을 못 봤어도 여기 남는다. */
+export interface Toast {
+  text: string;
+}
+
+export function summarize(commits: IngestCommit[], halted: boolean): string {
+  if (commits.length === 0) return "새로 정리할 노트가 없었다.";
+  const pages = new Set(commits.flatMap((c) => c.paths.filter((p) => p.startsWith("wiki/"))));
+  return `노트 ${commits.length}장 → 위키 ${pages.size}장 갱신${halted ? " · 중간에 멈춤" : ""}`;
+}
+
 interface IngestState {
   running: boolean;
+  /** 아직 정리하지 않은 노트 수. null 은 아직 안 물어본 것이다. */
+  pending: number | null;
+  /** 지금 처리 중인 것. "3/67 데미안" 처럼 온다. */
+  current: string | null;
   log: Progress[];
   /** 이번 앱 세션에서 정리가 남긴 커밋. 되돌리기 후보다. 되돌린 것은 뺀다. */
   commits: IngestCommit[];
   issues: string[];
   error: string | null;
+  toast: Toast | null;
   /** null 은 아직 안 물어본 것이다. */
   keyReady: boolean | null;
-  /** 정리가 "신원 없음" 으로 멈췄다 — 이름을 받아야 한다. */
-  identityNeeded: boolean;
   plan: RestorePlan | null;
   chosen: Set<NotePath>;
   restoring: boolean;
   init: () => Promise<void>;
+  refreshPending: () => Promise<void>;
   start: () => Promise<void>;
   saveKey: (value: string) => Promise<void>;
-  saveIdentity: (a: Author) => Promise<void>;
+  dismissToast: () => void;
   openPlan: (oid: string) => Promise<void>;
   toggle: (path: NotePath) => void;
   closePlan: () => void;
@@ -42,12 +57,14 @@ function message(e: unknown): string {
 
 export const useIngest = create<IngestState>((set, get) => ({
   running: false,
+  pending: null,
+  current: null,
   log: [],
   commits: [],
   issues: [],
   error: null,
+  toast: null,
   keyReady: null,
-  identityNeeded: false,
   plan: null,
   chosen: new Set(),
   restoring: false,
@@ -59,31 +76,45 @@ export const useIngest = create<IngestState>((set, get) => ({
     } catch (e) {
       set({ keyReady: false, error: message(e) });
     }
+    await get().refreshPending();
+  },
+
+  refreshPending: async () => {
+    try {
+      const r = await window.piecepool.pendingIngest();
+      set({ pending: r.ok ? r.value : null });
+    } catch {
+      set({ pending: null });
+    }
   },
 
   start: async () => {
     if (get().running) return;
-    set({ running: true, log: [], issues: [], error: null, identityNeeded: false });
+    set({ running: true, log: [], issues: [], error: null, toast: null, current: null });
     const off = window.piecepool.onIngestProgress((p) =>
-      set((s) => ({ log: appendLog(s.log, p) })),
+      set((s) => ({
+        log: appendLog(s.log, p),
+        current: p.step === "진행" ? (p.detail ?? null) : s.current,
+      })),
     );
     try {
       const r = await window.piecepool.syncVault();
       if (r.ok) {
-        set((s) => ({ commits: [...r.value.commits, ...s.commits], issues: r.value.issues }));
-        if (r.value.halted)
-          set({ error: "형식 불량이 잦아 멈췄다. 다시 시작하면 그 다음 장부터 이어간다." });
+        set((s) => ({
+          commits: [...r.value.commits, ...s.commits],
+          issues: r.value.issues,
+          toast: { text: summarize(r.value.commits, r.value.halted) },
+        }));
       } else {
-        // 신원이 없어 봉인을 못 한 경우만 따로 안내한다 — 나머지는 메시지 그대로.
-        const identity = r.error.kind === "git_failed" && r.error.message.includes("신원");
-        set({ error: identity ? null : r.error.message, identityNeeded: identity });
+        set({ error: r.error.message });
       }
     } catch (e) {
       set({ error: message(e) });
     } finally {
       off();
-      set({ running: false });
+      set({ running: false, current: null });
       void useWorkspace.getState().refreshTree();
+      void get().refreshPending();
     }
   },
 
@@ -97,15 +128,7 @@ export const useIngest = create<IngestState>((set, get) => ({
     }
   },
 
-  saveIdentity: async (a) => {
-    try {
-      const r = await window.piecepool.setGitIdentity(a);
-      if (r.ok) set({ identityNeeded: false, error: null });
-      else set({ error: r.error.message });
-    } catch (e) {
-      set({ error: message(e) });
-    }
-  },
+  dismissToast: () => set({ toast: null }),
 
   openPlan: async (oid) => {
     try {
@@ -145,6 +168,7 @@ export const useIngest = create<IngestState>((set, get) => ({
           error: null,
         }));
         void useWorkspace.getState().refreshTree();
+        void get().refreshPending();
       } else {
         set({ error: r.error.message });
       }

@@ -1,5 +1,5 @@
 // OWNER: 7단계 — 채널명과 요청/응답 타입은 shared/ipc.ts 에 둔다.
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Notification } from "electron";
 import type { IpcMainEvent } from "electron";
 import { basename, join } from "node:path";
 import type { AppError, ErrorKind, NotePath, Result, Vault } from "../shared/types.ts";
@@ -10,9 +10,8 @@ import { openVault } from "../core/vault/open.ts";
 import { readTree } from "../core/vault/tree.ts";
 import { readRaw } from "../core/vault/notes.ts";
 import { scanVault, toGraph } from "../core/index/scan.ts";
-import { readIdentity, writeIdentity } from "../core/git/repo.ts";
 import { planRestore, restorePaths } from "../core/git/restore.ts";
-import { syncVault } from "../core/ingest/sync.ts";
+import { countPending, syncVault } from "../core/ingest/sync.ts";
 import { hasKey, readKey, setKey } from "./keys.ts";
 import { readLastVault, writeLastVault } from "./recent.ts";
 
@@ -58,6 +57,17 @@ function str(x: unknown, what: string): string {
 
 /** 정리는 한 번에 하나만 돈다 (v1 은 순차, ADR-0002 결정 7). */
 let syncing = false;
+
+/** 정리가 끝나면 OS 알림 하나. 창을 보고 있지 않아도 안다 — 몇십 분 걸리는 일이다. */
+function notifyDone(s: IngestSummary): void {
+  if (!Notification.isSupported()) return;
+  const pages = new Set(s.commits.flatMap((c) => c.paths.filter((p) => p.startsWith("wiki/"))));
+  const body =
+    s.commits.length === 0
+      ? "새로 정리할 노트가 없었다."
+      : `노트 ${s.commits.length}장 → 위키 ${pages.size}장 갱신${s.halted ? " · 중간에 멈춤" : ""}`;
+  new Notification({ title: "PiecePool 정리 끝", body }).show();
+}
 
 /** 앱이 디스크에 남기는 유일한 상태. */
 function stateFile(): string {
@@ -129,6 +139,7 @@ export function registerHandlers(): void {
   );
 
   ipcMain.handle(CHANNEL.vaultTree, () => wrap(async () => await readTree(requireVault())));
+  ipcMain.handle(CHANNEL.ingestPending, () => wrap(async () => await countPending(requireVault())));
 
   // 정리 — 오래 걸리므로 진행은 요청한 창으로 이벤트로 흘린다. 결과는 커밋 목록이다.
   ipcMain.handle(CHANNEL.ingestSync, (e) =>
@@ -147,11 +158,13 @@ export function registerHandlers(): void {
             if (!e.sender.isDestroyed()) e.sender.send(CHANNEL.ingestProgress, p);
           },
         });
-        return {
+        const summary: IngestSummary = {
           commits: r.commits.map((c) => ({ oid: c.commitOid, label: c.label, paths: c.written })),
           issues: r.issues,
           halted: r.halted,
         };
+        notifyDone(summary);
+        return summary;
       } finally {
         syncing = false;
       }
@@ -168,18 +181,6 @@ export function registerHandlers(): void {
       const list: NotePath[] = paths.map((p) => str(p, "경로"));
       // 그 커밋이 건드린 경로인지는 restorePaths 가 확인한다 — 아니면 거부한다.
       return await restorePaths(requireVault(), str(oid, "커밋"), list);
-    }),
-  );
-
-  ipcMain.handle(CHANNEL.gitIdentity, () => wrap(async () => await readIdentity(requireVault())));
-
-  ipcMain.handle(CHANNEL.gitSetIdentity, (_e, author: unknown) =>
-    wrap(async () => {
-      const a = author as { name?: unknown; email?: unknown } | null;
-      const name = str(a?.name, "이름").trim();
-      const email = str(a?.email, "이메일").trim();
-      if (name === "") throw new PiecePoolError("git_failed", "이름이 비어 있다");
-      await writeIdentity(requireVault(), { name, email });
     }),
   );
 

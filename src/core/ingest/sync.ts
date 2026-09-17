@@ -9,8 +9,11 @@ import {
   makeContext,
   markDeletedSources,
   processItem,
+  readSyncState,
 } from "./engine.ts";
+import { rawHashOf, readRawHash, scanSources } from "./source.ts";
 import { commitWritten, prepareRepo } from "./step.ts";
+import { readItem, scanNotes } from "./wiki.ts";
 
 /**
  * 자료 하나를 정리해 커밋 하나로. agent/tasks/ingest.run 의 본체다 — 그 진입점은 동결이라
@@ -69,8 +72,9 @@ export async function syncVault(v: Vault, o: EngineOptions = {}): Promise<SyncRe
   }
 
   const items = await collectItems(v, ctx.today, ctx.force);
-  for (const item of items) {
+  for (const [i, item] of items.entries()) {
     if (ctx.schemaFails > 2) return { commits, issues, halted: true };
+    ctx.onProgress?.({ step: "진행", detail: `${i + 1}/${items.length} ${item.name || item.key}` });
     const written = new Written();
     carry.push(...(await prepareRepo(v, carry, ctx.onProgress)));
     const outcome = await processItem(v, item, ctx, written);
@@ -79,4 +83,20 @@ export async function syncVault(v: Vault, o: EngineOptions = {}): Promise<SyncRe
     await commitIf(item.name || item.key, written);
   }
   return { commits, issues, halted: false };
+}
+
+/**
+ * 아직 정리하지 않은 항목 수. 화면의 "노트 N장이 아직 위키에 없다" 가 이것이다.
+ * PDF 추출은 하지 않는다 — 지문만 비교하므로 큰 볼트에서도 싸다.
+ */
+export async function countPending(v: Vault): Promise<number> {
+  const state = await readSyncState(v);
+  let n = 0;
+  for (const p of await scanNotes(v)) {
+    if (state.notes[p]?.hash !== (await readItem(v, p)).hash) n++;
+  }
+  for (const src of await scanSources(v)) {
+    if ((await readRawHash(v, src)) !== (await rawHashOf(v, src))) n++;
+  }
+  return n;
 }

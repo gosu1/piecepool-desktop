@@ -12,7 +12,7 @@ import type { Progress } from "../shared/types.ts";
  * fs 를 통째로 노출하면 격리가 무의미해진다 —
  * 경로 검증은 반드시 core/vault/paths.ts 에 둔다.
  *
- * 지금 열어 주는 것은 열일곱이다.
+ * 지금 열어 주는 것은 열여섯이다.
  *
  * renderer 에서 경로를 받는 것은 `readRaw` 와 `restorePaths` 둘이다. 앞은 main 이
  * resolveInVault 로 검증하고(core/vault/paths.ts), 뒤는 core/git/restore 가 그 커밋이
@@ -28,6 +28,7 @@ export function exposeApi(): void {
     readRaw: (path) => ipcRenderer.invoke(CHANNEL.noteRead, path),
     buildGraph: () => ipcRenderer.invoke(CHANNEL.graphBuild),
     readTree: () => ipcRenderer.invoke(CHANNEL.vaultTree),
+    pendingIngest: () => ipcRenderer.invoke(CHANNEL.ingestPending),
     syncVault: () => ipcRenderer.invoke(CHANNEL.ingestSync),
     onIngestProgress: (cb) => {
       // 이벤트 객체는 넘기지 않는다 — renderer 가 받을 것은 Progress 하나다.
@@ -37,8 +38,6 @@ export function exposeApi(): void {
     },
     planRestore: (oid) => ipcRenderer.invoke(CHANNEL.restorePlan, oid),
     restorePaths: (oid, paths) => ipcRenderer.invoke(CHANNEL.restoreApply, oid, paths),
-    gitIdentity: () => ipcRenderer.invoke(CHANNEL.gitIdentity),
-    setGitIdentity: (author) => ipcRenderer.invoke(CHANNEL.gitSetIdentity, author),
     hasKey: () => ipcRenderer.invoke(CHANNEL.keyHas),
     setKey: (value) => ipcRenderer.invoke(CHANNEL.keySet, value),
     minimizeWindow: () => ipcRenderer.send(CHANNEL.windowMinimize),
