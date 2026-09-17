@@ -1329,17 +1329,26 @@ git commit -m "feat: 툴콜 루프 — 상한에 닿아도 빈손으로 끝내�
 
 ---
 
-## Task 6: 세션 조립과 로그
+## Task 6: 세션 조립 · 로그 · 프롬프트 · 대화 모드
+
+`QuerySession` 을 넓히면 `cli/query.ts` 가 곧바로 깨지므로 **한 태스크에서 함께 고친다.**
+커밋마다 `npm run typecheck` 가 통과해야 한다는 Global Constraints 를 지키기 위해서다.
 
 **Files:**
 
 - Modify: `src/core/agent/tasks/query.ts`
+- Modify: `src/core/prompts/query.md`
+- Modify: `src/cli/query.ts`
 - Test: `src/core/agent/tasks/query.test.ts`
 
 **Interfaces:**
 
-- Consumes: Task 1 `buildIndex`, Task 3 `createTools`, Task 4 `checkCitations`, Task 5 `runAgent`, `index/scan.ts` 의 `scanVault`, `index/links.ts` 의 `resolveLink`, `prompts/load.ts` 의 `loadPrompt`
-- Produces: `ask(v, session, question, o?)` 가 답을 돌려주고 `.piecepool/sessions/<id>.md` 를 쓴다. `session.log` 가 누적된다
+- Consumes: Task 1 `buildIndex`, Task 3 `createTools` · `Tool`, Task 4 `checkCitations`, Task 5 `runAgent`, `index/scan.ts` 의 `scanVault`, `index/links.ts` 의 `resolveLink`, `prompts/load.ts` 의 `loadPrompt`
+- Produces:
+  - `ask(v, session, question, o?)` 가 답을 돌려주고 `.piecepool/sessions/<id>.md` 를 쓴다
+  - `buildSessionLog(meta: SessionMeta, turns: Turn[]): string`
+  - `QuerySession` 에 `turns: Turn[]` · `history: LlmMessage[]` · `tools?: Tool[]` 추가
+  - `npm run query -- <볼트> [질문]` — 질문이 없으면 대화 모드
 
 - [ ] **Step 1: 테스트를 쓴다**
 
@@ -1474,9 +1483,11 @@ export async function ask(
   o?: { onProgress?: OnProgress },
 ): Promise<string> {
   const prompt = await loadPrompt("query");
-  const tools = createTools(v, new Written(), { readOnly: true });
+  // 툴은 세션에 한 번만 만든다 — 툴 안에 절 색인이 캐시돼 있어
+  // 매 턴 새로 만들면 위키 전체를 다시 읽는다 (설계 §5.6).
+  session.tools ??= createTools(v, new Written(), { readOnly: true });
 
-  const res = await runAgent(prompt, question, tools, {
+  const res = await runAgent(prompt, question, session.tools, {
     onProgress: o?.onProgress,
     history: session.history,
   });
@@ -1538,13 +1549,19 @@ export interface QuerySession {
   turns: Turn[];
   /** LLM 에게 넘길 대화. 대명사는 이것으로 풀린다. */
   history: LlmMessage[];
+  /**
+   * 세션이 쓰는 툴. **한 번 만들어 계속 쓴다** — 툴 안에 절 색인이 캐시돼 있어
+   * 매 턴 새로 만들면 위키 전체를 다시 읽는다 (설계 §5.6).
+   */
+  tools?: Tool[];
 }
 ```
 
-`Written` 과 `LlmMessage` import 를 더한다.
+import 를 더한다.
 
 ```ts
 import type { LlmMessage } from "../../llm/chat.ts";
+import type { Tool } from "../tools.ts";
 import { Written } from "../written.ts";
 ```
 
@@ -1553,36 +1570,7 @@ import { Written } from "../written.ts";
 Run: `npx vitest run src/core/agent/tasks/query.test.ts`
 Expected: PASS — 3 tests
 
-- [ ] **Step 5: 전체 검증**
-
-Run: `npx prettier --check . && npm run lint && npm run typecheck && npm test`
-Expected: `cli/query.ts` 가 `QuerySession` 을 옛 모양으로 만들고 있어 **typecheck 가 실패한다.** Task 7 에서 고친다
-
-- [ ] **Step 6: 커밋**
-
-```bash
-git add src/core/agent/tasks/query.ts src/core/agent/tasks/query.test.ts
-git commit -m "feat: 쿼리 세션을 조립하고 로그를 남긴다
-
-계기는 프론트매터에만 둔다 — 본문에 섞으면 수확이 왕복 수와 토큰을 사실로 읽는다.
-연 경로와 unsourced 를 남겨 수확이 대화 출신 문장을 가릴 재료로 쓴다."
-```
-
----
-
-## Task 7: 프롬프트와 대화 모드
-
-**Files:**
-
-- Modify: `src/core/prompts/query.md`
-- Modify: `src/cli/query.ts`
-
-**Interfaces:**
-
-- Consumes: Task 6 의 `ask` · `QuerySession` · `Turn`
-- Produces: `npm run query -- <볼트> [질문]` — 질문이 없으면 대화 모드
-
-- [ ] **Step 1: 프롬프트를 쓴다**
+- [ ] **Step 5: 프롬프트를 쓴다**
 
 `src/core/prompts/query.md` 전체를 바꾼다.
 
@@ -1630,7 +1618,7 @@ git commit -m "feat: 쿼리 세션을 조립하고 로그를 남긴다
 사용자는 자기가 쓴 것을 다시 읽으려는 것이지 요약문을 원하는 것이 아닙니다.
 ````
 
-- [ ] **Step 2: CLI 에 대화 모드를 더한다**
+- [ ] **Step 6: CLI 에 대화 모드를 더한다**
 
 `src/cli/query.ts` 전체를 바꾼다.
 
@@ -1680,23 +1668,26 @@ await main(async () => {
 });
 ```
 
-- [ ] **Step 3: 전체 검증**
+- [ ] **Step 7: 전체 검증**
 
 Run: `npx prettier --check . && npm run lint && npm run typecheck && npm test`
-Expected: 전부 통과 (Task 6 에서 깨졌던 typecheck 가 여기서 닫힌다)
+Expected: 전부 통과. `QuerySession` 변경과 `cli/query.ts` 수정이 한 태스크에 있으므로 중간에 깨지는 커밋이 없다
 
-- [ ] **Step 4: 커밋**
+- [ ] **Step 8: 커밋**
 
 ```bash
-git add src/core/prompts/query.md src/cli/query.ts
-git commit -m "feat: 쿼리 프롬프트와 대화 모드
+git add src/core/agent/tasks/query.ts src/core/agent/tasks/query.test.ts src/core/prompts/query.md src/cli/query.ts
+git commit -m "feat: 쿼리 세션 조립 · 로그 · 프롬프트 · 대화 모드
 
+계기는 프론트매터에만 둔다 — 본문에 섞으면 수확이 왕복 수와 토큰을 사실로 읽는다.
+연 경로와 unsourced 를 남겨 수확이 대화 출신 문장을 가릴 재료로 쓴다.
+툴은 세션에 한 번만 만든다 — 매 턴 새로 만들면 위키 전체를 다시 읽는다.
 질문 인자가 없으면 대화 모드로 들어간다 — 단발이면 대명사를 시험할 수 없다."
 ```
 
 ---
 
-## Task 8: 정답 세트와 채점
+## Task 7: 정답 세트와 채점
 
 **Files:**
 
@@ -1843,13 +1834,14 @@ npm run query -- fixtures/vault-life
 | §6.1 연 경로 수집                       | 5        |
 | §3.3 · §9.3 근거 대조                   | 4, 6, 7  |
 | §7 루프 · 상한 · `hit_cap`              | 5        |
-| §9.1 멀티턴 · 대화 모드                 | 6, 7     |
+| §9.1 멀티턴 · 대화 모드                 | 6        |
 | §9.2 로그 형식 · 계기                   | 6        |
+| §5.6 색인을 세션 동안 재사용            | 6        |
 | §10.1 툴 실패는 결과다                  | 3, 5     |
 | §10.2 단위 테스트                       | 1~6      |
-| §10.3 정답 세트                         | 8        |
-| §10.4 선행 조건                         | 8 (사람) |
-| §10.6 사람 몫                           | 8 Step 5 |
+| §10.3 정답 세트                         | 7        |
+| §10.4 선행 조건                         | 7 (사람) |
+| §10.6 사람 몫                           | 7 Step 5 |
 
 **손대지 않는 것 확인:** `llm/stream.ts` · `index/scan.ts` 의 `saveIndex`·`loadIndex` ·
 `vault/notes.ts` 의 `readNote` 등 · `vault/paths.ts` 의 `assertAgentWritable` ·
