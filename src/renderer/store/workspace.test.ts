@@ -475,11 +475,17 @@ describe("moveTabToPane", () => {
     expect(s.activePane).toBe(0);
   });
 
-  it("같은 칸으로의 드롭은 아무것도 바꾸지 않는다", () => {
+  it("칸이 둘일 때 자기 칸으로의 드롭은 아무것도 바꾸지 않는다", () => {
     const a = note("a.md");
-    const before = [{ id: 0, tabs: [a], activeTab: a.id }];
-    useWorkspace.setState({ panes: before, activePane: 0 });
-    useWorkspace.getState().moveTabToPane(a.id, 0);
+    const b = note("b.md");
+    // 칸이 하나일 때는 to 가 "어느 쪽에 새 칸을 만드나"라 자기 칸이라는 것이 없다.
+    // 제자리 드롭이 뜻을 갖는 것은 칸이 둘일 때뿐이다.
+    const before = [
+      { id: 0, tabs: [a], activeTab: a.id },
+      { id: 1, tabs: [b], activeTab: b.id },
+    ];
+    useWorkspace.setState({ panes: before, activePane: 1 });
+    useWorkspace.getState().moveTabToPane(b.id, 1);
     expect(useWorkspace.getState().panes).toEqual(before);
   });
 
@@ -576,5 +582,78 @@ describe("칸이 둘일 때의 기존 액션", () => {
     expect(s.panes).toHaveLength(2);
     expect(s.activePane).toBe(1);
     expect(s.panes[1].activeTab).toBe(GRAPH_TAB_ID);
+  });
+});
+
+describe("moveTabToPane — 왼쪽으로 나누기", () => {
+  it("칸이 하나일 때 0 으로 옮기면 왼쪽에 새 칸이 생긴다", () => {
+    const a = note("a.md");
+    const b = note("b.md");
+    useWorkspace.setState({
+      panes: [{ id: 0, tabs: [a, b], activeTab: a.id }],
+      activePane: 0,
+    });
+    useWorkspace.getState().moveTabToPane(b.id, 0);
+    const s = useWorkspace.getState();
+    expect(s.panes).toHaveLength(2);
+    // 끌고 간 탭이 왼쪽, 남은 것이 오른쪽이다.
+    expect(s.panes[0].tabs.map((t) => t.id)).toEqual([b.id]);
+    expect(s.panes[1].tabs.map((t) => t.id)).toEqual([a.id]);
+    expect(s.panes[0].activeTab).toBe(b.id);
+    expect(s.activePane).toBe(0);
+  });
+
+  it("왼쪽으로 나눠도 두 칸의 id 가 서로 다르다", () => {
+    const a = note("a.md");
+    const b = note("b.md");
+    useWorkspace.setState({
+      panes: [{ id: 0, tabs: [a, b], activeTab: a.id }],
+      activePane: 0,
+    });
+    useWorkspace.getState().moveTabToPane(b.id, 0);
+    const s = useWorkspace.getState();
+    expect(s.panes[0].id).not.toBe(s.panes[1].id);
+  });
+
+  it("떠난 칸의 활성 탭이 오른쪽 이웃으로 옮겨간다", () => {
+    const a = note("a.md");
+    const b = note("b.md");
+    const c = note("c.md");
+    useWorkspace.setState({
+      panes: [{ id: 0, tabs: [a, b, c], activeTab: b.id }],
+      activePane: 0,
+    });
+    useWorkspace.getState().moveTabToPane(b.id, 0);
+    const s = useWorkspace.getState();
+    expect(s.panes[1].activeTab).toBe(c.id);
+  });
+
+  it("마지막 탭을 왼쪽으로 옮기면 빈 칸이 정리돼 칸이 도로 하나다", () => {
+    const a = note("a.md");
+    useWorkspace.setState({
+      panes: [{ id: 0, tabs: [a], activeTab: a.id }],
+      activePane: 0,
+    });
+    useWorkspace.getState().moveTabToPane(a.id, 0);
+    const s = useWorkspace.getState();
+    expect(s.panes).toHaveLength(1);
+    expect(s.panes[0].tabs.map((t) => t.id)).toEqual([a.id]);
+    expect(s.activePane).toBe(0);
+  });
+
+  it("칸이 둘일 때 0 은 여전히 '왼쪽 칸으로 옮겨라' 다 — 셋째 칸을 만들지 않는다", () => {
+    const a = note("a.md");
+    const b = note("b.md");
+    useWorkspace.setState({
+      panes: [
+        { id: 0, tabs: [a], activeTab: a.id },
+        { id: 1, tabs: [b], activeTab: b.id },
+      ],
+      activePane: 1,
+    });
+    useWorkspace.getState().moveTabToPane(b.id, 0);
+    const s = useWorkspace.getState();
+    expect(s.panes).toHaveLength(1);
+    expect(s.panes[0].tabs.map((t) => t.id)).toEqual([a.id, b.id]);
   });
 });

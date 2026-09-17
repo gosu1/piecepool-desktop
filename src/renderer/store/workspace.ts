@@ -298,20 +298,24 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   moveTabToPane: (id, to) =>
     set((s) => {
-      // 칸은 둘까지다. to 가 panes.length 면 새 칸을 만든다는 뜻이다.
-      if (to < 0 || to > 1 || to > s.panes.length) return {};
+      // 칸은 둘까지다.
+      if (to < 0 || to > 1) return {};
       const from = paneOf(s.panes, id);
-      if (from === -1 || from === to) return {};
+      if (from === -1) return {};
       const tab = s.panes[from].tabs.find((t) => t.id === id);
       if (tab === undefined) return {};
 
-      // 새 칸을 만드는 경우와 기존 칸에 넣는 경우를 한 배열로 만들어 놓고 한 번에 훑는다.
-      const grown: Pane[] =
-        to === s.panes.length
-          ? [...s.panes, { id: ++paneSeq, tabs: [], activeTab: null }]
-          : s.panes;
+      // 칸이 하나면 to 는 **새 칸을 어느 쪽에 만드나**다(0=왼쪽, 1=오른쪽).
+      // "0번 칸으로 옮겨라"와 겹치지 않는다 — 그때 from 도 언제나 0 이라 아무 일도 아니다.
+      if (s.panes.length === 1) {
+        const fresh: Pane = { id: ++paneSeq, tabs: [tab], activeTab: id };
+        const rest = removeTab(s.panes[0], id);
+        return compact(to === 0 ? [fresh, rest] : [rest, fresh], to);
+      }
 
-      const panes = grown.map((p, i) => {
+      // 칸이 둘이면 to 는 이미 있는 칸이다.
+      if (from === to) return {};
+      const panes = s.panes.map((p, i) => {
         if (i === from) return removeTab(p, id);
         if (i === to) return { ...p, tabs: [...p.tabs, tab], activeTab: id };
         return p;
