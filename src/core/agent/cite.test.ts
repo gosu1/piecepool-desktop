@@ -41,4 +41,26 @@ describe("checkCitations", () => {
     const r = checkCitations("여기. [[무릎 통증#증상|무릎]]", opened, resolve);
     expect(r.dropped).toEqual([]);
   });
+
+  it("이름이 빈 링크는 검증도 집계도 통과시키지 않는다", () => {
+    const r = checkCitations("이건 사실무근이다. [[#가짜]]", opened, resolve);
+    expect(r.dropped).toEqual([]);
+    expect(r.unsourced).toBe(1);
+  });
+
+  it("인라인 코드 안의 [[...]] 는 근거로 안 친다", () => {
+    const answer = "근거는 `[[페이지#절]]` 형식으로 답니다.";
+    const r = checkCitations(answer, opened, resolve);
+    expect(r.text).toBe(answer);
+    expect(r.dropped).toEqual([]);
+    expect(r.unsourced).toBe(1);
+  });
+
+  it("코드 블록 안의 [[...]] 도 근거로 안 치고, 블록 내용은 훼손되지 않는다", () => {
+    const answer = "설명.\n\n```\n[[가짜링크]]\n코드 내용 그대로\n```\n\n마지막 문단.";
+    const r = checkCitations(answer, opened, resolve);
+    expect(r.text).toBe(answer);
+    expect(r.dropped).toEqual([]);
+    expect(r.unsourced).toBe(3);
+  });
 });
