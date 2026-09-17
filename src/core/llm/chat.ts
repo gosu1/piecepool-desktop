@@ -1,4 +1,6 @@
-// OWNER: A — 4단계에서 확정 (2026-09-17). 툴콜 없음: AI 는 JSON 하나를 내고 코드가 파일을 쓴다 (ADR-0002 결정 2).
+// OWNER: A — 4단계에서 확정 (2026-09-17). 정리(ingest)는 툴콜을 쓰지 않는다:
+// AI 는 JSON 하나를 내고 코드가 파일을 쓴다 (ADR-0002 결정 2).
+// 쿼리(B)는 읽기 툴 4종을 쥔다 — generate() 가 그쪽이다 (6단계, 2026-09-18).
 //
 // OpenAI 호환 엔드포인트를 fetch 로 직접 쓴다. 패키지를 늘리지 않는다. 기본은 Kimi K3,
 // reasoning_effort low (2026-09-15 합의 · 09-17 실측). Gemini 도 같은 형식이라 base URL 만 바꾸면 된다.
@@ -7,14 +9,96 @@
 // 앱은 main/keys.ts 가 safeStorage 에서 읽어 process.env 에 올린 뒤 부른다.
 import { PiecePoolError } from "../errors.ts";
 
-export interface LlmMessage {
-  role: "user" | "model";
-  text: string;
+/** LLM 에게 보낼 툴 정의. `parameters` 는 JSON Schema 다. */
+export interface ToolSpec {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
 }
 
-/** 자유 텍스트 응답. 쿼리(B) 가 쓴다 — 6단계에서 채운다. */
-export async function generate(messages: LlmMessage[]): Promise<string> {
-  throw new Error("unimplemented: core/llm/chat.generate");
+/** LLM 이 부르겠다고 한 툴 하나. */
+export interface ToolCall {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
+/**
+ * 대화 한 칸. `tool` 은 우리가 툴을 실행하고 돌려주는 결과다.
+ * 역할 이름이 OpenAI 와 다른 것은 `model` 뿐이라 변환에서 맞춘다.
+ */
+export type LlmMessage =
+  | { role: "user" | "model"; text: string }
+  | { role: "tool"; callId: string; name: string; result: unknown };
+
+export function toApiMessages(messages: LlmMessage[], system?: string): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  if (system !== undefined) out.push({ role: "system", content: system });
+  for (const m of messages) {
+    if (m.role === "tool") {
+      out.push({ role: "tool", tool_call_id: m.callId, content: JSON.stringify(m.result) });
+    } else {
+      out.push({ role: m.role === "model" ? "assistant" : "user", content: m.text });
+    }
+  }
+  return out;
+}
+
+type RawChoice = {
+  message?: {
+    content?: string | null;
+    tool_calls?: { id?: string; function?: { name?: string; arguments?: string } }[];
+  };
+};
+
+/**
+ * 응답에서 본문과 툴콜을 꺼낸다.
+ *
+ * `arguments` 가 깨진 JSON 이어도 던지지 않는다 — 빈 인자로 두면 툴의 런타임 검증이
+ * "인자가 없다" 를 결과로 돌려주고 AI 가 고쳐 다시 부른다. 여기서 던지면 세션이 죽는다.
+ */
+export function parseCalls(raw: unknown): { text: string; calls: ToolCall[] } {
+  const msg = (raw as { choices?: RawChoice[] }).choices?.[0]?.message;
+  const calls: ToolCall[] = [];
+  for (const c of msg?.tool_calls ?? []) {
+    let args: Record<string, unknown> = {};
+    try {
+      args = JSON.parse(c.function?.arguments ?? "{}") as Record<string, unknown>;
+    } catch {
+      args = {};
+    }
+    calls.push({ id: c.id ?? "", name: c.function?.name ?? "", args });
+  }
+  return { text: msg?.content ?? "", calls };
+}
+
+/**
+ * 자유 텍스트 응답. 쿼리(B)가 쓴다.
+ *
+ * `tools` 를 주면 모델이 툴콜을 낼 수 있다. 부르는 쪽(`agent/loop.ts`)이
+ * 실행하고 결과를 `role: "tool"` 로 붙여 다시 부른다.
+ */
+export async function generate(
+  messages: LlmMessage[],
+  o?: { system?: string; tools?: ToolSpec[] },
+): Promise<{ text: string; calls: ToolCall[]; usage: CallUsage }> {
+  const c = config();
+  const t0 = Date.now();
+  const body: Record<string, unknown> = {
+    model: c.model,
+    messages: toApiMessages(messages, o?.system),
+    max_tokens: 32_000,
+    ...c.sampling,
+  };
+  if (o?.tools?.length) {
+    body.tools = o.tools.map((t) => ({
+      type: "function",
+      function: { name: t.name, description: t.description, parameters: t.parameters },
+    }));
+  }
+  const raw = (await postJson(c, "/chat/completions", body)) as { usage?: RawUsage };
+  const { text, calls } = parseCalls(raw);
+  return { text, calls, usage: toUsage(c.model, raw.usage, Date.now() - t0) };
 }
 
 type Config = {
