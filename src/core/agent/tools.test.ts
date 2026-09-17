@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Vault } from "../../shared/types.ts";
 import { openVault } from "../vault/open.ts";
-import { createTools } from "./tools.ts";
+import { createTools, globToRe } from "./tools.ts";
 import { Written } from "./written.ts";
 
 let v: Vault;
@@ -94,5 +94,21 @@ describe("list_notes", () => {
   it("glob 으로 좁힌다", async () => {
     const r = (await toolOf("list_notes").run({ glob: "wiki/*" })) as { paths: string[] };
     expect(r.paths.sort()).toEqual(["wiki/달리기.md", "wiki/무릎 통증.md"]);
+  });
+});
+
+describe("globToRe", () => {
+  // Windows 는 ? 를 파일명에 못 써서 list_notes 로는 재현할 수 없다 — 함수를 직접 잰다.
+  it("? 를 리터럴로 이스케이프한다 — 정규식 메타문자로 새지 않는다", () => {
+    const re = globToRe("wiki/무엇?.md");
+    expect(re.test("wiki/무엇?.md")).toBe(true);
+    // 이스케이프가 안 됐다면 ? 가 "앞 문자 0~1회" 로 풀려 이것도 통과했을 것이다.
+    expect(re.test("wiki/무엇.md")).toBe(false);
+  });
+
+  it("* 는 와일드카드로 그대로 남긴다", () => {
+    const re = globToRe("wiki/*");
+    expect(re.test("wiki/달리기.md")).toBe(true);
+    expect(re.test("wiki/폴더/달리기.md")).toBe(false);
   });
 });

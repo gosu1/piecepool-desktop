@@ -21,8 +21,8 @@ export function titleOf(p: NotePath): string {
   return (p.split("/").pop() ?? p).replace(/\.md$/i, "");
 }
 
-/** 트리에서 파일 경로만 평탄화해 뽑는다. */
-function flatten(nodes: TreeNode[]): NotePath[] {
+/** 트리에서 파일 경로만 평탄화해 뽑는다. agent/tools.ts 도 이걸 쓴다 — 순회 규칙이 한 곳에만 살게 한다. */
+export function flatten(nodes: TreeNode[]): NotePath[] {
   const out: NotePath[] = [];
   for (const n of nodes) {
     if (n.kind === "file") out.push(n.path);

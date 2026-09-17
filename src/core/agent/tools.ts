@@ -1,13 +1,11 @@
 // FROZEN: 파일 전체 — A↔B 경계면 + 툴 6종 (0단계 설계 §3.4·§8)
-import type { NotePath, Vault } from "../../shared/types.ts";
+import type { Vault } from "../../shared/types.ts";
 import type { Written } from "./written.ts";
 import { readRaw } from "../vault/notes.ts";
 import { readTree } from "../vault/tree.ts";
-import { scanVault } from "../index/scan.ts";
+import { flatten, scanVault } from "../index/scan.ts";
 import { backlinksOf } from "../index/links.ts";
 import { buildIndex, search, type WikiIndex } from "../index/search.ts";
-// TreeNode 는 shared/ipc.ts 에 있다 — index/scan.ts 도 거기서 가져온다.
-import type { TreeNode } from "../../shared/ipc.ts";
 
 /** 상위 §7.2 가 이름과 인자를 문자 그대로 제시한 6종. */
 export type ToolName =
@@ -40,18 +38,14 @@ function str(args: Record<string, unknown>, key: string): string | { error: stri
   return v;
 }
 
-function flatten(nodes: TreeNode[]): NotePath[] {
-  const out: NotePath[] = [];
-  for (const n of nodes) {
-    if (n.kind === "file") out.push(n.path);
-    else if (n.children !== undefined) out.push(...flatten(n.children));
-  }
-  return out;
-}
-
-/** `wiki/*` 같은 아주 작은 glob 만 받는다. `*` 는 `/` 를 넘지 않는다. */
-function globToRe(glob: string): RegExp {
-  const esc = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*");
+/**
+ * `wiki/*` 같은 아주 작은 glob 만 받는다. `*` 는 `/` 를 넘지 않는다.
+ *
+ * export 는 테스트 전용이다 — Windows 는 `?` 를 파일명에 못 써서 list_notes 를
+ * 통해서는 이스케이프를 재현할 수 없다.
+ */
+export function globToRe(glob: string): RegExp {
+  const esc = glob.replace(/[.+^${}()|?[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*");
   return new RegExp(`^${esc}$`);
 }
 
