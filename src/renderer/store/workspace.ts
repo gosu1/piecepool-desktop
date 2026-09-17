@@ -83,6 +83,9 @@ export type Tab = NoteTab | GraphTab | QueryTab;
 /** 탭 요청 세대. 닫았다가 곧바로 다시 연 탭에 옛 응답이 덮어쓰는 것을 막는다. */
 let tabSeq = 0;
 
+/** 칸 id 세대. React 의 key 로 쓰므로 살아 있는 칸끼리 겹치지 않기만 하면 된다. */
+let paneSeq = 0;
+
 /** 탭이 든 칸의 인덱스. 없으면 -1. */
 function paneOf(panes: Pane[], id: string): number {
   return panes.findIndex((p) => p.tabs.some((t) => t.id === id));
@@ -153,6 +156,7 @@ interface WorkspaceState {
   openQueryTab: () => void;
   focusTab: (id: string) => void;
   closeTab: (id: string) => void;
+  moveTabToPane: (id: string, to: number) => void;
 }
 
 /** 두 액션이 같은 응답 모양을 받는다. 해석을 한 곳에 둔다. */
@@ -290,5 +294,30 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       if (i === -1) return {};
       const panes = s.panes.map((p, j) => (j === i ? removeTab(p, id) : p));
       return compact(panes, s.activePane);
+    }),
+
+  moveTabToPane: (id, to) =>
+    set((s) => {
+      // 칸은 둘까지다. to 가 panes.length 면 새 칸을 만든다는 뜻이다.
+      if (to < 0 || to > 1 || to > s.panes.length) return {};
+      const from = paneOf(s.panes, id);
+      if (from === -1 || from === to) return {};
+      const tab = s.panes[from].tabs.find((t) => t.id === id);
+      if (tab === undefined) return {};
+
+      // 새 칸을 만드는 경우와 기존 칸에 넣는 경우를 한 배열로 만들어 놓고 한 번에 훑는다.
+      const grown: Pane[] =
+        to === s.panes.length
+          ? [...s.panes, { id: ++paneSeq, tabs: [], activeTab: null }]
+          : s.panes;
+
+      const panes = grown.map((p, i) => {
+        if (i === from) return removeTab(p, id);
+        if (i === to) return { ...p, tabs: [...p.tabs, tab], activeTab: id };
+        return p;
+      });
+
+      // 떠난 칸이 비었으면 걷어낸다. 인덱스가 밀리므로 compact 가 새 activePane 을 준다.
+      return compact(panes, to);
     }),
 }));

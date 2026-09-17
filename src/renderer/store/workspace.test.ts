@@ -12,6 +12,7 @@ import {
 } from "./workspace.ts";
 import type { VaultPayload } from "../../shared/ipc.ts";
 import type { Result } from "../../shared/types.ts";
+import type { Tab } from "./workspace.ts";
 
 const initial = useWorkspace.getState();
 
@@ -386,5 +387,194 @@ describe("쿼리 탭", () => {
     });
     expect(next.panes).toEqual([{ id: 0, tabs: [], activeTab: null }]);
     expect(next.activePane).toBe(0);
+  });
+});
+
+/** 노트 탭 하나를 만든다. 칸을 세우는 테스트가 반복해서 쓴다. */
+function note(name: string): Tab {
+  return {
+    kind: "note",
+    id: noteTabId(name),
+    path: name,
+    title: name,
+    body: "",
+    error: null,
+    seq: 1,
+  };
+}
+
+describe("moveTabToPane", () => {
+  it("칸이 하나일 때 옮기면 칸이 둘이 된다", () => {
+    const a = note("a.md");
+    const b = note("b.md");
+    useWorkspace.setState({
+      panes: [{ id: 0, tabs: [a, b], activeTab: a.id }],
+      activePane: 0,
+    });
+    useWorkspace.getState().moveTabToPane(b.id, 1);
+    const s = useWorkspace.getState();
+    expect(s.panes).toHaveLength(2);
+    expect(s.panes[0].tabs.map((t) => t.id)).toEqual([a.id]);
+    expect(s.panes[1].tabs.map((t) => t.id)).toEqual([b.id]);
+    expect(s.panes[1].activeTab).toBe(b.id);
+    expect(s.activePane).toBe(1);
+  });
+
+  it("두 칸의 id 가 서로 다르다", () => {
+    const a = note("a.md");
+    const b = note("b.md");
+    useWorkspace.setState({
+      panes: [{ id: 0, tabs: [a, b], activeTab: a.id }],
+      activePane: 0,
+    });
+    useWorkspace.getState().moveTabToPane(b.id, 1);
+    const s = useWorkspace.getState();
+    expect(s.panes[0].id).not.toBe(s.panes[1].id);
+  });
+
+  it("칸이 둘일 때 반대 칸으로 옮기면 원래 칸에서 사라진다", () => {
+    const a = note("a.md");
+    const b = note("b.md");
+    const c = note("c.md");
+    useWorkspace.setState({
+      panes: [
+        { id: 0, tabs: [a], activeTab: a.id },
+        { id: 1, tabs: [b, c], activeTab: c.id },
+      ],
+      activePane: 1,
+    });
+    useWorkspace.getState().moveTabToPane(c.id, 0);
+    const s = useWorkspace.getState();
+    expect(s.panes[0].tabs.map((t) => t.id)).toEqual([a.id, c.id]);
+    expect(s.panes[1].tabs.map((t) => t.id)).toEqual([b.id]);
+    expect(s.activePane).toBe(0);
+  });
+
+  it("떠난 칸의 활성 탭이 오른쪽 이웃으로 옮겨간다", () => {
+    const a = note("a.md");
+    const b = note("b.md");
+    const c = note("c.md");
+    useWorkspace.setState({
+      panes: [{ id: 0, tabs: [a, b, c], activeTab: b.id }],
+      activePane: 0,
+    });
+    useWorkspace.getState().moveTabToPane(b.id, 1);
+    expect(useWorkspace.getState().panes[0].activeTab).toBe(c.id);
+  });
+
+  it("마지막 탭을 옮기면 빈 칸이 정리돼 칸이 도로 하나다", () => {
+    const a = note("a.md");
+    useWorkspace.setState({
+      panes: [{ id: 0, tabs: [a], activeTab: a.id }],
+      activePane: 0,
+    });
+    useWorkspace.getState().moveTabToPane(a.id, 1);
+    const s = useWorkspace.getState();
+    expect(s.panes).toHaveLength(1);
+    expect(s.panes[0].tabs.map((t) => t.id)).toEqual([a.id]);
+    expect(s.activePane).toBe(0);
+  });
+
+  it("같은 칸으로의 드롭은 아무것도 바꾸지 않는다", () => {
+    const a = note("a.md");
+    const before = [{ id: 0, tabs: [a], activeTab: a.id }];
+    useWorkspace.setState({ panes: before, activePane: 0 });
+    useWorkspace.getState().moveTabToPane(a.id, 0);
+    expect(useWorkspace.getState().panes).toEqual(before);
+  });
+
+  it("없는 탭이나 범위 밖 칸은 아무것도 바꾸지 않는다", () => {
+    const a = note("a.md");
+    const before = [{ id: 0, tabs: [a], activeTab: a.id }];
+    useWorkspace.setState({ panes: before, activePane: 0 });
+    useWorkspace.getState().moveTabToPane("note:없다.md", 1);
+    expect(useWorkspace.getState().panes).toEqual(before);
+    // 칸은 둘까지다 — 2 는 만들지 않는다.
+    useWorkspace.getState().moveTabToPane(a.id, 2);
+    expect(useWorkspace.getState().panes).toEqual(before);
+  });
+});
+
+describe("칸이 둘일 때의 기존 액션", () => {
+  it("오른쪽 칸의 마지막 탭을 닫으면 칸이 하나가 되고 activePane 이 0 이다", () => {
+    const a = note("a.md");
+    const b = note("b.md");
+    useWorkspace.setState({
+      panes: [
+        { id: 0, tabs: [a], activeTab: a.id },
+        { id: 1, tabs: [b], activeTab: b.id },
+      ],
+      activePane: 1,
+    });
+    useWorkspace.getState().closeTab(b.id);
+    const s = useWorkspace.getState();
+    expect(s.panes).toHaveLength(1);
+    expect(s.panes[0].tabs.map((t) => t.id)).toEqual([a.id]);
+    expect(s.activePane).toBe(0);
+  });
+
+  it("focusTab 은 탭이 든 칸으로 activePane 을 옮긴다", () => {
+    const a = note("a.md");
+    const b = note("b.md");
+    useWorkspace.setState({
+      panes: [
+        { id: 0, tabs: [a], activeTab: a.id },
+        { id: 1, tabs: [b], activeTab: b.id },
+      ],
+      activePane: 0,
+    });
+    useWorkspace.getState().focusTab(b.id);
+    expect(useWorkspace.getState().activePane).toBe(1);
+  });
+
+  it("그래프 탭을 열면 activePane 쪽에 붙는다", () => {
+    const a = note("a.md");
+    const b = note("b.md");
+    useWorkspace.setState({
+      panes: [
+        { id: 0, tabs: [a], activeTab: a.id },
+        { id: 1, tabs: [b], activeTab: b.id },
+      ],
+      activePane: 1,
+    });
+    useWorkspace.getState().openGraphTab();
+    const s = useWorkspace.getState();
+    expect(s.panes[0].tabs).toHaveLength(1);
+    expect(s.panes[1].tabs).toHaveLength(2);
+  });
+
+  it("이미 열린 노트를 사이드바에서 다시 열면 그 탭이 있는 칸으로 간다", async () => {
+    const a = note("a.md");
+    const b = note("b.md");
+    useWorkspace.setState({
+      panes: [
+        { id: 0, tabs: [a], activeTab: a.id },
+        { id: 1, tabs: [b], activeTab: b.id },
+      ],
+      activePane: 1,
+    });
+    // 이미 열려 있으면 openTab 이 곧바로 돌아온다 — window.piecepool 을 부르지 않는다.
+    await useWorkspace.getState().openTab("a.md", "a");
+    const s = useWorkspace.getState();
+    expect(s.activePane).toBe(0);
+    expect(s.panes[0].activeTab).toBe(a.id);
+    expect(s.panes[1].tabs).toHaveLength(1);
+    expect(s.selected).toBe("a.md");
+  });
+
+  it("이미 열린 그래프 탭은 그 탭이 있는 칸으로 포커스가 간다", () => {
+    const a = note("a.md");
+    useWorkspace.setState({
+      panes: [
+        { id: 0, tabs: [a], activeTab: a.id },
+        { id: 1, tabs: [{ kind: "graph", id: GRAPH_TAB_ID, title: "그래프" }], activeTab: null },
+      ],
+      activePane: 0,
+    });
+    useWorkspace.getState().openGraphTab();
+    const s = useWorkspace.getState();
+    expect(s.panes).toHaveLength(2);
+    expect(s.activePane).toBe(1);
+    expect(s.panes[1].activeTab).toBe(GRAPH_TAB_ID);
   });
 });
