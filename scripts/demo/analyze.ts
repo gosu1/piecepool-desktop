@@ -212,7 +212,12 @@ async function main(): Promise<void> {
       const names = [p.name, ...(p.fm.aliases ?? [])].map(normalizeTitle);
       return alts(spec).some((a) => names.some((n) => n === a || n.startsWith(a + " ")));
     };
-    const findPage = (spec: string) => pages.find((p) => matches(p, spec));
+    // 정확히 같은 이름을 먼저 — `달리기` 를 찾는데 `달리기 무릎 경고 앱` 이 앞부분 일치로 먼저 잡혔다 (40회차).
+    const exactPage = (spec: string) =>
+      pages.find((p) =>
+        [p.name, ...(p.fm.aliases ?? [])].map(normalizeTitle).some((n) => alts(spec).includes(n)),
+      );
+    const findPage = (spec: string) => exactPage(spec) ?? pages.find((p) => matches(p, spec));
     const body = (p: WikiPage) =>
       p.summary + "\n" + p.sections.map((x) => x.content).join("\n") + "\n" + p.records.join("\n");
     const linksBetween = (a: WikiPage, b: WikiPage) => {
