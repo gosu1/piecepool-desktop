@@ -4,6 +4,8 @@
 // "그 문장이 그 절에서 나왔는가" 는 모른다. 근거를 사칭한 문단은 사람이 본다
 // (설계 §3.3 · §10.6).
 
+import { blankCode } from "../index/links.ts";
+
 /** 이번 세션에서 실제로 본 것. `path#heading` 또는 전문을 연 `path`. */
 export type Opened = Set<string>;
 
@@ -13,42 +15,6 @@ export type Opened = Set<string>;
  * 합의가 필요하므로, fragment 만 여기서 따로 읽는다.
  */
 const LINK = /\[\[([^\]|#]+)(?:#([^\]|]+))?(?:\|([^\]]*))?\]\]/g;
-
-/**
- * `index/links.ts` 의 `blankCode` 와 같은 전처리를 그대로 복제한 것이다.
- * 그 함수는 그 파일에서 export 되지 않는 내부 구현이고, 이번 수정은
- * `cite.ts`/`cite.test.ts` 두 파일만 고치기로 되어 있어 가져다 쓸 수 없다.
- * 로직 두 벌을 두는 대가가 있다 — 코드 펜스 규칙이 바뀌면 두 곳을 같이 고쳐야 한다.
- */
-function blankCode(body: string): string {
-  const lines = body.split("\n");
-  let fenceChar: string | null = null;
-  let fenceLen = 0;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const m = /^\s*(`{3,}|~{3,})/.exec(line);
-
-    if (fenceChar === null) {
-      if (m !== null) {
-        fenceChar = m[1][0];
-        fenceLen = m[1].length;
-        lines[i] = " ".repeat(line.length);
-        continue;
-      }
-      // 백틱 런의 길이가 같은 쌍만 인라인 코드다.
-      lines[i] = line.replace(/(`+)[^\n]*?\1/g, (s) => " ".repeat(s.length));
-      continue;
-    }
-
-    // 펜스 안이다. 닫으려면 같은 문자에 길이가 여는 쪽 이상이어야 한다 —
-    // 백틱 넷으로 연 블록 안의 백틱 셋짜리 예제는 그 블록을 닫지 못한다(CommonMark).
-    if (m !== null && m[1][0] === fenceChar && m[1].length >= fenceLen) fenceChar = null;
-    lines[i] = " ".repeat(line.length);
-  }
-
-  return lines.join("\n");
-}
 
 export function checkCitations(
   answer: string,

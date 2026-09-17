@@ -31,8 +31,10 @@ export function normalizeTitle(t: string): string {
 /**
  * 코드 펜스와 인라인 코드를 **같은 길이의 공백**으로 지운다.
  * 길이를 유지하는 이유: 나중에 링크 위치(offset)가 필요해질 때 통째로 밀리지 않는다.
+ *
+ * agent/cite.ts 도 이걸 쓴다 — 코드 펜스를 비우는 규칙이 한 곳에만 살게 한다.
  */
-function blankCode(body: string): string {
+export function blankCode(body: string): string {
   const lines = body.split("\n");
   let fenceChar: string | null = null;
   let fenceLen = 0;
