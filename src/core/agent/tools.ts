@@ -1,6 +1,13 @@
 // FROZEN: 파일 전체 — A↔B 경계면 + 툴 6종 (0단계 설계 §3.4·§8)
-import type { Vault } from "../../shared/types.ts";
+import type { NotePath, Vault } from "../../shared/types.ts";
 import type { Written } from "./written.ts";
+import { readRaw } from "../vault/notes.ts";
+import { readTree } from "../vault/tree.ts";
+import { scanVault } from "../index/scan.ts";
+import { backlinksOf } from "../index/links.ts";
+import { buildIndex, search, type WikiIndex } from "../index/search.ts";
+// TreeNode 는 shared/ipc.ts 에 있다 — index/scan.ts 도 거기서 가져온다.
+import type { TreeNode } from "../../shared/ipc.ts";
 
 /** 상위 §7.2 가 이름과 인자를 문자 그대로 제시한 6종. */
 export type ToolName =
@@ -13,15 +20,40 @@ export type ToolName =
  */
 export type ReadOnlyToolName = Exclude<ToolName, "write_note" | "delete_note">;
 
+// 4단계에 Tool 로 툴콜 스키마 같은 선택 필드가 추가되는 것은
+// 동결 파기가 아니라 예정된 증분이다. 6단계(쿼리)가 그 시점이다.
+// args 는 LLM 이 준 신뢰할 수 없는 JSON 이라 런타임 검증을 거친다 —
+// 검증 실패는 던지지 않고 { error } 로 돌려준다. 던지면 세션이 죽고,
+// 돌려주면 AI 가 고쳐 다시 부른다.
+
 export interface Tool {
   name: ToolName;
   run(args: Record<string, unknown>): Promise<unknown>;
+  /** LLM 에게 보낼 툴 정의. `parameters` 는 JSON Schema. */
+  schema?: { description: string; parameters: Record<string, unknown> };
 }
 
-// 4단계에 Tool 로 툴콜 스키마 같은 선택 필드가 추가되는 것은
-// 동결 파기가 아니라 예정된 증분이다. 상위 문서에 툴콜 프로토콜이 없으므로
-// 지금 schema 필드를 지어내면 거짓 안정성이 된다.
-// args 는 LLM 이 준 신뢰할 수 없는 JSON 이라 런타임 검증을 거친다.
+/** LLM 이 준 값에서 문자열을 꺼낸다. 없거나 딴 타입이면 이유를 돌려준다. */
+function str(args: Record<string, unknown>, key: string): string | { error: string } {
+  const v = args[key];
+  if (typeof v !== "string") return { error: `${key} 는 문자열이어야 한다` };
+  return v;
+}
+
+function flatten(nodes: TreeNode[]): NotePath[] {
+  const out: NotePath[] = [];
+  for (const n of nodes) {
+    if (n.kind === "file") out.push(n.path);
+    else if (n.children !== undefined) out.push(...flatten(n.children));
+  }
+  return out;
+}
+
+/** `wiki/*` 같은 아주 작은 glob 만 받는다. `*` 는 `/` 를 넘지 않는다. */
+function globToRe(glob: string): RegExp {
+  const esc = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*");
+  return new RegExp(`^${esc}$`);
+}
 
 /**
  * 툴 6종: list_notes · read_note · write_note · search · backlinks · delete_note
@@ -34,5 +66,98 @@ export interface Tool {
  * 반영은 세션 끝의 수확에서 ingest 를 통해 일어난다.
  */
 export function createTools(v: Vault, w: Written, o?: { readOnly?: boolean }): Tool[] {
-  throw new Error("unimplemented: core/agent/tools.createTools");
+  if (o?.readOnly !== true) {
+    throw new Error("unimplemented: core/agent/tools.createTools");
+  }
+
+  // 색인은 처음 쓸 때 한 번 만들어 세션 동안 재사용한다.
+  let wiki: WikiIndex | null = null;
+  let links: Awaited<ReturnType<typeof scanVault>> | null = null;
+
+  const tools: Tool[] = [
+    {
+      name: "search",
+      schema: {
+        description:
+          "위키를 낱말로 찾는다. 절 단위로 점수가 높은 것부터 발췌와 함께 돌려준다. 0건이면 다른 말로 다시 불러 본다.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          required: ["query"],
+          properties: { query: { type: "string" }, limit: { type: "number" } },
+        },
+      },
+      async run(args) {
+        const q = str(args, "query");
+        if (typeof q !== "string") return q;
+        wiki ??= await buildIndex(v);
+        const limit = typeof args.limit === "number" ? args.limit : undefined;
+        const hits = search(wiki, q, { limit });
+        return hits.length === 0 ? { hits: [], note: "0건" } : { hits };
+      },
+    },
+    {
+      name: "read_note",
+      schema: {
+        description: "노트 원문을 통째로 읽는다. search 의 발췌로 모자랄 때 쓴다.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          required: ["path"],
+          properties: { path: { type: "string" } },
+        },
+      },
+      async run(args) {
+        const p = str(args, "path");
+        if (typeof p !== "string") return p;
+        try {
+          return { text: await readRaw(v, p) };
+        } catch (e: unknown) {
+          const code = (e as NodeJS.ErrnoException).code;
+          if (code === "ENOENT") return { error: `없는 파일이다: ${p}` };
+          return { error: `볼트 밖 경로이거나 읽을 수 없다: ${p}` };
+        }
+      },
+    },
+    {
+      name: "backlinks",
+      schema: {
+        description: "이 노트를 가리키는 노트들을 돌려준다.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          required: ["path"],
+          properties: { path: { type: "string" } },
+        },
+      },
+      async run(args) {
+        const p = str(args, "path");
+        if (typeof p !== "string") return p;
+        links ??= await scanVault(v);
+        return { paths: backlinksOf(p, links.links) };
+      },
+    },
+    {
+      name: "list_notes",
+      schema: {
+        description:
+          "노트 경로를 나열한다. glob 은 `wiki/*` 처럼 쓴다. search 가 0건일 때 어떤 페이지가 있는지 보는 데 쓴다.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          properties: { glob: { type: "string" } },
+        },
+      },
+      async run(args) {
+        const all = flatten(await readTree(v));
+        if (args.glob === undefined) return { paths: all };
+        const g = str(args, "glob");
+        if (typeof g !== "string") return g;
+        const re = globToRe(g);
+        return { paths: all.filter((p) => re.test(p)) };
+      },
+    },
+  ];
+
+  return tools;
 }
