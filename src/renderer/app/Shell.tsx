@@ -3,6 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerE
 import { Pane } from "./Pane.tsx";
 import { Ribbon } from "./Ribbon.tsx";
 import { Sidebar } from "./Sidebar.tsx";
+import { DragLayer } from "../features/split/DragLayer.tsx";
 import { WindowControls } from "./WindowControls.tsx";
 import {
   MAX_SIDEBAR_WIDTH,
@@ -104,6 +105,7 @@ export function Shell() {
           </Fragment>
         ))}
       </main>
+      <DragLayer />
     </div>
   );
 }

@@ -1,6 +1,12 @@
+import { useRef } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { IS_MAC } from "../bridge.ts";
 import { WINDOW_CONTROLS_WIDTH } from "./WindowControls.tsx";
 import { useWorkspace } from "../store/workspace.ts";
+import { useDrag } from "../features/split/drag.ts";
+
+/** 이만큼 안 움직이면 드래그가 아니라 클릭이다. GraphView 와 같은 값이다. */
+const CLICK_SLOP = 3;
 
 /**
  * 한 칸의 탭 줄. 오른쪽 빈 공간은 일부러 비워 둔다 —
@@ -14,6 +20,57 @@ export function TabStrip({ pane }: { pane: number }) {
   const last = useWorkspace((s) => pane === s.panes.length - 1);
   const focusTab = useWorkspace((s) => s.focusTab);
   const closeTab = useWorkspace((s) => s.closeTab);
+  const moveTabToPane = useWorkspace((s) => s.moveTabToPane);
+  /** 눌린 탭. moved 가 false 인 동안에는 아직 클릭일 수 있다. */
+  const pressRef = useRef<{ id: string; x: number; y: number; moved: boolean } | null>(null);
+
+  const onDown = (e: ReactPointerEvent<HTMLButtonElement>, id: string) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    pressRef.current = { id, x: e.clientX, y: e.clientY, moved: false };
+  };
+
+  const onMove = (e: ReactPointerEvent<HTMLButtonElement>, title: string) => {
+    const d = pressRef.current;
+    if (d === null) return;
+
+    if (!d.moved) {
+      if (Math.abs(e.clientX - d.x) < CLICK_SLOP && Math.abs(e.clientY - d.y) < CLICK_SLOP) return;
+      // 본문 영역은 드래그 시작 때 한 번만 잰다(설계 §5). main 은 두 칸을 함께 덮는다.
+      const main = e.currentTarget.closest("main");
+      if (main === null) return;
+      const r = main.getBoundingClientRect();
+      d.moved = true;
+      useDrag.getState().start({ id: d.id, title }, { left: r.left, width: r.width });
+    }
+
+    useDrag.getState().move(e.clientX, e.clientY, useWorkspace.getState().panes.length);
+  };
+
+  const onUp = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    // 상태를 먼저 되돌린다: releasePointerCapture 는 더 이상 활성 포인터가 아닐 때
+    // NotFoundError 를 던질 수 있는데, 뒤에 두면 핸들러가 무장 상태로 남는다(ResizeHandle 과 같은 이유).
+    const d = pressRef.current;
+    pressRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    if (d === null) return;
+
+    if (!d.moved) {
+      focusTab(d.id);
+      return;
+    }
+
+    const { zone, end } = useDrag.getState();
+    end();
+    if (zone !== null) moveTabToPane(d.id, zone);
+  };
+
+  const onCancel = () => {
+    // 창 밖으로 나가거나 제스처가 취소된 것이다. 아무것도 옮기지 않는다.
+    pressRef.current = null;
+    useDrag.getState().end();
+  };
 
   if (p === undefined || p.tabs.length === 0) return null;
 
@@ -36,9 +93,13 @@ export function TabStrip({ pane }: { pane: number }) {
           >
             <button
               type="button"
-              onClick={() => focusTab(t.id)}
+              onPointerDown={(e) => onDown(e, t.id)}
+              onPointerMove={(e) => onMove(e, t.title)}
+              onPointerUp={onUp}
+              onPointerCancel={onCancel}
               aria-current={active ? "true" : undefined}
-              className="min-w-0 flex-1 truncate px-2 text-left text-sm"
+              // 드래그 중에 제목이 글자 선택으로 파래지는 것을 막는다.
+              className="min-w-0 flex-1 select-none truncate px-2 text-left text-sm"
             >
               {t.title}
             </button>
