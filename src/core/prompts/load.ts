@@ -1,10 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { assetPath } from "../assets.ts";
 
-export type PromptName = "write" | "lint" | "query";
+export type PromptName = "write" | "lint" | "query" | "me-summary";
 
 /**
- * 프롬프트는 3종이다.
+ * 프롬프트는 3종 + 보조 1종이다.
+ *
+ * `me-summary` 는 `나` 허브의 요약을 N장마다 다시 쓰는 작은 호출이다 (ADR-0002 결정 11).
  *
  * `write` 하나가 볼트 밖 파일(`ingest`)과 볼트 안 노트(정리하기)를 모두 맡는다.
  * 전처리를 거치면 둘 다 `<context>` 태그로 감싼 텍스트가 되므로 프롬프트가

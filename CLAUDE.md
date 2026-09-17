@@ -47,15 +47,15 @@
 
 ## 1. 손대도 되는 곳 / 안 되는 곳
 
-| 폴더                         |                                                                            |
-| ---------------------------- | -------------------------------------------------------------------------- |
-| `src/core/` · `src/cli/`     | 작업 구역. 단 **본인 담당 구간만** 손댄다                                  |
-| `src/shared/`                | **동결.** 합의 없이 고치지 않는다                                          |
-| `src/main/` · `src/preload/` | `index.ts`·`ipc.ts`·`preload/` 가 채워졌다. `keys.ts` 는 스텁 유지         |
-| `src/renderer/`              | **8단계 진행 중.** `app/`·`store/`·`features/` 가 있다. `ds/` 는 아직 없다 |
-| `docs/adr/legacy/`           | **읽기 전용.** 구 레포 원문 보존용이다. 내용도 포맷도 바꾸지 않는다        |
-| `docs/superpowers/specs/`    | 설계문서. **합의 없이 고치지 않는다**                                      |
-| `docs/adr/`                  | 새 ADR 추가는 가능. 기존 ADR 수정은 합의                                   |
+| 폴더                         |                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------- |
+| `src/core/` · `src/cli/`     | 작업 구역. 단 **본인 담당 구간만** 손댄다. `ingest/` · `git/` 은 4단계까지 찼다 |
+| `src/shared/`                | **동결.** 합의 없이 고치지 않는다                                               |
+| `src/main/` · `src/preload/` | `index.ts`·`ipc.ts`·`preload/` 가 채워졌다. `keys.ts` 는 스텁 유지              |
+| `src/renderer/`              | **8단계 진행 중.** `app/`·`store/`·`features/` 가 있다. `ds/` 는 아직 없다      |
+| `docs/adr/legacy/`           | **읽기 전용.** 구 레포 원문 보존용이다. 내용도 포맷도 바꾸지 않는다             |
+| `docs/superpowers/specs/`    | 설계문서. **합의 없이 고치지 않는다**                                           |
+| `docs/adr/`                  | 새 ADR 추가는 가능. 기존 ADR 수정은 합의                                        |
 
 담당 구간은 두 갈래다. **A = 문서 → wiki**(`ingest/` · `agent/tasks/ingest.ts`), **B = wiki → query**(`agent/tasks/query.ts` · 수확 · 세션 로그).
 `vault/` · `index/` · `git/` · `agent/` · `llm/` 은 공유 구역이다.
@@ -159,7 +159,7 @@ addSource(fm, "...")       // 이렇게
 throw new Error("unimplemented: core/vault/notes.readNote");
 ```
 
-**버그가 아니다.** `src/core` 는 아직 25곳이 이 상태다 (`main` 3 · `preload` 0 · `cli` 0).
+**버그가 아니다.** `src/core` 는 아직 19곳이 이 상태다 (`main` 3 · `preload` 0 · `cli` 0).
 `core/assets.ts` · `core/prompts/load.ts` 외에,
 `main/index.ts` · `main/ipc.ts` · `preload/` 와 `renderer/` 전체는 이제 실동작한다 (7·8단계 진행 중).
 

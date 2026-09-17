@@ -40,11 +40,13 @@ async function filesAtHead(v: Vault): Promise<string[]> {
 }
 
 describe("ensureRepo", () => {
-  it("없으면 init 하고 .piecepool/.gitignore 를 쓴다. 두 번째는 아무것도 안 쓴다", async () => {
+  it("없으면 init 하고 .piecepool/.gitignore 를 쓴다. 커밋될 때까지 그 경로를 돌려준다", async () => {
     const v = await tempVault();
     expect(await ensureRepo(v)).toEqual([".piecepool/.gitignore"]);
     expect(await exists(v, ".git")).toBe(true);
     expect(await read(v, ".piecepool/.gitignore")).toBe("index.json\n");
+    expect(await ensureRepo(v)).toEqual([".piecepool/.gitignore"]);
+    await commit(v, [".piecepool/.gitignore"], AGENT_AUTHOR, "첫 커밋");
     expect(await ensureRepo(v)).toEqual([]);
   });
 

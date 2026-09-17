@@ -53,5 +53,28 @@ function escape(p: NotePath): PiecePoolError {
  * 상위 §9 가 "단일 방어 지점" 이라 부른 자리가 조용히 둘이 된다.
  */
 export async function assertAgentWritable(v: Vault, p: NotePath): Promise<void> {
-  throw new Error("unimplemented: core/vault/paths.assertAgentWritable");
+  const bad = (why: string) =>
+    new PiecePoolError("path_escape", `에이전트가 쓸 수 없는 경로다: ${p} — ${why}`);
+  if (p === "" || isAbsolute(p) || p.includes("\\")) throw bad("볼트 기준 POSIX 상대경로만");
+  const parts = p.split("/");
+  if (parts.some((s) => s === "" || s === "." || s === ".."))
+    throw bad("빈 조각이나 .. 은 안 된다");
+  const roots = [...v.agentWriteRoots, "inbox"];
+  if (parts.length < 2 || !roots.includes(parts[0])) throw bad(`${roots.join(" · ")} 아래만`);
+  // wiki/ 와 inbox/ 는 .md 만. sources/ 에는 원본 복사본(pdf 등), .piecepool/ 에는 상태 파일이 온다
+  // (ADR-0002 결정 6, 2026-09-15 합의).
+  if ((parts[0] === "wiki" || parts[0] === "inbox") && !p.toLowerCase().endsWith(".md")) {
+    throw bad(".md 만 쓴다");
+  }
+  // 새 파일은 realpath 가 없다. 이미 있는 가장 가까운 조상으로 심링크 우회를 본다.
+  for (let n = parts.length; n >= 1; n--) {
+    const ancestor = parts.slice(0, n).join("/");
+    try {
+      await realpath(resolve(v.root, ancestor));
+    } catch {
+      continue;
+    }
+    await resolveInVault(v, ancestor);
+    return;
+  }
 }

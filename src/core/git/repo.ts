@@ -17,15 +17,14 @@ const INDEX_JSON: NotePath = ".piecepool/index.json";
  * 저장소를 준비한다. 볼트를 열 때가 아니라 **에이전트가 처음 쓸 때** 부른다 —
  * 구경하려고 연 폴더에 .git 을 남기지 않는다 (09-14 실제 볼트 설계 §2.1).
  *
- * 돌려주는 것은 이 호출이 새로 쓴 경로다. .gitignore 는 툴이 아니라 여기서 쓰므로
- * Written 에 안 들어온다 — 호출부가 첫 커밋의 경로에 합쳐야 한다.
+ * 돌려주는 것은 아직 커밋에 안 들어간 우리 파일(.gitignore)이다. 툴이 아니라 여기서 쓰므로
+ * Written 에 안 들어온다 — 호출부가 다음 커밋의 경로에 합친다.
  */
 export async function ensureRepo(v: Vault): Promise<NotePath[]> {
   if (!fs.existsSync(join(v.root, ".git"))) {
     await git.init({ ...repo(v), defaultBranch: "main" });
   }
 
-  const written: NotePath[] = [];
   const ignoreAbs = join(v.root, GITIGNORE);
   let ignore = "";
   try {
@@ -37,7 +36,6 @@ export async function ensureRepo(v: Vault): Promise<NotePath[]> {
     await mkdir(dirname(ignoreAbs), { recursive: true });
     const sep = ignore === "" || ignore.endsWith("\n") ? "" : "\n";
     await writeFile(ignoreAbs, `${ignore}${sep}index.json\n`, "utf8");
-    written.push(GITIGNORE);
   }
 
   // 이미 추적 중인 index.json 은 .gitignore 가 걸러내지 못한다 — 인덱스에서만 뺀다.
@@ -46,7 +44,7 @@ export async function ensureRepo(v: Vault): Promise<NotePath[]> {
   if (tracked.includes(INDEX_JSON)) {
     await git.remove({ ...repo(v), filepath: INDEX_JSON });
   }
-  return written;
+  return tracked.includes(GITIGNORE) ? [] : [GITIGNORE];
 }
 
 /** 볼트의 git config 신원. 없으면 null — 봉인 커밋을 만들 수 없다는 뜻이다. */

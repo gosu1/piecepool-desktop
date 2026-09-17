@@ -1,5 +1,6 @@
 // FROZEN: 파일 전체 — A↔B 경계면 + 진입점 (0단계 설계 §3.1·§3.3·§8)
 import type { NotePath, OnProgress, Vault } from "../../../shared/types.ts";
+import { ingestSource } from "../../ingest/sync.ts";
 
 /**
  * 인제스트의 입력. 볼트 밖 파일이거나 쿼리 세션 로그다.
@@ -37,5 +38,5 @@ export async function run(
     extraPaths?: NotePath[];
   },
 ): Promise<IngestResult> {
-  throw new Error("unimplemented: core/agent/tasks/ingest.run");
+  return await ingestSource(v, src, o);
 }

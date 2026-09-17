@@ -8,18 +8,19 @@
 // ingest 엔진의 CLI 판이다. 앱에는 아직 안 꽂혀 있다 — 4단계에서 src/core/ 로 옮겨 꽂는다.
 
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import type { Vault } from "../../src/shared/types.ts";
+import { normalizeTitle } from "../../src/core/index/links.ts";
 import {
   hash8,
+  loadWiki,
   localDate,
-  normalizeTitle,
-  readNote,
+  readItem,
   readWikiPage,
-  scanNotes,
   scanWiki,
   type WikiPage,
-} from "./vault.ts";
-import { buildUserMessage, pageEmbedText, pickCandidates } from "./prompt.ts";
+} from "../../src/core/ingest/wiki.ts";
+import { buildUserMessage, pageEmbedText, pickCandidates } from "../../src/core/ingest/prompt.ts";
 import {
   BudgetExceeded,
   MODELS,
@@ -32,7 +33,14 @@ import {
   usageSummary,
   writeWiki,
 } from "./llm.ts";
-import { buildMarkdown, hasChanges, nameIndex, retroLink, safeFileName, verify } from "./build.ts";
+import {
+  buildMarkdown,
+  hasChanges,
+  nameIndex,
+  retroLink,
+  safeFileName,
+  verify,
+} from "../../src/core/ingest/build.ts";
 import {
   buildSourcePage,
   extract,
@@ -41,9 +49,10 @@ import {
   readRawHash,
   scanSources,
   sourceDate,
-} from "./source.ts";
-import { commitFiles, type FileWrite } from "./tx.ts";
-import { loadDictionary } from "./spell.ts";
+} from "../../src/core/ingest/source.ts";
+import { commitFiles, type FileWrite } from "../../src/core/ingest/tx.ts";
+import { loadDictionary } from "../../src/core/ingest/spell.ts";
+import { scanNotes } from "../../src/core/ingest/wiki.ts";
 
 type Args = {
   vault: string;
@@ -116,6 +125,11 @@ function parseArgs(argv: string[]): Args {
   return a;
 }
 
+/** 실험 볼트를 Vault 로. 쓰기 루트는 제품 기본값과 같다. */
+function vaultOf(root: string): Vault {
+  return { root: resolve(root), agentWriteRoots: ["wiki", "sources", ".piecepool"] };
+}
+
 /** 처리한 항목의 지문. `missing` 은 원본이 사라져 기록에 `(출처 삭제됨)` 을 붙인 상태. */
 type SyncEntry = { hash: string; compiledAt: string; missing?: true };
 type SyncState = {
@@ -154,8 +168,7 @@ async function exists(p: string): Promise<boolean> {
  * 존재만 보장한다. 요약은 AI 가 큰 그림이 바뀔 때만 고친다.
  */
 async function ensureMePage(vault: string, today: string): Promise<void> {
-  const file = join(vault, "wiki", "나.md");
-  if (await exists(file)) return;
+  if (await exists(join(vault, "wiki", "나.md"))) return;
   // 초기 요약에도 지문을 찍는다. 없으면 "지문 없음 = 사용자 편집" 규칙에 걸려
   // 코드가 만든 자리 표시 문장을 AI 가 영영 못 고친다 (2026-09-14 실측).
   const summary = "아직 정리된 것이 없다.";
@@ -172,7 +185,7 @@ async function ensureMePage(vault: string, today: string): Promise<void> {
     `> ${summary}`,
     "",
   ].join("\n");
-  await commitFiles([{ path: file, content: md }]);
+  await commitFiles(vaultOf(vault), [{ path: "wiki/나.md", content: md }]);
   console.log("   wiki/나.md 를 만들었습니다 (허브)");
 }
 
@@ -183,15 +196,6 @@ function escapeRe(s: string): string {
 /** 기록 줄이 이 출처를 가리키는가. `← [[이름]]` 또는 `← [[이름#절]]`. */
 function sourceTag(name: string): RegExp {
   return new RegExp(`← \\[\\[${escapeRe(name)}(\\]\\]|#)`);
-}
-
-async function loadWiki(vault: string): Promise<Map<string, WikiPage>> {
-  const map = new Map<string, WikiPage>();
-  for (const p of await scanWiki(vault)) {
-    const page = await readWikiPage(vault, p);
-    map.set(normalizeTitle(page.name), page);
-  }
-  return map;
 }
 
 /**
@@ -208,8 +212,8 @@ function countBodyLinks(markdown: string): number {
   return new Set(names).size;
 }
 
-function wikiPath(vault: string, name: string): string {
-  return join(vault, "wiki", `${safeFileName(name)}.md`);
+function wikiPath(name: string): string {
+  return `wiki/${safeFileName(name)}.md`;
 }
 
 /** 정리용 재작성 — 기록만 바뀐 페이지를 같은 빌더로 다시 조립한다. 출처는 더하지 않는다. */
@@ -250,7 +254,7 @@ async function markDeletedSources(vault: string, state: SyncState, today: string
   }
   if (!changes.length) return;
 
-  const wiki = await loadWiki(vault);
+  const wiki = await loadWiki(vaultOf(vault));
   const writes: FileWrite[] = [];
   for (const page of wiki.values()) {
     if (!page.recordsOurs) continue;
@@ -271,12 +275,12 @@ async function markDeletedSources(vault: string, state: SyncState, today: string
     });
     if (touched)
       writes.push({
-        path: wikiPath(vault, page.name),
+        path: wikiPath(page.name),
         content: rebuildRecordsOnly(page, today),
         mustExist: true,
       });
   }
-  await commitFiles(writes);
+  await commitFiles(vaultOf(vault), writes);
   for (const c of changes) {
     if (c.missing) state.notes[c.key].missing = true;
     else delete state.notes[c.key].missing;
@@ -293,7 +297,7 @@ async function markDeletedSources(vault: string, state: SyncState, today: string
  * 페이지들의 요약을 모아 작은 별도 호출로 쓴다. 소스당 1회 원칙에 1/N 을 얹는다.
  */
 async function refreshMeSummary(vault: string, today: string): Promise<boolean> {
-  const wiki = await loadWiki(vault);
+  const wiki = await loadWiki(vaultOf(vault));
   const me = wiki.get("나");
   if (!me) return false;
   const sumSec = me.sections.find((s) => s.heading === "요약");
@@ -311,7 +315,7 @@ async function refreshMeSummary(vault: string, today: string): Promise<boolean> 
     `<나에 관한 페이지들>\n${lines.join("\n")}\n</나에 관한 페이지들>`,
     `<최근 기록>\n${me.records.slice(-10).join("\n")}\n</최근 기록>`,
   ].join("\n\n");
-  const sys = await readFile("scripts/demo/me-summary.md", "utf8");
+  const sys = await readFile("src/core/prompts/me-summary.md", "utf8");
   const { value } = await askJson<{ summary: string }>(
     sys,
     user,
@@ -332,7 +336,7 @@ async function refreshMeSummary(vault: string, today: string): Promise<boolean> 
     date: null,
     today,
   });
-  await commitFiles([{ path: wikiPath(vault, "나"), content: md, mustExist: true }]);
+  await commitFiles(vaultOf(vault), [{ path: wikiPath("나"), content: md, mustExist: true }]);
   return true;
 }
 
@@ -347,7 +351,7 @@ async function applyRetroLinks(
   const targets = [...wiki.values()].filter((p) => !skip.has(normalizeTitle(p.name)));
   const hits = retroLink(targets, newNames);
   const writes: FileWrite[] = hits.map(({ page, content, summary }) => ({
-    path: wikiPath(vault, page.name),
+    path: wikiPath(page.name),
     content: buildMarkdown({
       page: {
         name: page.name,
@@ -364,7 +368,7 @@ async function applyRetroLinks(
     }),
     mustExist: true,
   }));
-  await commitFiles(writes);
+  await commitFiles(vaultOf(vault), writes);
   return writes.length;
 }
 
@@ -387,54 +391,50 @@ type Item = {
 async function collectItems(args: Args, today: string): Promise<Item[]> {
   const items: Item[] = [];
 
-  for (const path of await scanNotes(args.vault)) {
-    const wall = await inputWall(args.vault, path);
+  const v = vaultOf(args.vault);
+  for (const path of await scanNotes(v)) {
+    const wall = await inputWall(v, path);
     if (wall) {
       items.push({ key: path, name: "", body: "", date: null, hash: "", wall });
       continue;
     }
-    const note = await readNote(args.vault, path);
-    items.push({ key: path, name: note.name, body: note.body, date: note.date, hash: note.hash });
+    items.push(await readItem(v, path));
   }
 
-  for (const src of await scanSources(args.vault)) {
-    const wall = await inputWall(args.vault, src.path);
+  for (const src of await scanSources(v)) {
+    const wall = await inputWall(v, src.path);
     if (wall) {
       items.push({ key: src.path, name: "", body: "", date: null, hash: "", wall });
       continue;
     }
-    const rawHash = await rawHashOf(args.vault, src);
+    const rawHash = await rawHashOf(v, src);
     // 입력 벽 7 — 출처 페이지의 raw_hash 가 같으면 이미 처리한 원본이다. 추출도 안 한다.
-    if (!args.force && (await readRawHash(args.vault, src)) === rawHash) {
+    if (!args.force && (await readRawHash(v, src)) === rawHash) {
       items.push({ key: src.path, name: `@${src.name}`, body: "", date: null, hash: rawHash });
       continue;
     }
-    const extracted = await extract(args.vault, src);
-    const chars = extracted.pages.reduce((a, p) => a + p.length, 0);
-    if (chars === 0) {
+    let extracted;
+    try {
+      extracted = await extract(v, src);
+    } catch (e: unknown) {
       // 입력 벽 8 — 텍스트가 0자면 스캔본이다. OCR 은 v1 범위 밖.
-      items.push({
-        key: src.path,
-        name: "",
-        body: "",
-        date: null,
-        hash: "",
-        wall: "parse_failed (텍스트 0자)",
-      });
+      const msg = e instanceof Error ? e.message : String(e);
+      items.push({ key: src.path, name: "", body: "", date: null, hash: "", wall: msg });
       continue;
     }
-    const date = await sourceDate(args.vault, src, extracted.metaDate);
+    const date = await sourceDate(v, src, extracted.metaDate);
     const md = buildSourcePage({ src, rawHash, date, today, extracted });
-    // AI 에게는 페이지 절만 넘긴다 — H1 과 임베드 줄은 자료가 아니다.
-    const body =
-      md.slice(md.indexOf("\n## ") + 1).trim() || md.replace(/^---[\s\S]*?\n---\n/, "").trim();
+    // AI 에게는 자료 본문만 넘긴다 — 출처 페이지의 프론트매터·H1·임베드 줄은 자료가 아니다.
+    const body = src.path.endsWith(".pdf")
+      ? extracted.pages.map((t, i) => `## ${i + 1}페이지\n\n${t}`).join("\n\n")
+      : extracted.pages[0];
     items.push({
       key: src.path,
       name: `@${src.name}`,
       body,
       date,
       hash: rawHash,
-      sourcePage: { path: join(args.vault, "sources", `@${src.name}.md`), content: md },
+      sourcePage: { path: `sources/@${src.name}.md`, content: md },
     });
   }
 
@@ -488,7 +488,7 @@ async function main(): Promise<void> {
 
   // 소급 링크만 — 기존 볼트에 한 번 돌린다. 정리는 하지 않는다.
   if (args.relink) {
-    const wiki = await loadWiki(args.vault);
+    const wiki = await loadWiki(vaultOf(args.vault));
     const names = [...wiki.values()].map((p) => p.name);
     const n = await applyRetroLinks(args.vault, wiki, names, new Set(), today);
     console.log(`소급 링크: ${n}장 갱신`);
@@ -560,7 +560,7 @@ async function main(): Promise<void> {
       // 다시 읽어 빌드하는 루프 — hashes 선행조건(결정 7 의 3단계). 데모는 단일 프로세스라
       // 두 번째 바퀴가 돌 일이 없지만, 앱 편집기가 들어오면 여기서 잡는다.
       for (let attempt = 0; ; attempt++) {
-        const wiki = await loadWiki(args.vault);
+        const wiki = await loadWiki(vaultOf(args.vault));
         const snapshot = new Map(
           [...wiki.values()].map((p) => [
             normalizeTitle(p.name),
@@ -608,14 +608,7 @@ async function main(): Promise<void> {
           }
         }
 
-        const note = {
-          path: item.key,
-          name: item.name,
-          body,
-          userFm: {},
-          hash: item.hash,
-          date: item.date,
-        };
+        const note = { key: item.key, name: item.name, body, hash: item.hash, date: item.date };
         const cands = pickCandidates(
           note,
           [...wiki.values()],
@@ -731,7 +724,7 @@ async function main(): Promise<void> {
             today,
           });
           writes.push({
-            path: wikiPath(args.vault, page.name),
+            path: existing?.path ?? wikiPath(page.name),
             content: md,
             mustExist: !!existing,
           });
@@ -750,7 +743,7 @@ async function main(): Promise<void> {
         for (const key of stale) {
           const existing = wiki.get(key)!;
           writes.push({
-            path: wikiPath(args.vault, existing.name),
+            path: existing.path,
             content: rebuildRecordsOnly(existing, today),
             mustExist: true,
           });
@@ -760,16 +753,9 @@ async function main(): Promise<void> {
         // 선행조건 — 쓰기 직전에 대상 페이지를 다시 읽어 hashes 가 그대로인지 본다.
         // 다르면 누군가(앱 편집기) 그 사이에 고친 것이다. 새 판 위에 빌더를 다시 돌린다.
         let changed = false;
-        const wikiDir = join(args.vault, "wiki");
         for (const w of writes) {
-          if (!w.mustExist || !w.path.startsWith(wikiDir)) continue;
-          const rel =
-            "wiki/" +
-            w.path
-              .slice(wikiDir.length + 1)
-              .split("\\")
-              .join("/");
-          const fresh = await readWikiPage(args.vault, rel).catch(() => null);
+          if (!w.mustExist || !w.path.startsWith("wiki/")) continue;
+          const fresh = await readWikiPage(vaultOf(args.vault), w.path).catch(() => null);
           if (
             fresh &&
             JSON.stringify(fresh.fm.hashes ?? {}) !== snapshot.get(normalizeTitle(fresh.name))
@@ -786,7 +772,7 @@ async function main(): Promise<void> {
           continue;
         }
 
-        await commitFiles(writes);
+        await commitFiles(vaultOf(args.vault), writes);
         for (const l of logs) console.log(l);
 
         // 이번 호출에서 새로 생긴 페이지 — 이미 쓰인 페이지 본문에 글자로 있으면 링크로 바꾼다.
@@ -809,7 +795,7 @@ async function main(): Promise<void> {
     if (!args.dry) {
       state.notes[item.key] = { hash: item.hash, compiledAt: new Date().toISOString() };
       // `나` 요약의 나이 — 지문이 그대로면 한 장 더 늙는다.
-      const me = (await loadWiki(args.vault)).get("나");
+      const me = (await loadWiki(vaultOf(args.vault))).get("나");
       const h = me ? hash8(me.summary) : "";
       state.me =
         state.me?.summaryHash === h
@@ -818,7 +804,7 @@ async function main(): Promise<void> {
       if (args.meEvery > 0 && state.me.age >= args.meEvery) {
         if (await refreshMeSummary(args.vault, today)) {
           calls++;
-          const fresh = (await loadWiki(args.vault)).get("나");
+          const fresh = (await loadWiki(vaultOf(args.vault))).get("나");
           state.me = { summaryHash: fresh ? hash8(fresh.summary) : "", age: 0 };
           console.log(`   나 요약 갱신: ${fresh?.summary.slice(0, 80)}`);
           if (usage.last) console.log(`   ${usage.last}`);
@@ -834,9 +820,9 @@ async function main(): Promise<void> {
   }
 
   // 요약 — 링크 밀도는 사업계획서의 기준선 1.5 와 비교한다.
-  const finalWiki = await loadWiki(args.vault);
+  const finalWiki = await loadWiki(vaultOf(args.vault));
   let links = 0;
-  for (const p of await scanWiki(args.vault)) {
+  for (const p of await scanWiki(vaultOf(args.vault))) {
     links += countBodyLinks(await readFile(join(args.vault, p), "utf8"));
   }
   const density = finalWiki.size ? (links / finalWiki.size).toFixed(2) : "0";

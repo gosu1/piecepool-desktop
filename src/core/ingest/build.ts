@@ -3,9 +3,14 @@
 // 검문이 빌더보다 앞이다. JSON 상태에서 걸러야 배열 항목 제거로 끝난다.
 // 매칭과 잠금 확인도 검문이 함께 한다 — 나뉘면 확인한 절과 쓰는 절이 달라진다.
 
-import { hash8, normalizeTitle, type Fm5, type WikiPage } from "./vault.ts";
-import type { LlmPage } from "./llm.ts";
+// scripts/demo/build.ts 를 옮겨 왔다 (2026-09-17, 4단계).
+
+import type { Fm } from "../../shared/types.ts";
+import { normalizeTitle } from "../index/links.ts";
+import { addSource } from "../vault/frontmatter.ts";
+import type { LlmPage } from "../llm/chat.ts";
 import { buildVocab, restoreTypos } from "./spell.ts";
+import { hash8, type WikiPage } from "./wiki.ts";
 
 export type VerifyIssue = {
   page: string;
@@ -592,9 +597,10 @@ export function buildMarkdown(input: BuildInput): string {
   const aliases = unique([...(existing?.fm.aliases ?? []), ...page.aliasesToAdd]).filter(
     (a) => normalizeTitle(a) !== normalizeTitle(page.name),
   );
-  // `parseList` 가 읽을 때 `[[ ]]` 를 벗기므로 여기서 다시 붙인다.
-  // 벗긴 채로 저장하면 갱신을 한 번 거칠 때마다 링크가 죽는다.
-  const sources = unique([...(existing?.fm.sources ?? []), ...(sourceName ? [sourceName] : [])]);
+  // sources 는 addSource 로만 늘린다 (append-only, CLAUDE.md §4). `parseList` 가 읽을 때
+  // `[[ ]]` 를 벗기므로 쓸 때 다시 붙인다 — 벗긴 채로 저장하면 갱신마다 링크가 죽는다.
+  const withSource: Fm = { sources: existing?.fm.sources ?? [] };
+  const sources = (sourceName ? addSource(withSource, sourceName) : withSource).sources ?? [];
 
   const hashes: Record<string, string> = {};
   if (summary) {
@@ -618,7 +624,7 @@ export function buildMarkdown(input: BuildInput): string {
     hashes["기록"] = hash8(recordsBody);
   }
 
-  const fm: Fm5 = {
+  const fm: Fm = {
     aliases,
     sources,
     created: existing?.fm.created ?? today,

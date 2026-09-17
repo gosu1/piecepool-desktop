@@ -1,10 +1,8 @@
 // 후보 추리기 — API 없이 확인한다.
 //
-//   npx vitest run scripts/demo
-
 import { describe, expect, it } from "vitest";
 import { pickCandidates } from "./prompt.ts";
-import { hash8, type Note, type WikiPage } from "./vault.ts";
+import { hash8, type Item, type WikiPage } from "./wiki.ts";
 
 function page(name: string, summary: string, body = "", records: string[] = []): WikiPage {
   return {
@@ -18,8 +16,8 @@ function page(name: string, summary: string, body = "", records: string[] = []):
   };
 }
 
-function note(body: string): Note {
-  return { path: "일기/2026-10-08.md", name: "2026-10-08", body, userFm: {}, hash: "", date: null };
+function note(body: string): Item {
+  return { key: "일기/2026-10-08.md", name: "2026-10-08", body, hash: "", date: null };
 }
 
 describe("BM25 후보", () => {

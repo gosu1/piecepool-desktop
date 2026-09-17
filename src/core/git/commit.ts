@@ -38,8 +38,13 @@ export async function commit(
  * 작성자는 볼트의 git config 를 따른다 — 사용자가 쓴 것을 에이전트 명의로
  * 남기면 자기 볼트 이력에서 자기 작업이 남의 것으로 보인다.
  */
-export async function sealUserEdits(v: Vault, author: Author): Promise<string | null> {
-  const dirty = await dirtyPaths(v);
+export async function sealUserEdits(
+  v: Vault,
+  author: Author,
+  /** 봉인에서 뺄 경로 — 우리가 방금 쓴 것(.gitignore · 세션 로그)은 사용자 편집이 아니다. */
+  except: NotePath[] = [],
+): Promise<string | null> {
+  const dirty = (await dirtyPaths(v)).filter((p) => !except.includes(p));
   if (dirty.length === 0) return null;
   return await commit(v, dirty, author, "chore(vault): 사용자 편집 봉인");
 }
