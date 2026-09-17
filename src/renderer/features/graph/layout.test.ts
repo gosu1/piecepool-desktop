@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { adjacency, buildLayout, degrees, radiusOf } from "./layout.ts";
+import { adjacency, buildLayout, degrees, radiusOf, recenter } from "./layout.ts";
 import type { SimNode } from "./layout.ts";
+import type { ForceCenter } from "d3-force";
 import type { GraphData } from "../../../shared/types.ts";
 
 /** A—B, A—C. A 가 허브다. D 는 고아다. */
@@ -80,5 +81,34 @@ describe("buildLayout", () => {
     sim.stop();
     expect([...(adj.get("A.md") ?? [])].sort()).toEqual(["B.md", "C.md"]);
     expect(adj.get("D.md")).toEqual(new Set());
+  });
+});
+
+describe("recenter", () => {
+  it("중심 힘을 새 크기의 한가운데로 옮긴다", () => {
+    const lay = buildLayout(g, 800, 600);
+    recenter(lay, 400, 600);
+    // 칸이 반으로 갈리면 중심도 절반으로 온다. 안 옮기면 그래프가 화면 밖으로 밀린다.
+    const c = lay.sim.force("center") as ForceCenter<SimNode>;
+    expect(c.x()).toBe(200);
+    expect(c.y()).toBe(300);
+    lay.sim.stop();
+  });
+
+  it("식은 시뮬을 다시 덥힌다", () => {
+    const lay = buildLayout(g, 800, 600);
+    lay.sim.alpha(0);
+    recenter(lay, 400, 600);
+    // 중심만 옮기고 alpha 를 안 올리면 노드가 그 자리에 굳어 있어 아무것도 안 바뀐다.
+    expect(lay.sim.alpha()).toBeGreaterThan(0);
+    lay.sim.stop();
+  });
+
+  it("노드를 새로 만들지 않는다", () => {
+    const lay = buildLayout(g, 800, 600);
+    const before = lay.nodes;
+    recenter(lay, 400, 600);
+    expect(lay.nodes).toBe(before);
+    lay.sim.stop();
   });
 });

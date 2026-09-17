@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from "react";
 import { bridge } from "../../bridge.ts";
 import { useWorkspace } from "../../store/workspace.ts";
-import { buildLayout } from "./layout.ts";
+import { buildLayout, recenter } from "./layout.ts";
 import type { Layout, SimNode } from "./layout.ts";
 import { draw } from "./draw.ts";
 import type { Palette } from "./draw.ts";
@@ -116,6 +116,23 @@ export function GraphView({ hidden }: { hidden: boolean }) {
   useEffect(() => {
     hiddenRef.current = hidden;
   }, [hidden]);
+
+  // 칸이 갈라지거나 창 크기가 바뀌면 host 폭이 달라진다. 캔버스 백버퍼는 rAF 루프가
+  // 매 프레임 다시 잡지만 **중심 힘은 buildLayout 때 박힌 값 그대로**라, 안 옮기면
+  // 그래프가 옛 중심에 뭉쳐 화면 밖으로 밀린다.
+  useEffect(() => {
+    const host = hostRef.current;
+    if (host === null) return;
+    const ro = new ResizeObserver(() => {
+      const lay = layoutRef.current;
+      // hidden 인 host 는 clientWidth/Height 가 0 이다 — 그 값으로 중심을 옮기면
+      // 노드가 한 점으로 빨려 들어간다. 다시 보일 때 관찰자가 실제 크기로 한 번 더 부른다.
+      if (lay === null || host.clientWidth === 0 || host.clientHeight === 0) return;
+      recenter(lay, host.clientWidth, host.clientHeight);
+    });
+    ro.observe(host);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     let raf = 0;

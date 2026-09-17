@@ -96,3 +96,18 @@ export function buildLayout(g: GraphData, w: number, h: number): Layout {
 
   return { sim, nodes, edges, adj };
 }
+
+/**
+ * 배치를 새 크기에 맞춘다. 칸이 갈라지거나 창 크기가 바뀔 때 부른다.
+ *
+ * buildLayout 이 중심 힘을 **로드 시점의 크기로 박아 넣는다.** 그대로 두면 폭이 줄어도
+ * 그래프는 옛 중심 주위에 뭉쳐 있어 화면 밖으로 밀린다.
+ *
+ * 노드를 새로 만들지 않는다 — 중심만 옮기고 시뮬을 다시 덥힌다. 다시 훑을 이유가 없고,
+ * 볼트를 재스캔하면 pan/zoom 까지 잃는다.
+ */
+export function recenter(lay: Layout, w: number, h: number): void {
+  lay.sim.force("center", forceCenter(w / 2, h / 2));
+  // alpha 를 안 올리면 노드가 굳은 자리에 그대로 있어 중심을 옮겨도 아무 일도 안 일어난다.
+  lay.sim.alpha(0.3).restart();
+}
