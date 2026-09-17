@@ -210,17 +210,18 @@ docs: 설계문서에 파서 타입 반영
 
 이미 정해진 것이 있고, 값을 치르고 얻은 결론이다. 다른 것을 설치하기 전에 근거를 확인한다.
 
-| 무엇            | 정해진 것                                                              | 어디                                                     |
-| --------------- | ---------------------------------------------------------------------- | -------------------------------------------------------- |
-| PDF 텍스트 추출 | `pdfjs-dist` **legacy 빌드** 단독. CMap 자산 필수                      | 상위 §7.1 · legacy ADR-0005 · 0010                       |
-| 볼트 git        | `isomorphic-git`. 네이티브 의존성 없음                                 | 상위 §4.3                                                |
-| 스타일          | Tailwind v4 + 구 레포 `--ds-*` 토큰                                    | 2026-09-14 크롬 설계 §3.2                                |
-| 빌드 배선       | 패키징 전까지 vite 수동 설정. electron-vite 는 유예                    | [ADR-0003](docs/adr/0003-manual-vite-until-packaging.md) |
-| 마크다운 에디터 | CodeMirror 6                                                           | legacy ADR-0004                                          |
-| 그래프 렌더링   | Canvas 2D + d3-force. Cytoscape 는 안 쓴다                             | [ADR-0004](docs/adr/0004-graph-canvas-d3force.md)        |
-| LLM 공급자      | **Kimi K3** (OpenAI 호환 엔드포인트). 실험은 Gemini flash-lite 로 했다 | 2026-09-15 합의 · ADR-0002 미결                          |
-| 임베딩          | Upstage solar-embedding 과 BGE-M3 중 **우리 볼트로 재서** 고른다       | 2026-09-15 합의                                          |
-| OCR             | **v1 범위 밖.** 텍스트 0자면 `parse_failed`                            | legacy ADR-0003                                          |
+| 무엇            | 정해진 것                                                                                                                        | 어디                                                     |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| PDF 텍스트 추출 | `pdfjs-dist` **legacy 빌드** 단독. CMap 자산 필수                                                                                | 상위 §7.1 · legacy ADR-0005 · 0010                       |
+| 볼트 git        | `isomorphic-git`. 네이티브 의존성 없음                                                                                           | 상위 §4.3                                                |
+| 스타일          | Tailwind v4 + 구 레포 `--ds-*` 토큰                                                                                              | 2026-09-14 크롬 설계 §3.2                                |
+| 빌드 배선       | 패키징 전까지 vite 수동 설정. electron-vite 는 유예                                                                              | [ADR-0003](docs/adr/0003-manual-vite-until-packaging.md) |
+| 마크다운 에디터 | CodeMirror 6                                                                                                                     | legacy ADR-0004                                          |
+| 그래프 렌더링   | Canvas 2D + d3-force. Cytoscape 는 안 쓴다                                                                                       | [ADR-0004](docs/adr/0004-graph-canvas-d3force.md)        |
+| LLM 공급자      | **Kimi K3**, `reasoning_effort: low` (OpenAI 호환 엔드포인트). 실측 `docs/experiments/2026-09-16-k3/`                            | 2026-09-15 합의 · 09-17 실측                             |
+| 임베딩          | **당장 안 쓴다.** 후보 추리기는 BM25(모델 없음). 정답 세트에서 BM25 가 놓치는 것이 드러나면 Upstage/BGE-M3 를 볼트로 재서 고른다 | ADR-0002 결정 3 (2026-09-16 개정)                        |
+| 한국어 맞춤법   | `hunspell-asm` + `dictionary-ko` — K3 가 깨뜨린 낱말을 되돌리는 두 번째 그물. 본문 표시는 안 한다                                | ADR-0002 결정 4 (2026-09-17 추가)                        |
+| OCR             | **v1 범위 밖.** 텍스트 0자면 `parse_failed`                                                                                      | legacy ADR-0003                                          |
 
 ### 정해진 것 — ADR-0002
 

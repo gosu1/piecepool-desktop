@@ -46,6 +46,8 @@
   },
   "dependencies": {
     "d3-force": "^3.0.0",
+    "dictionary-ko": "^2.0.0",
+    "hunspell-asm": "^4.0.2",
     "pdfjs-dist": "^6.3.289"
   }
 }

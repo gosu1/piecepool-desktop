@@ -185,7 +185,7 @@ node scripts/demo/analyze.ts fixtures/vault-life                               #
 
 - 무료 티어 한도: flash-lite 하루 500회, 임베딩 1000항목. 하루에 전체 실행 5~6회가 상한이다
 - 같은 입력은 `.piecepool/demo-cache/` 에서 온다. 프롬프트를 안 바꾸면 다시 돌려도 호출이 없다
-- `--only "DETR"` 로 노트 하나만, `--embed` 로 뜻 후보(임베딩)까지, `--prompt <파일>` 로 다른 프롬프트를 비교한다
+- `--only "DETR"` 로 노트 하나만, `--bm25 --top 8` 로 모델 없는 후보 추리기(키·한도 없음, 27~30회차에서 임베딩과 같거나 위), `--embed` 로 뜻 후보(임베딩)까지, `--prompt <파일>` 로 다른 프롬프트를 비교한다
 - 무엇을 어떻게 쟀는지는 [실험 기록](docs/experiments/2026-09-15-밤샘실험/README.md), 왜 이 설계인지는 [ADR-0002](docs/adr/0002-agentic-pipeline.md), 팀원용 설명은 [파이프라인 설명서](docs/파이프라인-설명서.md)
 
 ---

@@ -1,0 +1,191 @@
+hit	페이지	민지
+hit	페이지	지훈
+hit	페이지	수아
+hit	페이지	가족|엄마
+hit	페이지	태윤|태윤 선배
+hit	페이지	하은
+hit	페이지	김교수님|김 교수|교수님
+hit	페이지	달리기
+hit	페이지	커피
+hit	페이지	수면
+hit	페이지	러너스 니|장경인대 증후군|무릎
+hit	페이지	헬스장|헬스
+miss	페이지	신경망
+hit	페이지	CNN
+hit	페이지	트랜스포머
+hit	페이지	DETR
+hit	페이지	ResNet
+hit	페이지	프로세스
+hit	페이지	스레드
+hit	페이지	동기화|세마포어|뮤텍스
+hit	페이지	데드락
+hit	페이지	정규화
+hit	페이지	트랜잭션
+hit	페이지	가설검정|t검정|p값
+hit	페이지	회귀|단순 선형 회귀|선형 회귀
+hit	페이지	기회비용|경제학원론
+hit	페이지	캡스톤 프로젝트|캡스톤|도서관 좌석 알림 앱
+hit	페이지	알고리즘 스터디
+hit	페이지	DP|동적 계획법|동적 프로그래밍
+hit	페이지	모두테크|모두테크 데이터 인턴|모두테크 인턴
+miss	페이지	자소서|자기소개서
+hit	페이지	부산 여행|부산
+miss	페이지	코딩테스트|코딩 테스트|코테
+hit	페이지	느리게 걷기
+hit	페이지	인터스텔라
+hit	페이지	클린 코드
+hit	페이지	사피엔스
+hit	금지	운영체제 1주차
+hit	금지	운영체제 2주차
+hit	금지	운영체제 3주차
+hit	금지	운영체제 4주차
+hit	금지	운영체제 5주차
+hit	금지	딥러닝 2주차
+hit	금지	일기
+hit	금지	강의
+hit	금지	주간회의
+hit	링크	DETR ↔ 트랜스포머
+hit	링크	DETR ↔ ResNet
+hit	링크	DETR ↔ CNN
+hit	링크	ResNet ↔ CNN
+hit	링크	민지 ↔ 달리기
+hit	링크	달리기 ↔ 러너스 니|장경인대 증후군|무릎|헬스장|헬스
+hit	링크	부산 여행|부산 ↔ 민지
+hit	링크	느리게 걷기 ↔ 민지
+hit	링크	캡스톤 프로젝트|캡스톤|도서관 좌석 알림 앱 ↔ 지훈
+hit	링크	캡스톤 프로젝트|캡스톤|도서관 좌석 알림 앱 ↔ 수아
+miss	링크	캡스톤 프로젝트|캡스톤|도서관 좌석 알림 앱 ↔ 정규화|관계형 모델|데이터베이스|관계형 데이터베이스
+miss	링크	동기화|세마포어|뮤텍스 ↔ 트랜잭션
+miss	링크	동기화|세마포어|뮤텍스 ↔ 데드락
+hit	링크	알고리즘 스터디 ↔ DP|동적 계획법|동적 프로그래밍
+miss	링크	코딩테스트|코딩 테스트|코테 ↔ DP|동적 계획법|동적 프로그래밍
+hit	링크	모두테크|모두테크 데이터 인턴|모두테크 인턴 ↔ 자소서|자기소개서|캡스톤 프로젝트|캡스톤|도서관 좌석 알림 앱
+hit	링크	기회비용|경제학원론 ↔ 노트북|느리게 걷기|커피
+miss	링크	신경망 ↔ CNN|활성함수|역전파
+hit	링크	프로세스 ↔ 스레드
+hit	사실	DETR ⊃ "object query"
+hit	사실	DETR ⊃ "헝가리안"
+hit	사실	민지 ⊃ "58분|57분"
+hit	사실	민지 ⊃ "10km"
+hit	사실	러너스 니|장경인대 증후군|무릎|달리기 ⊃ "2주"
+hit	사실	커피 ⊃ "디카페인"
+miss	사실	신경망 ⊃ "기울기 소실|역전파"
+miss	사실	트랜잭션 ⊃ "ACID"
+hit	사실	데드락 ⊃ "은행원"
+hit	사실	모두테크|모두테크 데이터 인턴|모두테크 인턴 ⊃ "합격|붙었"
+hit	사실	캡스톤 프로젝트|캡스톤|도서관 좌석 알림 앱 ⊃ "5분|크롤링"
+hit	사실	가계부|커피 ⊃ "94,000|9만"
+hit	사실	부산 여행|부산 ⊃ "19만|밀면|돼지국밥"
+page	-	1x1 컨볼루션
+page	-	BFS
+page	-	Belady 이상
+page	-	CIFAR-10 분류 과제
+page	-	CNN
+page	-	CPU 스케줄링
+page	-	DETR
+page	-	DFS
+page	-	DP
+page	-	FCFS
+page	-	ResNet
+page	-	SJF
+page	-	SQL
+page	-	TLB
+page	-	critical section
+page	-	dilation
+page	-	fork
+page	-	pooling
+page	-	p값
+page	-	race condition
+page	-	receptive field
+page	-	t검정
+page	-	가계부
+page	-	가상 메모리
+page	-	가설검정
+page	-	가족
+page	-	감기
+page	-	격리 수준
+page	-	계획 오류
+page	-	공공재
+page	-	공유지의 비극
+page	-	관계형 모델
+page	-	기울기 소실
+page	-	기회비용
+page	-	김교수님
+page	-	김치볶음밥
+page	-	나
+page	-	노트 위키 자동화 앱
+page	-	노트북
+page	-	느리게 걷기
+page	-	다중 회귀
+page	-	다중공선성
+page	-	단순 선형 회귀
+page	-	달리기 무릎 경고 앱
+page	-	달리기
+page	-	던바의 수
+page	-	데드락
+page	-	도서관 좌석 알림 앱
+page	-	돈
+page	-	돼지국밥
+page	-	디미터 법칙
+page	-	라운드 로빈
+page	-	러너스 니
+page	-	매몰비용
+page	-	멀티 소스 BFS
+page	-	모두테크 데이터 인턴
+page	-	무릎 부상
+page	-	뮤텍스
+page	-	민지
+page	-	밀면
+page	-	부산 여행
+page	-	사피엔스
+page	-	생산자-소비자 문제
+page	-	세마포어
+page	-	수면 기록 앱
+page	-	수면
+page	-	수아
+page	-	수요와 공급
+page	-	스래싱
+page	-	스레드
+page	-	스핀락
+page	-	시간 지연
+page	-	시스템 콜
+page	-	시장 실패
+page	-	알고리즘 스터디
+page	-	역전파
+page	-	영어 단어
+page	-	외부효과
+page	-	우선순위 스케줄링
+page	-	운영체제
+page	-	윈도우 함수
+page	-	은행원 알고리즘
+page	-	이상 현상
+page	-	인덱스
+page	-	인터스텔라
+page	-	장보기
+page	-	정규형
+page	-	정규화
+page	-	정보 비대칭
+page	-	지훈
+page	-	진로
+page	-	추석
+page	-	커피 카운터 앱
+page	-	커피
+page	-	컨텍스트 스위치
+page	-	클린 코드
+page	-	키 (데이터베이스)
+page	-	탄력성
+page	-	태윤
+page	-	토마토 파스타
+page	-	통계 과제 3
+page	-	트랜스포머
+page	-	트랜잭션
+page	-	파이프
+page	-	퍼셉트론
+page	-	페이지 교체 알고리즘
+page	-	페이지 폴트
+page	-	페이징
+page	-	프로세스
+page	-	하은
+page	-	함수 종속
+page	-	헬스장
+page	-	활성함수
