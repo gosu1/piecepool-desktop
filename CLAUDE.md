@@ -52,7 +52,7 @@
 | `src/core/` · `src/cli/`     | 작업 구역. 단 **본인 담당 구간만** 손댄다                                  |
 | `src/shared/`                | **동결.** 합의 없이 고치지 않는다                                          |
 | `src/main/` · `src/preload/` | `index.ts`·`ipc.ts`·`preload/` 가 채워졌다. `keys.ts` 는 스텁 유지         |
-| `src/renderer/`              | **8단계 진행 중.** `app/`·`store/` 만 있다. `features/`·`ds/` 는 아직 없다 |
+| `src/renderer/`              | **8단계 진행 중.** `app/`·`store/`·`features/` 가 있다. `ds/` 는 아직 없다 |
 | `docs/adr/legacy/`           | **읽기 전용.** 구 레포 원문 보존용이다. 내용도 포맷도 바꾸지 않는다        |
 | `docs/superpowers/specs/`    | 설계문서. **합의 없이 고치지 않는다**                                      |
 | `docs/adr/`                  | 새 ADR 추가는 가능. 기존 ADR 수정은 합의                                   |
@@ -97,6 +97,7 @@ PR 상태 · CI 결과 · 브랜치 · 파일 존재 · 머지 여부. 이전 �
 | 둘 다 없음   | 내부 구현. 소유자 단독                           |
 
 동결은 15곳이고 **일부는 파일 전체가 아니라 특정 함수만**이다. 마커에 적힌 범위를 읽어라.
+목록은 두 곳에 나뉘어 있다 — 0단계 설계 §8 에 14곳, `shared/ipc.ts` 는 [ADR-0005](docs/adr/0005-ipc-contract-and-renderer-state.md) 에 있다.
 
 ### 볼트의 git 과 이 레포의 git 을 혼동하지 마라
 
@@ -210,18 +211,19 @@ docs: 설계문서에 파서 타입 반영
 
 이미 정해진 것이 있고, 값을 치르고 얻은 결론이다. 다른 것을 설치하기 전에 근거를 확인한다.
 
-| 무엇            | 정해진 것                                                                                                                        | 어디                                                     |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| PDF 텍스트 추출 | `pdfjs-dist` **legacy 빌드** 단독. CMap 자산 필수                                                                                | 상위 §7.1 · legacy ADR-0005 · 0010                       |
-| 볼트 git        | `isomorphic-git`. 네이티브 의존성 없음                                                                                           | 상위 §4.3                                                |
-| 스타일          | Tailwind v4 + 구 레포 `--ds-*` 토큰                                                                                              | 2026-09-14 크롬 설계 §3.2                                |
-| 빌드 배선       | 패키징 전까지 vite 수동 설정. electron-vite 는 유예                                                                              | [ADR-0003](docs/adr/0003-manual-vite-until-packaging.md) |
-| 마크다운 에디터 | CodeMirror 6                                                                                                                     | legacy ADR-0004                                          |
-| 그래프 렌더링   | Canvas 2D + d3-force. Cytoscape 는 안 쓴다                                                                                       | [ADR-0004](docs/adr/0004-graph-canvas-d3force.md)        |
-| LLM 공급자      | **Kimi K3**, `reasoning_effort: low` (OpenAI 호환 엔드포인트). 실측 `docs/experiments/2026-09-16-k3/`                            | 2026-09-15 합의 · 09-17 실측                             |
-| 임베딩          | **당장 안 쓴다.** 후보 추리기는 BM25(모델 없음). 정답 세트에서 BM25 가 놓치는 것이 드러나면 Upstage/BGE-M3 를 볼트로 재서 고른다 | ADR-0002 결정 3 (2026-09-16 개정)                        |
-| 한국어 맞춤법   | `hunspell-asm` + `dictionary-ko` — K3 가 깨뜨린 낱말을 되돌리는 두 번째 그물. 본문 표시는 안 한다                                | ADR-0002 결정 4 (2026-09-17 추가)                        |
-| OCR             | **v1 범위 밖.** 텍스트 0자면 `parse_failed`                                                                                      | legacy ADR-0003                                          |
+| 무엇            | 정해진 것                                                                                                                        | 어디                                                         |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| PDF 텍스트 추출 | `pdfjs-dist` **legacy 빌드** 단독. CMap 자산 필수                                                                                | 상위 §7.1 · legacy ADR-0005 · 0010                           |
+| 볼트 git        | `isomorphic-git`. 네이티브 의존성 없음                                                                                           | 상위 §4.3                                                    |
+| 스타일          | Tailwind v4 + 구 레포 `--ds-*` 토큰                                                                                              | 2026-09-14 크롬 설계 §3.2                                    |
+| 빌드 배선       | 패키징 전까지 vite 수동 설정. electron-vite 는 유예                                                                              | [ADR-0003](docs/adr/0003-manual-vite-until-packaging.md)     |
+| 마크다운 에디터 | CodeMirror 6                                                                                                                     | legacy ADR-0004                                              |
+| 그래프 렌더링   | Canvas 2D + d3-force. Cytoscape 는 안 쓴다                                                                                       | [ADR-0004](docs/adr/0004-graph-canvas-d3force.md)            |
+| LLM 공급자      | **Kimi K3**, `reasoning_effort: low` (OpenAI 호환 엔드포인트). 실측 `docs/experiments/2026-09-16-k3/`                            | 2026-09-15 합의 · 09-17 실측                                 |
+| 임베딩          | **당장 안 쓴다.** 후보 추리기는 BM25(모델 없음). 정답 세트에서 BM25 가 놓치는 것이 드러나면 Upstage/BGE-M3 를 볼트로 재서 고른다 | ADR-0002 결정 3 (2026-09-16 개정)                            |
+| 한국어 맞춤법   | `hunspell-asm` + `dictionary-ko` — K3 가 깨뜨린 낱말을 되돌리는 두 번째 그물. 본문 표시는 안 한다                                | ADR-0002 결정 4 (2026-09-17 추가)                            |
+| 상태 관리       | zustand. renderer 는 `core`·`main` 을 import 할 수 없어(eslint zone) 스토어 뒤에 IPC 를 둔다                                     | [ADR-0005](docs/adr/0005-ipc-contract-and-renderer-state.md) |
+| OCR             | **v1 범위 밖.** 텍스트 0자면 `parse_failed`                                                                                      | legacy ADR-0003                                              |
 
 ### 정해진 것 — ADR-0002
 
