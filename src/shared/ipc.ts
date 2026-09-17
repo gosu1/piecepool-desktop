@@ -9,6 +9,7 @@ export const CHANNEL = {
   vaultLast: "vault:last",
   vaultTree: "vault:tree",
   noteRead: "note:read",
+  noteWrite: "note:write",
   graphBuild: "graph:build",
   windowMinimize: "window:minimize",
   windowToggleMaximize: "window:toggleMaximize",
@@ -84,6 +85,11 @@ export interface PiecePoolApi {
    * 돌려주는 것이 Note 가 아니라 문자열이기 때문이다.
    */
   readRaw: (path: NotePath) => Promise<Result<string>>;
+  /**
+   * 편집기 저장. 본문만 보낸다 — 프론트매터는 main 이 원문에서 그대로 붙인다(core/vault/edit).
+   * renderer 가 경로를 보내는 자리 하나 더. readRaw 와 같이 resolveInVault 가 막는다.
+   */
+  writeBody: (path: NotePath, body: string) => Promise<Result<void>>;
   /**
    * 링크 색인에서 파생한 그래프. **인자가 없다** — 열린 볼트 전체가 대상이다.
    * 경로를 받지 않으므로 resolveInVault 가 지키는 표면이 늘지 않는다.

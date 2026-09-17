@@ -132,6 +132,8 @@ export function IngestView() {
   }, [log.length]);
 
   const canStart = vault !== null && keyReady === true && !running;
+  // 위키를 한 장도 안 바꾼 커밋(상태 파일만)은 되돌릴 것이 없다 — 목록에서 뺀다.
+  const shown = commits.filter((c) => c.paths.some((p) => p.startsWith("wiki/")));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-4 text-sm">
@@ -157,9 +159,9 @@ export function IngestView() {
 
       <RestorePanel />
 
-      {commits.length > 0 && (
+      {shown.length > 0 && (
         <div className="flex max-h-56 flex-col gap-1 overflow-auto">
-          {commits.map((c) => (
+          {shown.map((c) => (
             <div key={c.oid} className="flex items-center gap-2">
               <span className="truncate text-ink">{c.label}</span>
               <span className="shrink-0 text-ink-faint">

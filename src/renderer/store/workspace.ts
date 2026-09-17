@@ -65,6 +65,10 @@ export interface NoteTab {
   error: string | null;
   /** 이 탭을 연 요청의 세대. 응답이 자기 세대의 탭에만 담기게 한다. */
   seq: number;
+  /** 편집했는데 아직 저장 안 됨. */
+  dirty: boolean;
+  /** 마지막 저장 실패 사유. 본문은 그대로 보이고 이것만 옆에 뜬다. */
+  saveError: string | null;
 }
 
 /** 그래프 탭. 파일이 아니라 경로가 없다. */
@@ -165,6 +169,10 @@ interface WorkspaceState {
   /** 새 탭이 열릴 칸. */
   activePane: number;
   openTab: (path: NotePath, title: string) => Promise<void>;
+  /** 편집기가 글자를 바꿀 때마다. 저장은 saveNote 가 따로 한다. */
+  editBody: (id: string, body: string) => void;
+  /** dirty 인 탭을 저장한다. 프론트매터는 main 이 원문에서 붙인다. */
+  saveNote: (id: string) => Promise<void>;
   openGraphTab: () => void;
   openQueryTab: () => void;
   openIngestTab: () => void;
@@ -256,7 +264,17 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
     const seq = ++tabSeq;
     // 먼저 타입을 붙여 둔다. map 안에서 리터럴로 쓰면 kind 가 string 으로 넓어진다.
-    const tab: Tab = { kind: "note", id, path, title, body: null, error: null, seq };
+    const tab: Tab = {
+      kind: "note",
+      id,
+      path,
+      title,
+      body: null,
+      error: null,
+      seq,
+      dirty: false,
+      saveError: null,
+    };
     set((s) => ({
       panes: s.panes.map((p, i) =>
         i === s.activePane ? { ...p, tabs: [...p.tabs, tab], activeTab: id } : p,
@@ -282,6 +300,42 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         ...p,
         tabs: p.tabs.map((t) =>
           t.kind === "note" && t.id === id && t.seq === seq ? { ...t, body, error } : t,
+        ),
+      })),
+    }));
+  },
+
+  editBody: (id, body) =>
+    set((s) => ({
+      panes: s.panes.map((p) => ({
+        ...p,
+        tabs: p.tabs.map((t) =>
+          t.kind === "note" && t.id === id ? { ...t, body, dirty: true } : t,
+        ),
+      })),
+    })),
+
+  saveNote: async (id) => {
+    const tab = get()
+      .panes.flatMap((p) => p.tabs)
+      .find((t): t is NoteTab => t.kind === "note" && t.id === id);
+    if (tab === undefined || !tab.dirty || tab.body === null) return;
+    const body = tab.body;
+    let saveError: string | null = null;
+    try {
+      const r = await window.piecepool.writeBody(tab.path, body);
+      if (!r.ok) saveError = r.error.message;
+    } catch (e) {
+      saveError = `앱 내부 연결이 끊겼다: ${String(e)}`;
+    }
+    // 저장하는 동안 더 쳤으면 아직 dirty 다 — 보낸 본문과 같을 때만 깨끗해진다.
+    set((s) => ({
+      panes: s.panes.map((p) => ({
+        ...p,
+        tabs: p.tabs.map((t) =>
+          t.kind === "note" && t.id === id
+            ? { ...t, dirty: saveError === null ? t.body !== body : true, saveError }
+            : t,
         ),
       })),
     }));

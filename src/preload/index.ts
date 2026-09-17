@@ -12,10 +12,10 @@ import type { Progress } from "../shared/types.ts";
  * fs 를 통째로 노출하면 격리가 무의미해진다 —
  * 경로 검증은 반드시 core/vault/paths.ts 에 둔다.
  *
- * 지금 열어 주는 것은 열여섯이다.
+ * 지금 열어 주는 것은 열일곱이다.
  *
- * renderer 에서 경로를 받는 것은 `readRaw` 와 `restorePaths` 둘이다. 앞은 main 이
- * resolveInVault 로 검증하고(core/vault/paths.ts), 뒤는 core/git/restore 가 그 커밋이
+ * renderer 에서 경로를 받는 것은 `readRaw` · `writeBody` · `restorePaths` 셋이다. 앞의 둘은 main 이
+ * resolveInVault 로 검증하고(core/vault/paths.ts), restorePaths 는 core/git/restore 가 그 커밋이
  * 건드린 경로인지 확인한다. 여기에 경로를 받는 함수를 더할 때마다 그 검증을 통과하는지 확인해야 한다.
  * `setKey` 는 값을 main 으로 보내기만 한다 — 되읽는 채널은 없다.
  *
@@ -26,6 +26,7 @@ export function exposeApi(): void {
     pickVault: () => ipcRenderer.invoke(CHANNEL.vaultPick),
     lastVault: () => ipcRenderer.invoke(CHANNEL.vaultLast),
     readRaw: (path) => ipcRenderer.invoke(CHANNEL.noteRead, path),
+    writeBody: (path, body) => ipcRenderer.invoke(CHANNEL.noteWrite, path, body),
     buildGraph: () => ipcRenderer.invoke(CHANNEL.graphBuild),
     readTree: () => ipcRenderer.invoke(CHANNEL.vaultTree),
     pendingIngest: () => ipcRenderer.invoke(CHANNEL.ingestPending),

@@ -9,6 +9,7 @@ import { PiecePoolError } from "../core/errors.ts";
 import { openVault } from "../core/vault/open.ts";
 import { readTree } from "../core/vault/tree.ts";
 import { readRaw } from "../core/vault/notes.ts";
+import { saveBody } from "../core/vault/edit.ts";
 import { scanVault, toGraph } from "../core/index/scan.ts";
 import { planRestore, restorePaths } from "../core/git/restore.ts";
 import { countPending, syncVault } from "../core/ingest/sync.ts";
@@ -136,6 +137,10 @@ export function registerHandlers(): void {
       }
       return toGraph(await scanVault(opened));
     }),
+  );
+
+  ipcMain.handle(CHANNEL.noteWrite, (_e, path: unknown, body: unknown) =>
+    wrap(async () => await saveBody(requireVault(), str(path, "경로"), str(body, "본문"))),
   );
 
   ipcMain.handle(CHANNEL.vaultTree, () => wrap(async () => await readTree(requireVault())));

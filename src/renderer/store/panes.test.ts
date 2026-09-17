@@ -11,6 +11,8 @@ const tab: Tab = {
   body: "",
   error: null,
   seq: 1,
+  dirty: false,
+  saveError: null,
 };
 
 /** 탭이 든 칸. id 는 호출부가 준다 — 같은 id 가 둘이면 안 된다. */
