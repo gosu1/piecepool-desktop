@@ -63,4 +63,17 @@ describe("checkCitations", () => {
     expect(r.dropped).toEqual([]);
     expect(r.unsourced).toBe(3);
   });
+
+  it("펜스가 문단 경계(빈 줄)를 가로질러 걸쳐도 안의 [[...]] 를 근거로 안 친다", () => {
+    // 펜스 안의 빈 줄이 문단을 넷으로 쪼갠다: "설명입니다." / "```\n예시:" /
+    // "[[달리기]] 는 문법 예시입니다.\n```" / "마지막." — 넷 다 실제 근거가
+    // 없다([[달리기]]는 펜스 안 예시일 뿐이다). 조각마다 blankCode 를 다시
+    // 태우면 세 번째 조각의 닫는 펜스가 "새로 여는 펜스" 로 오인되어
+    // [[달리기]] 가 코드로 지워지지 않고 근거로 잡히는 결함이 있었다.
+    const answer = "설명입니다.\n\n```\n예시:\n\n[[달리기]] 는 문법 예시입니다.\n```\n\n마지막.";
+    const r = checkCitations(answer, opened, resolve);
+    expect(r.text).toBe(answer);
+    expect(r.dropped).toEqual([]);
+    expect(r.unsourced).toBe(4);
+  });
 });

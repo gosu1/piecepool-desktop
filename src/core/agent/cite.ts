@@ -58,21 +58,32 @@ export function checkCitations(
   }
   text += answer.slice(last);
 
-  // 문단 경계는 text(코드 내용이 살아있는 원문 구조) 기준으로 가른다 — 문단
-  // 하나가 통째로 코드 블록인 흔한 경우, blankCode 가 그 문단을 전부 공백으로
-  // 바꾸면 앞뒤의 빈 줄과 구분이 안 돼 문단 자체가 사라져 버리기 때문이다.
-  // 문단마다 다시 blankCode 를 태워, 그 안에서 진짜 링크가 있는지만 본다 —
-  // 코드 안에서 [[페이지#절]] 문법을 설명하는 예시는 이렇게 걸러진다.
-  // (펜스가 문단 경계인 빈 줄을 가로질러 걸치는 경우는 이 문단 분리 모델
-  // 자체의 기존 한계이고 이번 수정 범위 밖이다.)
+  // 문단 경계는 answer(원문) 기준 오프셋으로 찾는다 — text 기준으로 가르면 안
+  // 된다. 뗀 링크는 대괄호가 빠지며 text 를 answer 보다 짧게 만들어, text 의
+  // 오프셋이 blanked(= answer 와 길이가 같다) 의 오프셋과 어긋난다.
+  // 빈 줄(문단 경계) 자체는 코드 펜스 안에서도 항상 빈 채로 남으므로
+  // answer 와 blanked 어느 쪽에서 찾아도 위치가 같다.
+  //
+  // 문단마다 blankCode 를 다시 태우지 않고, 이미 문서 전체를 한 번에 비운
+  // blanked 에서 같은 구간만 잘라 쓴다 — 펜스 상태를 문서 전체 기준으로 한
+  // 번만 판정해야, 펜스가 문단 경계(빈 줄)를 가로질러 걸쳐도 조각마다 상태가
+  // 끊기지 않는다.
   //
   // unsourced 는 검증(LINK)과 같은 정규식으로 센다 — 느슨한 정규식을 따로 쓰면
   // [[#가짜]] 처럼 이름이 빈 링크가 검증은 건너뛰면서 집계에서는 "근거 있음"
   // 으로 잡혀 샌다.
   // match() 는 전역(g) 정규식이라도 호출마다 lastIndex 를 0 으로 되돌리고
   // 시작한다 — test()/exec() 로 문단마다 이어 쓰면 이전 위치를 물고 가 상태가 샌다.
-  const paragraphs = text.split(/\n\s*\n/).filter((p) => p.trim() !== "");
-  const unsourced = paragraphs.filter((p) => blankCode(p).match(LINK) === null).length;
+  const isUnsourced = (from: number, to: number): boolean =>
+    answer.slice(from, to).trim() !== "" && blanked.slice(from, to).match(LINK) === null;
+
+  let unsourced = 0;
+  let pStart = 0;
+  for (const bm of answer.matchAll(/\n\s*\n/g)) {
+    if (isUnsourced(pStart, bm.index)) unsourced++;
+    pStart = bm.index + bm[0].length;
+  }
+  if (isUnsourced(pStart, answer.length)) unsourced++;
 
   return { text, unsourced, dropped };
 }
