@@ -210,6 +210,7 @@ docs: 설계문서에 파서 타입 반영
 | 그래프 렌더링   | Cytoscape.js                                                                                                                     | legacy ADR-0006                    |
 | LLM 공급자      | **Kimi K3** (OpenAI 호환 엔드포인트). 실험은 Gemini flash-lite 로 했다                                                           | 2026-09-15 합의 · ADR-0002 미결    |
 | 임베딩          | **당장 안 쓴다.** 후보 추리기는 BM25(모델 없음). 정답 세트에서 BM25 가 놓치는 것이 드러나면 Upstage/BGE-M3 를 볼트로 재서 고른다 | ADR-0002 결정 3 (2026-09-16 개정)  |
+| 한국어 맞춤법   | `hunspell-asm` + `dictionary-ko` — K3 가 깨뜨린 낱말을 되돌리는 두 번째 그물. 본문 표시는 안 한다                                | ADR-0002 결정 4 (2026-09-17 추가)  |
 | OCR             | **v1 범위 밖.** 텍스트 0자면 `parse_failed`                                                                                      | legacy ADR-0003                    |
 
 ### 정해진 것 — ADR-0002
