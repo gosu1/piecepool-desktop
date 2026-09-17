@@ -6,7 +6,7 @@ import type { OnProgress, Vault } from "../../../shared/types.ts";
 import type { LlmMessage } from "../../llm/chat.ts";
 import { loadPrompt } from "../../prompts/load.ts";
 import { resolveLink } from "../../index/links.ts";
-import { scanVault } from "../../index/scan.ts";
+import { scanVault, type VaultIndex } from "../../index/scan.ts";
 import { checkCitations } from "../cite.ts";
 import { runAgent } from "../loop.ts";
 import { createTools, type Tool } from "../tools.ts";
@@ -42,6 +42,12 @@ export interface QuerySession {
    * 매 턴 새로 만들면 위키 전체를 다시 읽는다 (설계 §5.6).
    */
   tools?: Tool[];
+  /**
+   * 근거 대조용 링크 색인. **한 번 만들어 계속 쓴다** — `scanVault` 는 볼트의
+   * 모든 마크다운 파일을 읽어 툴 캐시보다 비싼데, 대화 중에는 위키가 바뀌지
+   * 않는다(읽기 전용, 수확은 B3) — 설계 §5.6.
+   */
+  index?: VaultIndex;
 }
 
 /**
@@ -90,8 +96,11 @@ export async function ask(
   });
 
   // 근거 대조 — 연 적 없는 절을 가리킨 링크를 뗀다.
-  const ix = await scanVault(v);
-  const cited = checkCitations(res.text, res.opened, (name) => resolveLink("", name, ix.targets));
+  // 링크 색인도 세션에 한 번만 만든다 — 대화 중에는 위키가 바뀌지 않는다 (설계 §5.6).
+  session.index ??= await scanVault(v);
+  const cited = checkCitations(res.text, res.opened, (name) =>
+    resolveLink("", name, session.index!.targets),
+  );
 
   session.turns.push({ who: "사용자", text: question });
   session.turns.push({ who: "AI", text: cited.text });
