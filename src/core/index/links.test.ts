@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { normalizeTitle, parseLinks, resolveLink } from "./links.ts";
+import { backlinksOf, normalizeTitle, parseLinks, resolveLink } from "./links.ts";
 import type { LinkTargets } from "./links.ts";
+import type { LinkRef } from "../../shared/types.ts";
 
 describe("normalizeTitle", () => {
   it("공백을 지운다 — 구 레포 PIE-64 가 이것으로 막힌다", () => {
@@ -137,5 +138,45 @@ describe("resolveLink", () => {
       files: new Set(["wiki/CNN.md", "CNN"]),
     };
     expect(resolveLink("a.md", "CNN", collide)).toBe("wiki/CNN.md");
+  });
+});
+
+describe("backlinksOf", () => {
+  const ref = (over: Partial<LinkRef>): LinkRef => ({
+    from: "b.md",
+    to: "제목",
+    embed: false,
+    resolved: "a.md",
+    ...over,
+  });
+
+  it("가리키는 노트를 찾는다", () => {
+    expect(backlinksOf("a.md", [ref({ from: "b.md" })])).toEqual(["b.md"]);
+  });
+
+  it("깨진 링크(resolved === null)는 안 센다", () => {
+    expect(backlinksOf("a.md", [ref({ from: "b.md", resolved: null })])).toEqual([]);
+  });
+
+  it("자기 링크(from === resolved)는 안 센다", () => {
+    expect(backlinksOf("a.md", [ref({ from: "a.md", resolved: "a.md" })])).toEqual([]);
+  });
+
+  it("같은 노트가 두 번 가리켜도 한 번만 돌려준다", () => {
+    const all = [ref({ from: "b.md" }), ref({ from: "b.md", to: "딴이름" })];
+    expect(backlinksOf("a.md", all)).toEqual(["b.md"]);
+  });
+
+  it("정렬해서 돌려준다", () => {
+    const all = [ref({ from: "z.md" }), ref({ from: "b.md" })];
+    expect(backlinksOf("a.md", all)).toEqual(["b.md", "z.md"]);
+  });
+
+  it("임베드(![[...]])도 포함한다", () => {
+    expect(backlinksOf("a.md", [ref({ from: "b.md", embed: true })])).toEqual(["b.md"]);
+  });
+
+  it("가리키는 것이 없으면 빈 배열이다", () => {
+    expect(backlinksOf("a.md", [ref({ from: "b.md", resolved: "z.md" })])).toEqual([]);
   });
 });

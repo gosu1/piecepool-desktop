@@ -126,6 +126,16 @@ export function resolveLink(from: NotePath, to: string, t: LinkTargets): NotePat
   return t.titles.get(normalizeTitle(to)) ?? (t.files.has(to) ? to : null);
 }
 
+/**
+ * `p` 를 가리키는 노트들. 깨진 링크(resolved === null)와 자기 링크(from === resolved)를
+ * 빼는 규칙은 scan.ts 의 toGraph 와 같다 — 그래프 엣지와 backlink 목록이 같은 것을
+ * 다른 모양으로 보여주는 것이므로 기준이 갈리면 안 된다.
+ */
 export function backlinksOf(p: NotePath, all: LinkRef[]): NotePath[] {
-  throw new Error("unimplemented: core/index/links.backlinksOf");
+  const from = new Set<NotePath>();
+  for (const l of all) {
+    if (l.resolved !== p || l.from === p) continue;
+    from.add(l.from);
+  }
+  return [...from].sort();
 }
