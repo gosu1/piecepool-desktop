@@ -5,6 +5,7 @@
 
 import { hash8, normalizeTitle, type Fm5, type WikiPage } from "./vault.ts";
 import type { LlmPage } from "./llm.ts";
+import { buildVocab, restoreTypos } from "./spell.ts";
 
 export type VerifyIssue = {
   page: string;
@@ -16,6 +17,8 @@ export type VerifyIssue = {
     | "절-보호"
     | "이름-비었음"
     | "나-기록-중복"
+    | "기록-중복"
+    | "오타-되돌림"
     | "별칭-차단";
   detail: string;
 };
@@ -64,13 +67,14 @@ function findQuote(sourceBody: string, quote: string): { found: boolean; anchor:
   if (needle.length < 4) return { found: false, anchor: null };
 
   // 헤딩으로 구간을 나눈다. 헤딩이 없으면 구간이 하나뿐이고 anchor 는 null 이다.
+  // 헤딩의 강조 표시(`**총평**`)는 앵커에서 뺀다 — 옵시디언 링크 `#**총평**` 은 안 열린다 (41회차).
   const lines = sourceBody.split(/\r?\n/);
   let current: string | null = null;
   const segments: { anchor: string | null; text: string }[] = [{ anchor: null, text: "" }];
   for (const line of lines) {
     const h = /^#{1,6}\s+(.*)$/.exec(line);
     if (h) {
-      current = h[1].trim();
+      current = h[1].replace(/[*_`]/g, "").trim();
       segments.push({ anchor: current, text: "" });
     } else {
       segments[segments.length - 1].text += line + "\n";
@@ -84,6 +88,21 @@ function findQuote(sourceBody: string, quote: string): { found: boolean; anchor:
   for (const seg of segments) {
     const hay = normQuote(seg.text);
     if (needles.some((n) => hay.includes(n))) return { found: true, anchor: seg.anchor };
+  }
+
+  // 구간 하나에서 못 찾으면 문서 전체에서 찾는다 — 쪽 경계에 걸친 문장("probabil-" 과
+  // 다음 쪽의 "ities")과 줄 끝 하이픈이 여기 걸린다 (40·41회차: 논문 10건, 실물 9건).
+  // 벽은 그대로다: 원문에 글자 그대로 있어야 한다. 앵커는 인용이 시작하는 구간.
+  const hays = segments.map((seg) => normQuote(seg.text));
+  const whole = hays.join("");
+  for (const n of needles) {
+    const at = whole.indexOf(n);
+    if (at < 0) continue;
+    let offset = 0;
+    for (let i = 0; i < segments.length; i++) {
+      if (at < offset + hays[i].length) return { found: true, anchor: segments[i].anchor };
+      offset += hays[i].length;
+    }
   }
   return { found: false, anchor: null };
 }
@@ -149,6 +168,27 @@ function autoLink(text: string, names: string[], selfName: string): string {
   return out;
 }
 
+/**
+ * 한 절 안에서 같은 이름의 링크는 첫 등장만 남기고 나머지는 글자로 푼다.
+ * K3 는 이름이 나올 때마다 `[[환각]]` 을 걸어 한 문단에 다섯 번씩 들어갔다 — 86장 볼트의
+ * 본문 링크 755개 중 275개가 이런 반복이었다 (40회차). 정답 세트(두 페이지가 이어졌나)에는
+ * 영향이 없고 읽기만 편해진다.
+ */
+function dedupeLinks(text: string): string {
+  const seen = new Set<string>();
+  return text.replace(
+    /\[\[([^\]|#]+)(#[^\]|]*)?(\|[^\]]+)?\]\]/g,
+    (whole, name: string, _anchor?: string, alias?: string) => {
+      const key = normalizeTitle(name);
+      if (!seen.has(key)) {
+        seen.add(key);
+        return whole;
+      }
+      return alias ? alias.slice(1) : name;
+    },
+  );
+}
+
 /** content 안의 `##` 는 `###` 으로 강등한다. 절 구조가 깨지는 것을 막되 내용은 살린다. */
 function demoteHeadings(text: string): string {
   return text.replace(
@@ -184,6 +224,13 @@ export type VerifyInput = {
   names: NameIndex;
   /** 기존 위키. 절 매칭과 해시 확인에 쓴다. */
   existing: Map<string, WikiPage>;
+  /**
+   * 깨진 낱말을 되돌릴 때 쓰는 어휘의 출처 — 볼트의 노트 본문 전부. 위키 본문은 넣지 않는다:
+   * 앞 호출이 깨뜨린 낱말이 어휘에 들어가면 그 낱말은 영영 "맞는 낱말" 이 된다.
+   */
+  vocabTexts?: string[];
+  /** 맞춤법 사전 — 낱말이면 true. 없으면 본문·사실의 오타는 되돌리지 않는다 (인용은 원문이 검증). */
+  isWord?: (run: string) => boolean;
 };
 
 export function verify(input: VerifyInput): VerifyResult {
@@ -228,6 +275,13 @@ export function verify(input: VerifyInput): VerifyResult {
     if (p.name) names.files.add(normalizeTitle(p.name));
   }
 
+  // 깨진 낱말의 사전 — 이번 자료, 볼트의 노트들, 페이지 이름. 모델이 옮긴 낱말은 여기 있던 것이다.
+  const vocab = buildVocab([
+    input.sourceBody,
+    ...(input.vocabTexts ?? []),
+    ...[...input.existing.values()].map((w) => w.name),
+  ]);
+
   for (const p of llmPages) {
     if (!p.name?.trim()) {
       issues.push({ page: "(이름 없음)", kind: "이름-비었음", detail: "페이지를 버렸습니다" });
@@ -250,9 +304,31 @@ export function verify(input: VerifyInput): VerifyResult {
               : `[[${name}]] — 목록에 없습니다`,
       });
 
+    // 깨진 낱말은 링크를 걸기 전에 되돌린다 — 링크 대상 이름도 낱말이다.
+    // 인용은 원문이 검증하므로 사전 없이 되돌리고, 본문·사실은 사전이 "낱말 아님" 이라 할 때만.
+    const fixTypos = (text: string, where: "본문" | "사실" | "인용") =>
+      where === "인용" || input.isWord
+        ? restoreTypos(
+            text,
+            vocab,
+            (from, to) =>
+              issues.push({
+                page: p.name,
+                kind: "오타-되돌림",
+                detail: `${from}→${to} (${where})`,
+              }),
+            where === "인용" ? undefined : input.isWord,
+          )
+        : text;
     const clean = (text: string) =>
       demoteHeadings(
-        autoLink(stripUnknownLinks(fixLinks(text), names, p.name, strip), displayNames, p.name),
+        dedupeLinks(
+          autoLink(
+            stripUnknownLinks(fixLinks(fixTypos(text, "본문")), names, p.name, strip),
+            displayNames,
+            p.name,
+          ),
+        ),
       );
 
     // 별칭 차단 — 다른 페이지의 제목이나 별칭이면 넣지 않는다 (결정 9 의 예방 2겹째).
@@ -333,10 +409,32 @@ export function verify(input: VerifyInput): VerifyResult {
       }
     }
 
+    // 이미 이 페이지에 있는 기록 — 같은 사실을 또 넣지 않는다. 관련 위키를 보낼 때 기록 절을
+    // 빼므로(프롬프트 크기) AI 는 이미 기록된 사실을 모른다. 그 몫을 코드가 맡는다.
+    const existingFacts = new Set(
+      (target?.records ?? []).map((line) =>
+        normQuote(
+          line
+            .replace(/^- (\d{4}-\d{2}-\d{2}|\(날짜 미상\))?\s*/, "")
+            .replace(/\s*←.*$/, "")
+            .replace(/\s*\(AI\)\s*$/, ""),
+        ),
+      ),
+    );
+
     const records: VerifiedRecord[] = [];
     for (const r of p.new_records ?? []) {
-      const { found, anchor } = findQuote(input.sourceBody, r.quote);
-      if (!found) {
+      let quote = r.quote;
+      let hit = findQuote(input.sourceBody, quote);
+      if (!hit.found) {
+        // 인용의 받침 오타 — 원문으로 되돌린 인용이 원문에 있으면 통과. 기록 줄에는 원문 글자.
+        const restored = fixTypos(quote, "인용");
+        if (restored !== quote) {
+          hit = findQuote(input.sourceBody, restored);
+          quote = restored;
+        }
+      }
+      if (!hit.found) {
         issues.push({
           page: p.name,
           kind: "quote-없음",
@@ -344,7 +442,18 @@ export function verify(input: VerifyInput): VerifyResult {
         });
         continue;
       }
-      records.push({ fact: r.fact.trim(), quote: r.quote, anchor });
+      const fact = fixTypos(r.fact.trim(), "사실");
+      const key = normQuote(fact);
+      if (existingFacts.has(key)) {
+        issues.push({
+          page: p.name,
+          kind: "기록-중복",
+          detail: `"${fact.slice(0, 40)}" 은 이미 있습니다`,
+        });
+        continue;
+      }
+      existingFacts.add(key);
+      records.push({ fact, quote, anchor: hit.anchor });
     }
 
     // 요약이 사용자 편집이면 덮지 않는다.

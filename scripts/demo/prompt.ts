@@ -210,9 +210,9 @@ function renderPage(page: WikiPage, hint?: string): string {
     if (s.heading === "요약") continue;
     lines.push("", `## ${s.heading}`, "", s.content);
   }
-  if (page.records.length) {
-    lines.push("", "## 기록", "", ...page.records);
-  }
+  // 기록 절은 보내지 않는다 (2026-09-17). 페이지 글자의 43~56% 가 기록이고, 86장 볼트에서
+  // 호출당 입력이 1.8만 → 2.8만 토큰으로 자란 주된 이유였다. AI 가 기록을 보는 이유는
+  // "같은 사실을 또 넣지 않기" 뿐인데 그것은 검문(`기록-중복`)이 코드로 막는다.
   return lines.join("\n");
 }
 

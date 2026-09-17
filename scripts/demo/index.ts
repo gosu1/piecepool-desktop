@@ -43,6 +43,7 @@ import {
   sourceDate,
 } from "./source.ts";
 import { commitFiles, type FileWrite } from "./tx.ts";
+import { loadDictionary } from "./spell.ts";
 
 type Args = {
   vault: string;
@@ -515,6 +516,10 @@ async function main(): Promise<void> {
   }
   if (args.limit > 0) items = items.slice(0, args.limit);
 
+  // 맞춤법 사전 — 깨진 낱말 되돌리기의 두 번째 겹. 못 열면 인용만 되돌린다.
+  const isWord = args.dry ? undefined : await loadDictionary().catch(() => undefined);
+  if (!args.dry && !isWord) console.log("! 맞춤법 사전을 못 열어 본문의 오타는 되돌리지 않습니다");
+
   let calls = 0;
   let cached = 0;
   let embedOk = args.useEmbed;
@@ -688,6 +693,8 @@ async function main(): Promise<void> {
           sourceBody: body,
           names: nameIndex(wiki.values()),
           existing: wiki,
+          vocabTexts: items.map((it) => it.body),
+          isWord,
         });
 
         if (attempt === 0) {
@@ -833,6 +840,13 @@ async function main(): Promise<void> {
   console.log(
     `AI 호출 ${calls}회 · 캐시 ${cached}회 · 임베딩 ${embedStats.sent}항목 · 지적 ${allIssues.length}건 · ${usageSummary()}`,
   );
+  // 지적을 종류별로 — 오타-되돌림 수가 곧 모델이 깨뜨린 낱말 수다.
+  const byKind = new Map<string, number>();
+  for (const line of allIssues) {
+    const kind = line.split(" ")[1] ?? "?";
+    byKind.set(kind, (byKind.get(kind) ?? 0) + 1);
+  }
+  if (byKind.size) console.log(`지적: ${[...byKind].map(([k, n]) => `${k} ${n}`).join(" · ")}`);
   const balanceAfter = balanceBefore === null ? null : await balance();
   if (balanceBefore !== null && balanceAfter !== null) {
     const spent = (balanceBefore - balanceAfter).toFixed(3);

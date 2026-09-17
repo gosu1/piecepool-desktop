@@ -342,3 +342,134 @@ describe("이름 정리", () => {
     expect(out.issues.filter((i) => i.kind === "링크-해제")).toHaveLength(0);
   });
 });
+
+describe("깨진 낱말 되돌리기 (2026-09-17)", () => {
+  const src = "# 면담\n\n졸업: 내년 6월. 해법을 찾는다. 아무도 안 잰 것 같다.";
+  const run = (page: Partial<Parameters<typeof verify>[0]["llmPages"][0]>) =>
+    verify({
+      llmPages: [
+        {
+          name: "졸업",
+          aliases_to_add: [],
+          summary: null,
+          new_sections: [],
+          replace_sections: [],
+          new_records: [],
+          ...page,
+        },
+      ],
+      sourceBody: src,
+      names: { files: new Set(), aliases: new Map() },
+      existing: new Map(),
+      // 사전 대역 — 깨진 꼴만 "낱말 아님". 본문·사실은 사전이 있어야 되돌린다.
+      isWord: (w) => !/^(낸년|핵법|아묘도)/.test(w),
+    });
+
+  it("quote 의 받침 오타는 원문으로 되돌려 통과시키고 기록 줄은 원문 글자를 쓴다", () => {
+    const out = run({ new_records: [{ fact: "졸업은 낸년 6월이다", quote: "졸업: 낸년 6월" }] });
+    expect(out.pages[0].records).toHaveLength(1);
+    expect(out.pages[0].records[0].fact).toBe("졸업은 내년 6월이다");
+    expect(out.issues.filter((i) => i.kind === "오타-되돌림")).toHaveLength(2);
+  });
+
+  it("절 본문의 오타도 되돌린다", () => {
+    const out = run({
+      new_sections: [{ heading: "계획", content: "핵법을 찾는 중이고 아묘도 모른다." }],
+    });
+    expect(out.pages[0].newSections[0].content).toBe("해법을 찾는 중이고 아무도 모른다.");
+  });
+});
+
+describe("인용 찾기 범위와 앵커 (2026-09-17)", () => {
+  const src =
+    "## 1페이지\n\nwe use probabil-\n\n## 2페이지\n\nities instead of log-probabilities here.\n\n## **총평**\n\n정말 좋았다고 생각한다.";
+  const run = (quote: string) =>
+    verify({
+      llmPages: [
+        {
+          name: "DETR",
+          aliases_to_add: [],
+          summary: null,
+          new_sections: [],
+          replace_sections: [],
+          new_records: [{ fact: "f", quote }],
+        },
+      ],
+      sourceBody: src,
+      names: { files: new Set(), aliases: new Map() },
+      existing: new Map(),
+    }).pages[0].records;
+
+  it("쪽 경계에 걸친 인용은 문서 전체에서 찾고 시작 쪽을 앵커로 쓴다", () => {
+    const r = run("we use probabilities instead of log-probabilities");
+    expect(r).toHaveLength(1);
+    expect(r[0].anchor).toBe("1페이지");
+  });
+
+  it("헤딩의 강조 표시는 앵커에서 뺀다", () => {
+    expect(run("정말 좋았다고 생각한다")[0].anchor).toBe("총평");
+  });
+});
+
+describe("반복 링크와 기록 중복 (2026-09-17)", () => {
+  it("한 절 안에서 같은 이름은 첫 등장만 링크로 남긴다", () => {
+    const out = verify({
+      llmPages: [
+        {
+          name: "exp-007",
+          aliases_to_add: [],
+          summary: null,
+          new_sections: [
+            {
+              heading: "결과",
+              content: "[[환각]] 비율이 줄었다. 숫자 [[환각]]은 9개. [[환각]] 14%.",
+            },
+          ],
+          replace_sections: [],
+          new_records: [],
+        },
+      ],
+      sourceBody: "환각 비율이 줄었다",
+      names: { files: new Set(["환각"]), aliases: new Map() },
+      existing: new Map(),
+    });
+    expect(out.pages[0].newSections[0].content).toBe(
+      "[[환각]] 비율이 줄었다. 숫자 환각은 9개. 환각 14%.",
+    );
+  });
+
+  it("이미 있는 기록과 같은 사실은 다시 넣지 않는다", () => {
+    const existing = new Map<string, WikiPage>([
+      [
+        "세마포어",
+        {
+          ...page("세마포어", []),
+          records: ["- 2026-05-31 세마포어는 정수 변수 S 하나에 두 연산만 가능하다 ← [[x]]"],
+        },
+      ],
+    ]);
+    const out = verify({
+      llmPages: [
+        {
+          name: "세마포어",
+          aliases_to_add: [],
+          summary: null,
+          new_sections: [],
+          replace_sections: [],
+          new_records: [
+            {
+              fact: "세마포어는 정수 변수 S 하나에 두 연산만 가능하다",
+              quote: "정수 변수 S 하나에",
+            },
+            { fact: "wait 은 값을 줄인다", quote: "wait 은 값을 줄인다" },
+          ],
+        },
+      ],
+      sourceBody: "세마포어는 정수 변수 S 하나에 두 연산만 가능하다. wait 은 값을 줄인다.",
+      names: { files: new Set(["세마포어"]), aliases: new Map() },
+      existing,
+    });
+    expect(out.pages[0].records.map((r) => r.fact)).toEqual(["wait 은 값을 줄인다"]);
+    expect(out.issues.filter((i) => i.kind === "기록-중복")).toHaveLength(1);
+  });
+});
