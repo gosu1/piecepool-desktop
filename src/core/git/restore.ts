@@ -4,21 +4,13 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import git from "isomorphic-git";
 import { AGENT_AUTHOR, type NotePath, type Vault } from "../../shared/types.ts";
+import type { RestorePath, RestorePlan } from "../../shared/ipc.ts";
 import { PiecePoolError } from "../errors.ts";
 import { commit } from "./commit.ts";
 import { repo } from "./repo.ts";
 
-export interface RestorePlan {
-  commitOid: string;
-  message: string;
-  paths: RestorePath[];
-}
-
-export interface RestorePath {
-  path: NotePath;
-  /** 그 커밋 뒤 사용자가 손댔다. 되돌리면 그 수정도 사라지므로 사용자가 골라야 한다. */
-  changedSince: boolean;
-}
+// 계획의 모양은 shared/ipc.ts 에 있다 — IPC 를 건너 화면까지 가는 타입이다.
+export type { RestorePath, RestorePlan };
 
 /** 되돌리기 계획. 커밋이 건드린 경로마다 그 뒤 변경 여부를 붙인다. */
 export async function planRestore(v: Vault, commitOid: string): Promise<RestorePlan> {

@@ -44,6 +44,9 @@ export const GRAPH_TAB_ID = "graph";
 /** 쿼리 탭도 하나뿐이다. 세션을 여럿 두는 것은 대화가 생긴 뒤의 일이다. */
 export const QUERY_TAB_ID = "query";
 
+/** 정리 탭. 볼트마다 하나이고 진행 상태는 store/ingest.ts 가 쥔다. */
+export const INGEST_TAB_ID = "ingest";
+
 /**
  * 탭 신원. NotePath 와 키 공간을 물리적으로 가른다 —
  * NotePath 는 string 별칭이라 `path | "graph"` 로는 타입이 충돌을 못 잡는다.
@@ -78,7 +81,14 @@ export interface QueryTab {
   title: "쿼리";
 }
 
-export type Tab = NoteTab | GraphTab | QueryTab;
+/** 정리 탭. 경로가 없고, 상태는 별도 스토어에 있다. */
+export interface IngestTab {
+  kind: "ingest";
+  id: "ingest";
+  title: "정리";
+}
+
+export type Tab = NoteTab | GraphTab | QueryTab | IngestTab;
 
 /** 탭 요청 세대. 닫았다가 곧바로 다시 연 탭에 옛 응답이 덮어쓰는 것을 막는다. */
 let tabSeq = 0;
@@ -115,7 +125,10 @@ function firstPane(): Pane {
  * 그래프·쿼리처럼 id 가 상수인 탭을 연다.
  * 어느 칸에든 이미 있으면 그 칸으로 포커스하고, 없으면 activePane 에 붙인다.
  */
-function openFixed(s: WorkspaceState, tab: GraphTab | QueryTab): Partial<WorkspaceState> {
+function openFixed(
+  s: WorkspaceState,
+  tab: GraphTab | QueryTab | IngestTab,
+): Partial<WorkspaceState> {
   const found = paneOf(s.panes, tab.id);
   if (found !== -1) {
     return {
@@ -154,6 +167,9 @@ interface WorkspaceState {
   openTab: (path: NotePath, title: string) => Promise<void>;
   openGraphTab: () => void;
   openQueryTab: () => void;
+  openIngestTab: () => void;
+  /** 트리만 다시 읽는다. 정리가 wiki/ 에 페이지를 만든 뒤 부른다 — 탭과 칸은 그대로 둔다. */
+  refreshTree: () => Promise<void>;
   focusTab: (id: string) => void;
   closeTab: (id: string) => void;
   moveTabToPane: (id: string, to: number) => void;
@@ -275,6 +291,18 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     set((s) => openFixed(s, { kind: "graph", id: GRAPH_TAB_ID, title: "그래프" })),
 
   openQueryTab: () => set((s) => openFixed(s, { kind: "query", id: QUERY_TAB_ID, title: "쿼리" })),
+
+  openIngestTab: () =>
+    set((s) => openFixed(s, { kind: "ingest", id: INGEST_TAB_ID, title: "정리" })),
+
+  refreshTree: async () => {
+    try {
+      const r = await window.piecepool.readTree();
+      if (r.ok) set({ tree: r.value });
+    } catch {
+      // 연결이 끊긴 것이다. 트리는 옛것으로 남지만 화면이 죽을 일은 아니다.
+    }
+  },
 
   focusTab: (id) =>
     set((s) => {

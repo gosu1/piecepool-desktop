@@ -2,6 +2,7 @@ import { useWorkspace } from "../store/workspace.ts";
 import type { Tab } from "../store/workspace.ts";
 import { GraphView } from "../features/graph/GraphView.tsx";
 import { QueryView } from "../features/query/QueryView.tsx";
+import { IngestView } from "../features/ingest/IngestView.tsx";
 
 /**
  * 그래프 탭이 활성일 땐 GraphView 가 그리므로 이 함수는 null 을 반환해 자리를 비켜 준다.
@@ -16,6 +17,7 @@ function noteBody(tab: Tab | null) {
 
   if (tab.kind === "graph") return null;
   if (tab.kind === "query") return <QueryView />;
+  if (tab.kind === "ingest") return <IngestView />;
 
   if (tab.error !== null) {
     return <div className="flex-1 overflow-auto p-4 text-sm text-danger">{tab.error}</div>;

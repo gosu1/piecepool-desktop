@@ -56,6 +56,13 @@ export async function readIdentity(v: Vault): Promise<Author | null> {
   return { name, email };
 }
 
+/** 볼트의 git 신원을 쓴다. 저장소가 없으면 만든다 — 신원을 적는 것은 정리를 시작하겠다는 뜻이다. */
+export async function writeIdentity(v: Vault, a: Author): Promise<void> {
+  await ensureRepo(v);
+  await git.setConfig({ ...repo(v), path: "user.name", value: a.name });
+  await git.setConfig({ ...repo(v), path: "user.email", value: a.email });
+}
+
 /** 워킹트리와 HEAD 가 다른 경로. 무시된 파일(index.json)은 빠진다. */
 export async function dirtyPaths(v: Vault): Promise<NotePath[]> {
   const rows = await git.statusMatrix(repo(v));
