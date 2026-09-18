@@ -21,6 +21,27 @@ describe("toApiMessages", () => {
       { role: "tool", tool_call_id: "c1", content: JSON.stringify({ hits: [] }) },
     ]);
   });
+
+  it("툴콜을 낸 assistant 턴과 그 결과가 한 요청에 짝으로 실린다 — id 가 같아야 API 가 400 을 내지 않는다", () => {
+    const out = toApiMessages([
+      {
+        role: "model",
+        text: "",
+        calls: [{ id: "c1", name: "search", args: { query: "무릎" } }],
+      },
+      { role: "tool", callId: "c1", name: "search", result: { hits: [] } },
+    ]);
+    const assistant = out[0] as { tool_calls: { id: string }[] };
+    const tool = out[1] as { tool_call_id: string };
+    expect(assistant.tool_calls[0].id).toBe(tool.tool_call_id);
+    expect(assistant).toEqual({
+      role: "assistant",
+      content: null,
+      tool_calls: [
+        { id: "c1", type: "function", function: { name: "search", arguments: '{"query":"무릎"}' } },
+      ],
+    });
+  });
 });
 
 describe("parseCalls", () => {

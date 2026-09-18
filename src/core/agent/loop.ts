@@ -77,7 +77,7 @@ export async function runAgent(
       return { text: res.text, opened, turns, toolCalls, hitCap: false, usage };
     }
 
-    messages.push({ role: "model", text: res.text });
+    messages.push({ role: "model", text: res.text, calls: res.calls });
     for (const call of res.calls) {
       toolCalls++;
       const tool = tools.find((t) => t.name === call.name);

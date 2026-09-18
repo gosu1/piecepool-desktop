@@ -28,7 +28,8 @@ export interface ToolCall {
  * 역할 이름이 OpenAI 와 다른 것은 `model` 뿐이라 변환에서 맞춘다.
  */
 export type LlmMessage =
-  | { role: "user" | "model"; text: string }
+  | { role: "user"; text: string }
+  | { role: "model"; text: string; calls?: ToolCall[] }
   | { role: "tool"; callId: string; name: string; result: unknown };
 
 export function toApiMessages(messages: LlmMessage[], system?: string): Record<string, unknown>[] {
@@ -37,8 +38,22 @@ export function toApiMessages(messages: LlmMessage[], system?: string): Record<s
   for (const m of messages) {
     if (m.role === "tool") {
       out.push({ role: "tool", tool_call_id: m.callId, content: JSON.stringify(m.result) });
+    } else if (m.role === "model") {
+      out.push({
+        role: "assistant",
+        content: m.text === "" ? null : m.text,
+        ...(m.calls?.length
+          ? {
+              tool_calls: m.calls.map((c) => ({
+                id: c.id,
+                type: "function",
+                function: { name: c.name, arguments: JSON.stringify(c.args) },
+              })),
+            }
+          : {}),
+      });
     } else {
-      out.push({ role: m.role === "model" ? "assistant" : "user", content: m.text });
+      out.push({ role: "user", content: m.text });
     }
   }
   return out;
