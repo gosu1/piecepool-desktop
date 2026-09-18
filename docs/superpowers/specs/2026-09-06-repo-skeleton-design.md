@@ -588,3 +588,4 @@ npm run ingest -- <볼트> x.pdf   → "unimplemented: core/vault/open.openVault
 | 미사용 인자         | —                            | `args: "none"`                                 | 0단계는 전부 스텁이라 미사용 인자가 필연                   |
 | CI 게이트           | §12.2 lint·typecheck·test    | + `prettier --check`                           | 없으면 포맷 드리프트를 아무도 못 잡는다                    |
 | 파서 타입           | 6.1 문법 4종 서술            | `LinkRef` 6필드 · `ParsedNote` · `retitleNote` | 규범이 확정한 것을 타입이 못 담고 있었다 (4.1절)           |
+| 세션 자동 반영      | 상위 §8.1 사람이 누를 때만   | 코드가 전체 정리로 흡수 → §8.1 대로 닫음       | B3 설계 §6 — 실험 배선(de07048)이 이관 때 따라온 것        |
