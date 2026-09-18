@@ -2,7 +2,7 @@
 
 - 날짜: 2026-09-17
 - 상태: 설계 승인됨 (구현 계획 대기)
-- 대체됨 (일부): §3(근거 대조) · §11.2 는 `2026-09-18-query-answer-grounding-design.md` 로 대체됐다 (2026-09-18)
+- 대체됨 (일부): §3(근거 대조) · §9.3·§10 의 근거 대조·`unsourced` 서술 · §11.2 는 `2026-09-18-query-answer-grounding-design.md` 로 대체됐다 (2026-09-18)
 - 상위 문서: `2026-09-05-electron-rebuild-design.md` — 재구축 전체 설계. 이 문서는 그 **4·6단계**에 해당하는 B 구간의 첫 조각이다.
 - 선행: `2026-09-06-repo-skeleton-design.md` (동결 목록·이탈 목록) · `docs/adr/0002-agentic-pipeline.md` (결정 1~11)
 - 관련 (이번 범위 밖): `2026-09-16-query-tab-shell-design.md` — 이 세션이 나중에 앉을 화면

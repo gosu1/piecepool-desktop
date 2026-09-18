@@ -64,7 +64,7 @@ export function globToRe(glob: string): RegExp {
  * 반영은 세션 끝의 수확에서 ingest 를 통해 일어난다.
  *
  * index 는 호출부가 이미 만든 링크 색인이다. 없으면 backlinks 가 처음 불릴 때 만든다 —
- * 세션이 근거 대조용으로 같은 색인을 들고 있어 넘기지 않으면 볼트를 두 번 읽는다.
+ * 세션이 같은 색인을 들고 있어 넘기지 않으면 볼트를 두 번 읽는다.
  */
 export function createTools(
   v: Vault,

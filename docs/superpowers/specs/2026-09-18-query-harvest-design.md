@@ -80,7 +80,7 @@ export async function harvestLog(v, id, log, o: EngineOptions & { onProgress? } 
 위키에 반영? [y/N]
 ```
 
-`근거 없는 문단 N개` 는 `session.stats.unsourced` 다 — 프론트매터에 이미 있는 값이고, 반영 여부를 판단할 정보가 된다.
+`근거 없는 문단 N개` 는 `session.stats.unsourced` 다 — 프론트매터에 이미 있는 값이고, 반영 여부를 판단할 정보가 된다 — B4 에서 `N턴 · 본 페이지 M장` 으로 바뀌었다 (`2026-09-18-query-answer-grounding-design.md`).
 `y` 면 `harvest()`, 결과는 `cli/ingest.ts` 와 같은 한 줄(`N건 반영됨 (oid)` / `이미 반영됨`).
 단발 질문 모드(`npm run query -- <볼트> "질문"`)는 묻지 않는다 — 지금처럼 로그만 남긴다.
 
