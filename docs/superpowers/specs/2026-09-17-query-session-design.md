@@ -290,12 +290,12 @@ export interface Tool {
 추가되는 것은 예정된 증분"이라고 미리 허용했다. 그리고 ADR-0002 가
 "B 가 query 를 구현할 때까지 현 상태 유지"로 이 시점을 예고했다.
 
-| 툴                      | 반환                 | 기반                                                                       |
-| ----------------------- | -------------------- | -------------------------------------------------------------------------- |
-| `search(query, limit?)` | `Hit[]`              | 신규 `index/search.ts`                                                     |
-| `read_note(path)`       | 원문 문자열          | `vault/notes.ts` 의 `readRaw`(구현됨) + `resolveInVault` 가 경로 탈출 차단 |
-| `backlinks(path)`       | 들어오는 링크 경로들 | `index/links.ts` 의 `backlinksOf`(**이미 구현됨**)                         |
-| `list_notes(glob?)`     | 경로 목록            | `vault/tree.ts` 의 `readTree`(구현됨)                                      |
+| 툴                      | 반환                 | 기반                                                                                                          |
+| ----------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `search(query, limit?)` | `Hit[]`              | 신규 `index/search.ts`                                                                                        |
+| `read_note(path)`       | 원문 문자열          | `vault/notes.ts` 의 `readRaw`(구현됨) + `resolveInVault` 가 경로 탈출 차단                                    |
+| `backlinks(path)`       | 들어오는 링크 경로들 | `index/links.ts` 의 `backlinksOf` — **초판이 "이미 구현됨" 이라 적었으나 스텁이었다.** B1 이 구현했다 (§12.3) |
+| `list_notes(glob?)`     | 경로 목록            | `vault/tree.ts` 의 `readTree`(구현됨)                                                                         |
 
 **`write_note` · `delete_note` 는 `unimplemented` 로 남긴다.** 쿼리 세션은 위키를 고치지 않는다.
 
@@ -375,14 +375,41 @@ export async function generate(messages: LlmMessage[]): Promise<string>;
 
 ```ts
 export type LlmMessage =
-  | { role: "user" | "model"; text: string }
+  | { role: "user"; text: string }
+  | { role: "model"; text: string; calls?: ToolCall[] }
   | { role: "tool"; callId: string; name: string; result: unknown };
 
 export async function generate(
   messages: LlmMessage[],
-  o?: { tools?: Tool[] },
+  o?: { system?: string; tools?: ToolSpec[] },
 ): Promise<{ text: string; calls: ToolCall[]; usage: CallUsage }>;
 ```
+
+### 8.1 ⚠ `model` 변형의 `calls` 를 빠뜨리면 실제 API 가 400 을 낸다 (2026-09-18 수정)
+
+**초판은 `model` 변형을 `{ role, text }` 로만 적었다. 그것이 구현으로 내려가 Critical 이 됐다.**
+
+OpenAI 호환 스펙에서 `role: "tool"` 메시지는 **직전 assistant 메시지의 `tool_calls` 에 같은 id 가
+있어야** 한다. `calls` 를 담을 자리가 없으면 2회차 요청이 이렇게 나간다.
+
+```
+[system, user, {assistant, content: ""}, {tool, tool_call_id: "c1", …}]
+                            ↑ tool_calls 가 없다 → 400
+```
+
+**AI 가 툴을 한 번이라도 부르면 세션이 죽는다.** 브랜치 전체 리뷰가 잡을 때까지
+7번의 태스크 리뷰가 전부 통과시켰다 — 각 부품은 명세대로였고 **명세가 틀렸기** 때문이다.
+
+테스트도 같은 이유로 못 잡았다. 변환 함수를 **한 턴짜리 입력**으로만 쟀고
+(`toApiMessages([{ role: "model", text: "안녕" }])`), 루프 테스트의 가짜 LLM 은
+메시지 배열을 **받기만 하고 검사하지 않았다.** 왕복 전체를 한 번도 조립해 보지 않은 것이다.
+
+**교훈: 외부 API 와의 계약은 부품 테스트로 안 잡힌다.** `chat.test.ts` 에
+"툴콜을 낸 assistant 턴과 그 결과가 한 요청에 짝으로 실린다" 를 두어 같은 구멍을 막았고,
+이 브랜치의 진짜 통과 조건은 테스트 수가 아니라 **툴을 부르는 대화가 한 번 끝까지 도는 것**이다.
+
+`ToolSpec` 을 따로 둔 것도 초판과 다르다 — 초판은 `o?: { tools?: Tool[] }` 로 `llm/` 이
+`agent/Tool` 을 알게 했는데, 그러면 계층이 뒤집힌다. 구현이 고른 쪽이 옳다.
 
 `llm/` 은 CLAUDE.md §1 의 **공유 구역**이고 `chat.ts` 는 `OWNER: A`(가배치)라 합의 절차 없이 진행한다.
 다만 머리 주석이 "툴콜 없음"이라 **읽는 사람이 오해할 수 있으므로 그 줄을 정리 한정으로 고친다.**
@@ -605,6 +632,30 @@ node --env-file=.env scripts/demo/index.ts --vault fixtures/vault-life --bm25 --
 | `sources/` 색인                         | 측정으로 필요가 드러나면      |
 | BM25 파라미터 조정                      | 볼트 두 성격이 생긴 뒤 (§5.4) |
 | 왕복 상한 기본값 확정                   | 정답 세트 반복 측정 뒤 (§7.2) |
+| **점수 하한**                           | 첫 정답 세트 측정 뒤 — 아래   |
+| **프론트매터 계기의 누계화**            | 다음 PR — 아래                |
+| **`scanVault` 이중 실행 제거**          | 다음 PR — 아래                |
+
+**점수 하한 (2026-09-18 발견).** 유니그램을 넣은 탓에 **한국어 질의는 사실상 0건이 나오지 않는다** —
+어떤 한글 질문이든 한 글자는 볼트 어딘가와 겹친다. 게다가 작은 코퍼스에서는 희귀한 한 글자가
+**오히려 높은 IDF** 를 받아 무관한 절을 끌어올린다(구현 중 `"양자역학"` 0건 테스트가 실패하며 드러났다).
+
+영향 둘: ① §6 의 "`list_notes` 가 `search` 0건의 탈출구" 논리가 약해진다
+② 0건 대신 **낮은 점수의 무관한 절**이 나와 AI 가 근거로 삼을 수 있다.
+
+**지금 하한을 두지 않는다** — 근거 없이 숫자를 지어내는 것이고, 이 문서가 "측정 없이
+파라미터를 바꾸지 않는다"고 했다. 첫 측정이 실제로 문제인지 드러낸다.
+
+**프론트매터 계기의 누계화.** `session.turns` 는 누적인데 `turns`·`tool_calls`·`tokens`·`usd`·
+`opened`·`unsourced` 는 **이번 `ask()` 호출분**이다. 5턴 대화의 로그를 열면 본문에는 10개 턴이 있는데
+`usd` 는 마지막 한 턴의 비용이고 `opened` 에는 앞 턴들이 연 절이 빠져 있다.
+**B3(수확)이 `opened` 를 근거 재료로 쓰면 앞 턴들의 근거를 잃는다.** `QuerySession` 에 누계 필드를
+얹으면 된다(가배치라 자유롭다).
+
+**`scanVault` 이중 실행.** `agent/tools.ts` 안의 `links` 캐시와 `tasks/query.ts` 의 `session.index` 가
+**같은 `VaultIndex` 를 각자 만든다.** `backlinks` 를 한 번이라도 부르면 볼트 전체 마크다운을 두 번 읽는다.
+§5.6 이 양해한 것은 `buildIndex` + `scanVault` 의 위키 이중 읽기이지 `scanVault` 이중 실행이 아니다.
+`createTools` 옵션에 `index?: VaultIndex` 를 더하는 것이(`schema?` 와 같은 가산적 증분) 가장 싸다.
 
 ## 12. A 에게 알릴 것 · 이관 시 할 일
 
@@ -645,8 +696,30 @@ demo 에 있던 `--limit` · `--budget` · `--expect` 가 `EngineOptions` 로 �
 앱의 정리 탭도 같은 엔진을 쓰므로 중간에 멈출 수단이 없다.
 K3 실측 기록이 "인입은 백그라운드로 돌리고 **진행률·예산 상한이 있어야 한다**"고 적은 항목이다.
 
+### 12.3 구현하며 드러난 것 (2026-09-18)
+
+- **`backlinksOf` 는 스텁이었다.** 초판 §6 표가 "이미 구현됨" 이라 적었는데 `links.ts` 의
+  유일한 스텁이었다. 동결 범위가 `parseLinks` 뿐이고 `index/` 는 공유 구역이며 호출자가
+  하나도 없어 **B1 이 첫 소비자로서 구현했다.** 규칙은 `scan.ts` 의 `toGraph` 와 같게 —
+  깨진 링크·자기 링크 제외, 중복 제거, 정렬
+- **`agent/tools.ts`(FROZEN)에서 `globToRe` 를 export 했다.** 테스트용이다 — Windows 가 `?` 를
+  파일명에 못 써서 `list_notes` 경유로는 `?` 이스케이프를 시험할 수 없다.
+  **근거: 이 브랜치가 만든 함수라 동결 당시 계약에 없던 심볼이고, 동결이 지키는
+  A↔B 경계면(`ToolName`·`ReadOnlyToolName`·`Tool`·`createTools`)은 그대로다.**
+  최종 리뷰도 같은 판단이었고, `tools.ts` 머리 마커에 이 예외를 한 줄 적어 두기를 권했다
+- **`flatten`(`index/scan.ts`) 과 `blankCode`(`index/links.ts`) 를 export 로 바꿨다.**
+  둘 다 B1 이 같은 로직을 복제하려다 리뷰에서 잡혀 공유로 올린 것이다
+
+**hunspell 리스너 누수 (A 에게 넘길 것).** `npm test` 의 `MaxListenersExceededWarning` 은
+`ingest/spell.ts` 의 `loadDictionary()` 가 부르는 `hunspell-asm` 이 `uncaughtException` 리스너를
+붙이고 떼지 않아서다. 테스트만의 문제가 아니다 — **Electron 처럼 오래 사는 프로세스에서
+정리를 반복하면 회당 14MB WASM 과 리스너가 샌다.** 모듈 레벨에 한 번만 로드하면 닫힌다.
+
 **이관 시 재측정할 항목:** A 가 `index/search.ts` 로 갈아탈 때 **유니그램을 유지할지**
 62장 볼트로 잰다 (§5.3). A 의 질의는 길어서 유니그램이 노이즈일 수 있다.
+다만 `ingest/prompt.ts` 의 `tokens()` 는 **B 가 실측으로 잡은 것과 같은 결함**을 안고 있다 —
+바이그램만 쓰므로 1글자 질의어가 색인과 만나지 못한다. 후보 추리기의 재현율 측정값이
+그 결함 위에서 나온 숫자다.
 
 ## 13. 기각한 대안
 

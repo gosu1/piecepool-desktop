@@ -631,7 +631,7 @@ generate() 가 쿼리(B)용으로 예약돼 있었는데 tools 인자가 없었�
 
 **Interfaces:**
 
-- Consumes: Task 1 의 `buildIndex` · `search` · `Hit`, `vault/notes.ts` 의 `readRaw`, `vault/tree.ts` 의 `readTree`, `index/scan.ts` 의 `scanVault`, `index/links.ts` 의 `backlinksOf`
+- Consumes: Task 1 의 `buildIndex` · `search` · `Hit`, `vault/notes.ts` 의 `readRaw`, `vault/tree.ts` 의 `readTree`, `index/scan.ts` 의 `scanVault`, `index/links.ts` 의 `backlinksOf` — **계획서가 "이미 구현됨" 으로 잘못 적었다. 실제로는 스텁이었고 Task 3 이 구현했다**
 - Produces:
   - `Tool` 에 선택 필드 `schema?: { description: string; parameters: Record<string, unknown> }`
   - `createTools(v, w, o?: { readOnly?: boolean }): Tool[]` — **동결된 시그니처 그대로다.** 색인은 툴이 처음 쓸 때 안에서 만들어 세션 동안 재사용한다
