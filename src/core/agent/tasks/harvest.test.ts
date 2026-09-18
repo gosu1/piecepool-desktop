@@ -37,7 +37,7 @@ function fakeLlm(pages: LlmPage[]): Llm {
 }
 
 const LOG =
-  "---\nid: s1\nmodel: kimi-k3\ndate: 2026-09-18\nturns: 2\ntool_calls: 1\nhit_cap: false\ntokens: { in: 1, cached: 0, out: 1 }\nunsourced: 0\n---\n\n## 1턴 (사용자)\n\n무릎이 아픈데 계속 뛰어도 될까?\n\n## 2턴 (AI)\n\n주당 10% 이상 늘리지 않는 것이 통설입니다.\n";
+  "---\nid: s1\nmodel: kimi-k3\ndate: 2026-09-18\nturns: 2\ntool_calls: 1\nhit_cap: false\ntokens: { in: 1, cached: 0, out: 1 }\n---\n\n## 1턴 (사용자)\n\n무릎이 아픈데 계속 뛰어도 될까?\n\n## 2턴 (AI)\n\n주당 10% 이상 늘리지 않는 것이 통설입니다.\n";
 
 const PAGE: LlmPage = {
   name: "달리기",

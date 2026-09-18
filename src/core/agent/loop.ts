@@ -7,8 +7,10 @@
 // 로그에서 구분되지 않는다. 2026-09-09 조회 스파이크가 겪은 일이다.
 import type { OnProgress } from "../../shared/types.ts";
 import { generate, type CallUsage, type LlmMessage, type ToolSpec } from "../llm/chat.ts";
-import type { Opened } from "./cite.ts";
 import type { Tool } from "./tools.ts";
+
+/** 이번 세션에서 실제로 본 것. `path#heading` 또는 전문을 연 `path`. */
+export type Opened = Set<string>;
 
 export interface AgentResult {
   text: string;
