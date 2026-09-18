@@ -21,6 +21,7 @@
     "wiki:lint": "node src/cli/lint.ts",
     "inbox": "node src/cli/inbox.ts",
     "query": "node src/cli/query.ts",
+    "harvest": "node src/cli/harvest.ts",
     "reindex": "node src/cli/reindex.ts"
   },
   "devDependencies": {
