@@ -32,8 +32,9 @@ function collectOpened(name: string, args: Record<string, unknown>, result: unkn
   if (name === "search") {
     const hits = (result as { hits?: { path: string; heading: string }[] }).hits ?? [];
     for (const h of hits) into.add(`${h.path}#${h.heading}`);
-  } else if (name === "read_note" && typeof args.path === "string") {
-    into.add(args.path);
+  } else if (name === "read_note") {
+    const path = (result as { path?: unknown }).path;
+    if (typeof path === "string") into.add(path);
   }
 }
 
@@ -81,7 +82,12 @@ export async function runAgent(
     for (const call of res.calls) {
       toolCalls++;
       const tool = tools.find((t) => t.name === call.name);
-      const result = tool ? await tool.run(call.args) : { error: `그런 툴은 없다: ${call.name}` };
+      let result: unknown;
+      try {
+        result = tool ? await tool.run(call.args) : { error: `그런 툴은 없다: ${call.name}` };
+      } catch (e) {
+        result = { error: e instanceof Error ? e.message : String(e) };
+      }
       collectOpened(call.name, call.args, result, opened);
       o?.onProgress?.({ step: "툴", detail: `${call.name} ${JSON.stringify(call.args)}` });
       messages.push({ role: "tool", callId: call.id, name: call.name, result });

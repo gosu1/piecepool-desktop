@@ -70,6 +70,32 @@ describe("read_note", () => {
     const r = (await toolOf("read_note").run({ path: "wiki/없다.md" })) as { error: string };
     expect(r.error).toContain("없는 파일");
   });
+
+  it("정규화된 path 를 결과에 싣는다 — opened 대조가 인자 문자열에 흔들리지 않는다", async () => {
+    const r = (await toolOf("read_note").run({ path: "wiki/달리기.md" })) as { path: string };
+    expect(r.path).toBe("wiki/달리기.md");
+  });
+
+  it(".md 가 아닌 파일은 거부한다", async () => {
+    await mkdir(join(v.root, "sources"), { recursive: true });
+    await writeFile(join(v.root, "sources", "원본.txt"), "비밀", "utf8");
+    const r = (await toolOf("read_note").run({ path: "sources/원본.txt" })) as { error: string };
+    expect(r.error).toBeTruthy();
+  });
+
+  it("숨김 폴더·숨김 파일은 거부한다 — .obsidian·.git·.env 유출을 막는다", async () => {
+    await mkdir(join(v.root, ".obsidian"), { recursive: true });
+    await writeFile(join(v.root, ".obsidian", "workspace.json"), "{}", "utf8");
+    await writeFile(join(v.root, ".env"), "SECRET=1", "utf8");
+
+    const hidden = (await toolOf("read_note").run({ path: ".obsidian/workspace.json" })) as {
+      error: string;
+    };
+    expect(hidden.error).toBeTruthy();
+
+    const dotfile = (await toolOf("read_note").run({ path: ".env" })) as { error: string };
+    expect(dotfile.error).toBeTruthy();
+  });
 });
 
 describe("search", () => {
@@ -80,6 +106,27 @@ describe("search", () => {
 
   it("0건이면 그렇다고 알린다", async () => {
     expect(await toolOf("search").run({ query: "양자역학" })).toEqual({ hits: [], note: "0건" });
+  });
+
+  it("limit: 0 은 무시된다 — 검색이 됐는데 0건으로 거짓말하지 않는다", async () => {
+    const r = (await toolOf("search").run({ query: "페이스", limit: 0 })) as {
+      hits: unknown[];
+    };
+    expect(r.hits.length).toBeGreaterThan(0);
+  });
+
+  it("limit 을 20 으로 자른다", async () => {
+    for (let i = 0; i < 12; i++) {
+      await writeFile(
+        join(v.root, "wiki", `테스트${i}.md`),
+        `---\ncreated: 2026-09-03\n---\n\n# 테스트${i}\n\n## 하나\n\n테스트 절 본문.\n\n## 둘\n\n테스트 절 본문.\n`,
+        "utf8",
+      );
+    }
+    const r = (await toolOf("search").run({ query: "테스트", limit: 999 })) as {
+      hits: unknown[];
+    };
+    expect(r.hits.length).toBeLessThanOrEqual(20);
   });
 });
 

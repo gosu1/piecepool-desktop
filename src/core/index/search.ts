@@ -46,6 +46,7 @@ export interface Section {
 
 export interface Hit {
   path: NotePath;
+  page: string;
   heading: string;
   score: number;
   text: string;
@@ -143,6 +144,7 @@ export function search(ix: WikiIndex, query: string, o?: { limit?: number }): Hi
     if (score > 0) {
       scored.push({
         path: sec.path,
+        page: sec.page,
         heading: sec.heading,
         score,
         text: sec.text.length > SNIPPET ? sec.text.slice(0, SNIPPET) : sec.text,

@@ -52,7 +52,7 @@ describe("runAgent", () => {
     const readTool: Tool = {
       name: "read_note",
       async run() {
-        return { text: "전문" };
+        return { text: "전문", path: "wiki/수면.md" };
       },
     };
     const r = await runAgent("sys", "질문", [readTool], {
@@ -62,6 +62,23 @@ describe("runAgent", () => {
       ]),
     });
     expect(r.opened.has("wiki/수면.md")).toBe(true);
+  });
+
+  it("opened 는 인자가 아니라 결과의 path 를 쓴다 — 비정규 인자로 근거가 어긋나지 않는다", async () => {
+    const readTool: Tool = {
+      name: "read_note",
+      async run() {
+        return { text: "전문", path: "wiki/수면.md" };
+      },
+    };
+    const r = await runAgent("sys", "질문", [readTool], {
+      llm: fakeLlm([
+        { text: "", calls: [{ id: "c1", name: "read_note", args: { path: "./wiki/수면.md" } }] },
+        { text: "답", calls: [] },
+      ]),
+    });
+    expect(r.opened.has("wiki/수면.md")).toBe(true);
+    expect(r.opened.has("./wiki/수면.md")).toBe(false);
   });
 
   it("실패한 툴 결과는 opened 에 넣지 않는다 — 근거가 될 수 없다", async () => {
@@ -77,6 +94,23 @@ describe("runAgent", () => {
         { text: "답", calls: [] },
       ]),
     });
+    expect(r.opened.size).toBe(0);
+  });
+
+  it("툴이 던지면 세션이 죽지 않고 error 결과로 이어간다", async () => {
+    const throwing: Tool = {
+      name: "read_note",
+      async run() {
+        throw new Error("EACCES");
+      },
+    };
+    const r = await runAgent("sys", "질문", [throwing], {
+      llm: fakeLlm([
+        { text: "", calls: [{ id: "c1", name: "read_note", args: { path: "wiki/수면.md" } }] },
+        { text: "답", calls: [] },
+      ]),
+    });
+    expect(r.text).toBe("답");
     expect(r.opened.size).toBe(0);
   });
 

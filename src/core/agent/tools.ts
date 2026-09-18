@@ -1,8 +1,11 @@
 // FROZEN: 파일 전체 — A↔B 경계면 + 툴 6종 (0단계 설계 §3.4·§8)
+import { realpath } from "node:fs/promises";
+import { relative, sep } from "node:path";
 import type { Vault } from "../../shared/types.ts";
 import type { Written } from "./written.ts";
 import { readRaw } from "../vault/notes.ts";
 import { readTree } from "../vault/tree.ts";
+import { resolveInVault } from "../vault/paths.ts";
 import { flatten, scanVault } from "../index/scan.ts";
 import { backlinksOf } from "../index/links.ts";
 import { buildIndex, search, type WikiIndex } from "../index/search.ts";
@@ -85,7 +88,10 @@ export function createTools(v: Vault, w: Written, o?: { readOnly?: boolean }): T
         const q = str(args, "query");
         if (typeof q !== "string") return q;
         wiki ??= await buildIndex(v);
-        const limit = typeof args.limit === "number" ? args.limit : undefined;
+        const limit =
+          Number.isInteger(args.limit) && (args.limit as number) > 0
+            ? Math.min(args.limit as number, 20)
+            : undefined;
         const hits = search(wiki, q, { limit });
         return hits.length === 0 ? { hits: [], note: "0건" } : { hits };
       },
@@ -105,7 +111,13 @@ export function createTools(v: Vault, w: Written, o?: { readOnly?: boolean }): T
         const p = str(args, "path");
         if (typeof p !== "string") return p;
         try {
-          return { text: await readRaw(v, p) };
+          const abs = await resolveInVault(v, p);
+          const root = await realpath(v.root);
+          const path = relative(root, abs).split(sep).join("/");
+          const parts = path.split("/");
+          if (!path.toLowerCase().endsWith(".md") || parts.some((s) => s.startsWith(".")))
+            return { error: `읽을 수 없는 경로다: ${p}` };
+          return { text: await readRaw(v, p), path };
         } catch (e: unknown) {
           const code = (e as NodeJS.ErrnoException).code;
           if (code === "ENOENT") return { error: `없는 파일이다: ${p}` };

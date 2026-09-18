@@ -71,6 +71,12 @@ describe("search", () => {
     expect(hits.some((h) => h.path === "wiki/무릎 통증.md" && h.heading === "증상")).toBe(true);
   });
 
+  it("Hit 에 페이지 이름을 싣는다 — AI 가 인용 이름을 지어내지 않게 한다", () => {
+    const hits = search(indexPages(VAULT), "무릎");
+    const hit = hits.find((h) => h.heading === "증상");
+    expect(hit?.page).toBe("무릎 통증");
+  });
+
   it("회귀: 1글자 낱말만 있는 질문도 찾는다", () => {
     const hits = search(indexPages(VAULT), "요즘 잠 잘 자?");
     expect(hits[0].path).toBe("wiki/수면.md");
