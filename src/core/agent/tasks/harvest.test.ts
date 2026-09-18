@@ -65,6 +65,8 @@ describe("harvestLog", () => {
     // 로그의 date: 가 출처 날짜로 간다
     expect(await read(v.root, "sources/@session-s1.md")).toContain("date: 2026-09-18");
     expect(await git.listFiles({ ...repo(v), ref: "HEAD" })).toContain(".piecepool/sessions/s1.md");
+    // 커밋 하나 — 로그가 봉인 커밋으로 밀리지 않았다
+    expect(await git.log({ ...repo(v) })).toHaveLength(1);
   });
 
   it("같은 로그를 다시 수확하면 커밋하지 않는다 — 입력 벽 7", async () => {
@@ -82,7 +84,7 @@ describe("harvestLog", () => {
 
 describe("harvest", () => {
   it("빈 로그는 거부한다 — 반영할 대화가 없다", async () => {
-    const v = await tempVault();
+    const v = { root: "unused", agentWriteRoots: [] };
     const session: QuerySession = {
       id: "s0",
       date: "2026-09-18",

@@ -108,6 +108,7 @@ export async function harvestLog(v, id, log, o: EngineOptions & { onProgress? } 
 - `SourceFile.session` 필드와 `itemFromSource` 의 session 분기는 그대로다 — `harvest` 가 그 길로 들어간다
 - `markDeletedSources` 는 파일 존재로 판단하므로 영향 없다
 - 기존 테스트 중 `scanSources` 가 세션을 돌려주는 데 기대는 것은 없다 (2026-09-18 확인)
+- 수확 안 한 로그는 다음 에이전트 쓰기 때 `prepareRepo` 의 **사용자 편집 봉인** 커밋에 실린다 — AI 가 쓴 파일이 사용자 이름으로 커밋된다. `step.ts` 의 기존 동작이고 그 뒤 `npm run harvest` 도 그대로 된다. B2 가 다시 발견하지 않도록 적어 둔다
 
 **두 설계문서 충돌 기록.** 상위 §8.1(사람이 누를 때만) 대 코드(전체 정리가 흡수). 0단계 §15 이탈 목록에 없던 것이라
 CLAUDE.md §2.5 로 사용자에게 물었고 §8.1 쪽으로 정했다 (2026-09-18). §15 표에 한 줄 더한다.

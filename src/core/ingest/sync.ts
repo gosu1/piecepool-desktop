@@ -1,4 +1,4 @@
-// 볼트 전체 정리 — 아직 안 한 노트·원본·세션 로그를 날짜순으로, 항목마다 커밋 하나.
+// 볼트 전체 정리 — 아직 안 한 노트·원본을 날짜순으로, 항목마다 커밋 하나. 세션 로그는 harvest 만 넘긴다.
 import type { NotePath, Vault } from "../../shared/types.ts";
 import type { IngestResult, IngestSource } from "../agent/tasks/ingest.ts";
 import { Written } from "../agent/written.ts";
