@@ -5,9 +5,7 @@ import { join } from "node:path";
 import type { OnProgress, Vault } from "../../../shared/types.ts";
 import type { LlmMessage } from "../../llm/chat.ts";
 import { loadPrompt } from "../../prompts/load.ts";
-import { resolveLink } from "../../index/links.ts";
-import { scanVault, type VaultIndex } from "../../index/scan.ts";
-import { checkCitations } from "../cite.ts";
+import { scanVault, titleOf, type VaultIndex } from "../../index/scan.ts";
 import { runAgent, type AgentResult } from "../loop.ts";
 import { createTools, type Tool } from "../tools.ts";
 import { Written } from "../written.ts";
@@ -24,7 +22,6 @@ export interface SessionMeta {
   tokens: { in: number; cached: number; out: number };
   usd: number | null;
   opened: string[];
-  unsourced: number;
 }
 
 /**
@@ -39,14 +36,9 @@ export interface SessionStats {
   tokens: { in: number; cached: number; out: number };
   usd: number | null;
   opened: Set<string>;
-  unsourced: number;
 }
 
-export function accumulate(
-  prev: SessionStats | undefined,
-  res: AgentResult,
-  unsourced: number,
-): SessionStats {
+export function accumulate(prev: SessionStats | undefined, res: AgentResult): SessionStats {
   const sum = (pick: (u: AgentResult["usage"][number]) => number) =>
     res.usage.reduce((a, u) => a + pick(u), 0);
   const usd = res.usage.every((u) => u.usd === null) ? null : sum((u) => u.usd ?? 0);
@@ -61,7 +53,6 @@ export function accumulate(
     },
     usd: prev?.usd == null && usd === null ? null : (prev?.usd ?? 0) + (usd ?? 0),
     opened: new Set([...(prev?.opened ?? []), ...res.opened]),
-    unsourced: (prev?.unsourced ?? 0) + unsourced,
   };
 }
 
@@ -85,7 +76,7 @@ export interface QuerySession {
    */
   tools?: Tool[];
   /**
-   * 근거 대조용 링크 색인. **한 번 만들어 계속 쓴다** — `scanVault` 는 볼트의
+   * backlinks 툴용 링크 색인. **한 번 만들어 계속 쓴다** — `scanVault` 는 볼트의
    * 모든 마크다운 파일을 읽어 툴 캐시보다 비싼데, 대화 중에는 위키가 바뀌지
    * 않는다(읽기 전용, 수확은 B3) — 설계 §5.6.
    */
@@ -115,12 +106,22 @@ export function buildSessionLog(meta: SessionMeta, turns: Turn[]): string {
     out.push("opened:");
     for (const p of meta.opened) out.push(`  - ${p}`);
   }
-  out.push(`unsourced: ${meta.unsourced}`);
   out.push("---", "");
   turns.forEach((t, i) => {
     out.push(`## ${i + 1}턴 (${t.who})`, "", t.text, "");
   });
   return out.join("\n");
+}
+
+/**
+ * 이번 턴이 연 것을 화면의 참고 줄로 바꾼다 — `#절` 을 떼고 페이지 이름으로 합쳐 정렬.
+ * 답변 텍스트에 붙이지 않는다. 로그에는 프론트매터 `opened:` 가 이미 있고,
+ * AI 턴 본문에 `[[페이지]]` 가 섞이면 수확의 ingest 가 내용으로 읽는다 (B4 설계 §2).
+ */
+export function openedPages(opened: Iterable<string>): string[] {
+  const names = new Set<string>();
+  for (const o of opened) names.add(titleOf(o.split("#")[0]));
+  return [...names].sort();
 }
 
 /** 위키를 근거로 답한다. 읽기 전용 툴만 받는다 — 대화 중에는 위키를 고치지 않는다. */
@@ -132,7 +133,6 @@ export async function ask(
 ): Promise<string> {
   const prompt = await loadPrompt("query");
   // 색인도 툴도 세션에 한 번만 만든다 — 대화 중에는 위키가 바뀌지 않는다 (설계 §5.6).
-  // 링크 색인은 근거 대조와 backlinks 툴이 같이 쓰므로 툴에 넘겨 scanVault 를 한 번만 한다.
   const index = (session.index ??= await scanVault(v));
   session.tools ??= createTools(v, new Written(), { readOnly: true, index });
 
@@ -141,17 +141,12 @@ export async function ask(
     history: session.history,
   });
 
-  // 근거 대조 — 연 적 없는 절을 가리킨 링크를 뗀다.
-  const cited = checkCitations(res.text, res.opened, (name) =>
-    resolveLink("", name, index.targets),
-  );
-
   session.turns.push({ who: "사용자", text: question });
-  session.turns.push({ who: "AI", text: cited.text });
+  session.turns.push({ who: "AI", text: res.text });
   session.history.push({ role: "user", text: question });
-  session.history.push({ role: "model", text: cited.text });
+  session.history.push({ role: "model", text: res.text });
 
-  session.stats = accumulate(session.stats, res, cited.unsourced);
+  session.stats = accumulate(session.stats, res);
   const md = buildSessionLog(
     {
       id: session.id,
@@ -168,11 +163,9 @@ export async function ask(
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, `${session.id}.md`), md, "utf8");
 
-  if (cited.dropped.length) {
-    o?.onProgress?.({
-      step: "근거 없음",
-      detail: `연 적 없는 절 ${cited.dropped.length}건의 링크를 뗐다`,
-    });
+  const pages = openedPages(res.opened);
+  if (pages.length) {
+    o?.onProgress?.({ step: "참고", detail: pages.map((p) => `[[${p}]]`).join(" · ") });
   }
-  return cited.text;
+  return res.text;
 }

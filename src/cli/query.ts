@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import { openVault } from "../core/vault/open.ts";
-import { ask, type QuerySession } from "../core/agent/tasks/query.ts";
+import { ask, openedPages, type QuerySession } from "../core/agent/tasks/query.ts";
 import { harvest } from "../core/agent/tasks/harvest.ts";
 import { localDate } from "../core/ingest/wiki.ts";
 import { log, main } from "./run.ts";
@@ -43,9 +43,9 @@ await main(async () => {
     }
     // 수확은 사용자가 고를 때만 (상위 §8.1). 턴이 없으면 로그도 없다.
     if (session.turns.length) {
-      const unsourced = session.stats?.unsourced ?? 0;
+      const pages = openedPages(session.stats?.opened ?? []).length;
       console.log(
-        `세션 로그: .piecepool/sessions/${session.id}.md · 근거 없는 문단 ${unsourced}개`,
+        `세션 로그: .piecepool/sessions/${session.id}.md · ${session.turns.length / 2}턴 · 본 페이지 ${pages}장`,
       );
       const yes = (await rl.question("위키에 반영? [y/N] ")).trim().toLowerCase() === "y";
       if (yes) {
