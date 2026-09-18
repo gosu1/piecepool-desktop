@@ -1,0 +1,167 @@
+# PiecePool Desktop — 세션 수확 (B3) — 설계
+
+2026-09-18. B1 설계(`2026-09-17-query-session-design.md`) §1.1 이 나눈 세 조각 중 두 번째다.
+B2(UI)보다 먼저 가는 이유는 선행 의존이 B1 뿐이라서다 — B2 는 `shared/ipc.ts` 동결 개봉 합의를 기다린다.
+
+## 1. 무엇을 만드나
+
+쿼리 세션이 끝나면 사용자가 고른 세션의 대화 로그를 **자료 하나로** ingest 에 넘겨 위키에 반영한다.
+상위 설계 §8.1 이 정한 그대로다 — 쓰기 경로는 ingest 하나뿐이고, 수확은 그것을 부르는 입구다.
+
+**B3 가 작은 이유.** ADR-0002 "수확 경로 (A 가 열어두고 B 가 꽂는다)" 의 A 몫이 끝나 있다 (2026-09-18 코드로 확인):
+
+| A 가 준비한 것                                                     | 어디                                             |
+| ------------------------------------------------------------------ | ------------------------------------------------ |
+| `IngestSource` 의 `{ kind: "session"; id; log }` 변형              | `agent/tasks/ingest.ts` (FROZEN)                 |
+| 세션 로그 → 출처 페이지 `sources/@session-<id>.md`, `key` · `hash` | `ingest/engine.ts` `itemFromSource` session 분기 |
+| AI 턴에서 찾은 quote 의 기록 줄에 `(AI)`                           | `ingest/build.ts`                                |
+| `extraPaths` 로 세션 로그를 같은 커밋에                            | `ingest/sync.ts` `ingestSource`                  |
+| 위 전부의 테스트 (가짜 LLM)                                        | `ingest/engine.test.ts:139`                      |
+
+B3 는 **입구 둘(`harvest()` · CLI)과 그 입구가 유일하도록 다른 입구를 닫는 것**이다.
+
+## 2. 결정
+
+| 결정                  | 택한 것                                                | 대안                                    | 이유                                                                                                                                        |
+| --------------------- | ------------------------------------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| ③(AI 사전지식) 거르기 | **안 한다. 그대로 넘기고 잰다**                        | 근거 없는 AI 문단 제거 · lint 규칙      | 지금 있는 `(AI)` 꼬리표로 실제 세션을 수확해 ③ 이 얼마나 들어오는지 본 뒤 정한다. 측정 없이 거름을 짓지 않는다 (B1 설계 §11.2 와 같은 원칙) |
+| 반영 시점             | **사용자가 고른 세션만**                               | 전체 정리가 미반영 세션을 흡수          | §6. Karpathy 원문 · 상위 §8.1 · LLM Wiki v2 의 실무자 반박이 전부 "사람이 문을 지킨다" 쪽이다                                               |
+| CLI 트리거            | **대화 끝 `y/N` + 별도 `npm run harvest`**             | 둘 중 하나                              | 상위 §8.1 "반영하지 않은 로그는 남아 나중에 수확할 수 있다" 를 CLI 에서도 지키려면 별도 명령이 필요하다                                     |
+| `harvest()` 테스트    | **본체를 비동결 함수로 빼서 가짜 LLM 으로 잰다**       | FROZEN 옵션에 `llm?` 추가 · 테스트 없음 | A 의 선례 (`sync.ts` 머리말: 진입점은 동결이라 `llm` 자리가 없어 본체를 뺐다). 합의 없이 해결된다                                           |
+| 세션 날짜             | **세션 시작 시 한 번 정해 로그 프론트매터 `date:` 로** | 수확 시점의 오늘 · id 에서 추출         | `ask()` 가 매 턴 로그를 통째로 다시 쓰므로 자정 넘긴 대화가 마지막 턴 날짜가 된다. id 는 UTC 라 하루 어긋날 수 있다                         |
+
+## 3. 파일 배치
+
+| 파일                     | 등급               | 무엇                                                                            |
+| ------------------------ | ------------------ | ------------------------------------------------------------------------------- |
+| `agent/tasks/harvest.ts` | `harvest()` FROZEN | 진입점 한 줄 래퍼 + 비동결 본체 `harvestLog()`                                  |
+| `agent/tasks/query.ts`   | OWNER B            | `QuerySession.date` · `SessionMeta.date` · `buildSessionLog` 가 `date:` 를 쓴다 |
+| `cli/query.ts`           | —                  | `newSession()` 이 `date` 를 정한다. 대화 모드 끝에 `y/N`                        |
+| `cli/harvest.ts`         | 신규               | `npm run harvest -- <볼트> <세션id>`                                            |
+| `package.json`           | —                  | `"harvest"` 스크립트                                                            |
+| `ingest/source.ts`       | **A 구역**         | `scanSources` 의 세션 루프 제거 (§6)                                            |
+| `scripts/eval-query.ts`  | —                  | `QuerySession` 리터럴에 `date` 추가 (타입이 요구)                               |
+
+`shared/` · `renderer/` · `main/` · `prompts/` 는 건드리지 않는다.
+
+## 4. `harvest()`
+
+```ts
+// FROZEN 진입점 — 시그니처 그대로
+export async function harvest(v, session, o?): Promise<IngestResult> {
+  if (!session.log) throw new PiecePoolError("parse_failed", "반영할 대화가 없다");
+  return await harvestLog(v, session.id, session.log, o);
+}
+
+// 비동결 본체 — EngineOptions 를 받아 가짜 LLM 으로 테스트한다
+export async function harvestLog(v, id, log, o: EngineOptions & { onProgress? } = {}) {
+  return await ingestSource(
+    v,
+    { kind: "session", id, log },
+    {
+      ...o,
+      extraPaths: [`.piecepool/sessions/${id}.md`],
+    },
+  );
+}
+```
+
+- `extraPaths` 에 세션 로그를 넣는 이유는 `ingest.ts` 의 주석 그대로다 — 툴이 아니라 `ask()` 가 쓴 파일이라 `Written` 에 없고, 빠지면 커밋 밖으로 밀린다
+- **같은 세션 두 번** → ingest 입력 벽 7(해시 동일)로 건너뜀 → `commitWritten` 이 아무것도 안 썼으면 커밋하지 않음 → `commitOid: ""`. CLI 는 이것을 "이미 반영됨" 으로 보여 준다
+- **수확 뒤 대화가 이어져 재수확** → 해시가 바뀌어 벽 7 을 통과 → `engine.ts` 의 재정리 경로(`prev.hash !== item.hash`)가 이전 기록을 걷어내고 다시 쓴다. A 가 만든 경로다. 세션에서도 도는지 통과 조건에 넣는다 (§7)
+- 빈 로그의 kind 는 `parse_failed` 다 — "텍스트 0자면 `parse_failed`" 와 같은 뜻이고, `ErrorKind` 는 `shared/` 라 새 값을 더하지 않는다. CLI 가 턴 수로 먼저 막으므로 여기는 방어선이다
+
+## 5. CLI
+
+**`npm run query` 대화 모드.** 빈 줄로 끝날 때 턴이 하나라도 있으면:
+
+```
+세션 로그: .piecepool/sessions/<id>.md · 근거 없는 문단 2개
+위키에 반영? [y/N]
+```
+
+`근거 없는 문단 N개` 는 `session.stats.unsourced` 다 — 프론트매터에 이미 있는 값이고, 반영 여부를 판단할 정보가 된다.
+`y` 면 `harvest()`, 결과는 `cli/ingest.ts` 와 같은 한 줄(`N건 반영됨 (oid)` / `이미 반영됨`).
+단발 질문 모드(`npm run query -- <볼트> "질문"`)는 묻지 않는다 — 지금처럼 로그만 남긴다.
+
+**`npm run harvest -- <볼트> <세션id>`.** `.piecepool/sessions/<id>.md` 를 읽어 `harvestLog()` 를 직접 부른다.
+`QuerySession` 을 가짜로 만들지 않는다 — 본체가 `id` 와 `log` 만 받으므로 껍데기가 필요 없다.
+파일이 없으면 `vault_not_found` 계열 에러로 끝난다.
+
+## 6. `scanSources` 의 세션 루프를 닫는다 — A 구역 변경
+
+`ingest/source.ts` 의 `scanSources` 가 `.piecepool/sessions/*.md` 를 원본 파일과 같은 목록에 넣는다.
+그래서 `npm run ingest -- <볼트>`(전체 정리, 앱의 정리 탭)가 **미반영 세션을 전부 흡수한다** —
+사용자가 `N` 을 누른 세션도, 잊고 있던 세션도.
+
+상위 §8.1 과 정면으로 어긋난다:
+
+> 수확은 사용자가 누를 때만 일어난다. … 자동 반영은 8.2 의 오염 위험을 사용자 모르게 키운다.
+
+**왜 있었나.** `git log -L` 로 따라가면 커밋 `de07048`(2026-09-15) 이다 — `scripts/demo/` 실험 단계에서
+쿼리 세션도 `harvest()` 도 없을 때 `fixtures/sessions/` 의 픽스처를 파이프라인에 태우는 가장 싼 배선이었고,
+4단계 이관 때 그대로 따라왔다. ADR-0002 나 어느 설계문서에도 "전체 정리가 세션을 반영한다" 는 결정은 없다.
+
+**무엇을 바꾸나.** `scanSources` 의 세션 `for` 루프(5줄)를 지운다. 따라오는 것:
+
+- `countPending`(정리 탭의 "N장이 아직 위키에 없다")이 세션을 세지 않는다 — 맞는 동작이다. 세션은 "정리 안 한 노트" 가 아니다
+- `SourceFile.session` 필드와 `itemFromSource` 의 session 분기는 그대로다 — `harvest` 가 그 길로 들어간다
+- `markDeletedSources` 는 파일 존재로 판단하므로 영향 없다
+- 기존 테스트 중 `scanSources` 가 세션을 돌려주는 데 기대는 것은 없다 (2026-09-18 확인)
+
+**두 설계문서 충돌 기록.** 상위 §8.1(사람이 누를 때만) 대 코드(전체 정리가 흡수). 0단계 §15 이탈 목록에 없던 것이라
+CLAUDE.md §2.5 로 사용자에게 물었고 §8.1 쪽으로 정했다 (2026-09-18). §15 표에 한 줄 더한다.
+
+**참고 — 다른 LLM 위키들.** Karpathy 원문은 "good answers _can be_ filed back" — 사람이 고른다.
+LLM Wiki v2 는 품질 문턱을 넘으면 자동 반영을 제안했고, 그 gist 의 실무자 댓글이
+"hooks 로 모델이 쓰게 두면 조용히 오염된다. human-in-the-loop 는 품질 관리다" 라고 반박했다.
+지금 코드는 v2 의 자동 반영에서 문턱을 뺀 것과 같은 위치였다.
+
+## 7. 검증
+
+### 7.1 단위 테스트 (LLM 없이, CI)
+
+| 무엇                                                                                        | 어디                                                                       |
+| ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `buildSessionLog` 가 `date:` 를 쓴다                                                        | `agent/tasks/query.test.ts`                                                |
+| `harvestLog` 가 세션 자료 + `extraPaths` 로 ingest 를 부르고 커밋에 세 종류 경로가 들어간다 | `agent/tasks/harvest.test.ts` (가짜 LLM — `engine.test.ts` 의 것을 따른다) |
+| `harvest` 가 빈 로그를 거부한다                                                             | 같은 파일                                                                  |
+| `scanSources` 가 `.piecepool/sessions/` 를 돌려주지 않는다                                  | `ingest/engine.test.ts`                                                    |
+
+엔진 내부(`(AI)` 꼬리표 · 출처 페이지 내용)는 `engine.test.ts:139` 가 이미 덮는다. 다시 쓰지 않는다.
+
+### 7.2 통과 조건
+
+1. `npm ci && npx prettier --check . && npm run lint && npm run typecheck && npm test` 전부 통과
+2. `npm run query -- fixtures/vault-life` 대화 → `y` → **커밋 1개**에 `wiki/*` · `sources/@session-<id>.md` · `.piecepool/sessions/<id>.md` · `sync_state.json`
+3. 같은 세션 `npm run harvest` 재실행 → "이미 반영됨", 커밋 없음
+4. 수확 → 한 턴 더 → 재수확 → 커밋 1개, 이전 세션 출신 기록 줄이 교체됨
+5. `npm run ingest -- fixtures/vault-life` 가 미반영 세션을 건드리지 않는다
+6. 로그 프론트매터의 `date:` 가 출처 페이지의 날짜로 간다
+
+### 7.3 사람에게 넘길 것 (CLAUDE.md §7)
+
+- **옵시디언으로 볼트를 열어** 수확된 기록 줄이 맞는 페이지에 붙었는지, `(AI)` 가 AI 턴 것에만 붙었는지
+- **③ 이 얼마나 들어왔는가** — 결정 1 의 측정이다. 수확된 `(AI)` 기록 줄 중 위키에 없던 내용이 몇 개인지 세어 둔다. 이 숫자가 다음 단계(거르기)의 근거다
+
+## 8. 미룬 것
+
+| 미룬 것                                      | 어디로                                                     |
+| -------------------------------------------- | ---------------------------------------------------------- |
+| ③ 거르기 (근거 없는 AI 문단)                 | §7.3 의 측정 뒤. 재료(`opened` · `[[링크]]`)는 로그에 있다 |
+| lint 규칙 "출처가 대화뿐인 문단" (상위 §8.3) | lint 구현 단계                                             |
+| UI 의 [위키에 반영] 버튼                     | B2                                                         |
+| 세션 로그 목록 · 미반영 세션 보기            | B2                                                         |
+
+## 9. A 에게 알릴 것
+
+- **§6 — `scanSources` 세션 루프 제거.** A 구역이고 B3 PR 에 실린다. 근거는 §6
+- B1 에서 넘긴 것 세 건(로마자 이름 회귀 · `--limit` 부재 · hunspell 누수)은 B1 설계 §12 에 그대로 있다
+
+## 10. 기각한 대안
+
+- **`harvest()` 를 테스트 없이 두기.** 5줄 래퍼라 넘어가려 했는데, 검토(2026-09-18)가 A 의 선례를 짚었다. 본체를 빼면 합의 없이 테스트된다
+- **`sessionFromLog()` 껍데기.** 나중 수확용으로 `QuerySession` 을 가짜로 만들려 했다. 본체가 `id` · `log` 만 받으면 필요 없다
+- **자동 반영 유지 + 상위 §8.1 개정.** A 의 의도를 살리는 안. 커밋 메시지를 보면 의도가 아니라 실험 배선이었고, 조사한 다른 위키들도 사람이 고르는 쪽이다
+- **`scanSources` 수정을 별도 PR 로.** 5줄이고 B3 의 `y/N` 이 이것 없이는 장식이다. 쪼개는 비용이 더 크다
+- **AI 턴 문단 거르기를 지금.** 출처 페이지(전문 100%)와 정리 입력이 갈라져 `itemFromSource` 를 건드려야 하고, 얼마나 들어오는지 모른 채 짓는 것이다
