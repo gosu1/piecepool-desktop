@@ -24,8 +24,9 @@ const SOURCE_EXT = new Set([".pdf", ".txt", ".md"]);
 const MAX_BYTES = 50 * 1024 * 1024;
 
 /**
- * `sources/` 안의 원본 파일과 `.piecepool/sessions/` 의 세션 로그. 출처 페이지(`@*.md`)와 숨김 파일은 뺀다.
- * 세션 로그는 수확(상위 §8.1)의 입력이다 — 대화 로그를 자료 하나로 보고 같은 파이프라인을 탄다.
+ * `sources/` 안의 원본 파일. 출처 페이지(`@*.md`)와 숨김 파일은 뺀다.
+ * 세션 로그(`.piecepool/sessions/`)는 여기서 훑지 않는다 — 사용자가 고른 세션만 `harvest` 가
+ * 자료로 넘긴다 (상위 §8.1). 전체 정리가 세션을 흡수하면 안 고른 대화가 위키에 들어간다.
  */
 export async function scanSources(v: Vault): Promise<SourceFile[]> {
   const out: SourceFile[] = [];
@@ -40,11 +41,6 @@ export async function scanSources(v: Vault): Promise<SourceFile[]> {
     if (!e.isFile() || e.name.startsWith(".") || e.name.startsWith("@")) continue;
     if (!SOURCE_EXT.has(extname(e.name))) continue;
     out.push({ path: `sources/${e.name}`, name: basename(e.name, extname(e.name)) });
-  }
-  for (const e of await list(".piecepool/sessions")) {
-    if (!e.isFile() || extname(e.name) !== ".md") continue;
-    const id = basename(e.name, ".md");
-    out.push({ path: `.piecepool/sessions/${e.name}`, name: `session-${id}`, session: true });
   }
   return out.sort((a, b) => a.path.localeCompare(b.path));
 }
