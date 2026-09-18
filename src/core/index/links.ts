@@ -31,8 +31,10 @@ export function normalizeTitle(t: string): string {
 /**
  * 코드 펜스와 인라인 코드를 **같은 길이의 공백**으로 지운다.
  * 길이를 유지하는 이유: 나중에 링크 위치(offset)가 필요해질 때 통째로 밀리지 않는다.
+ *
+ * agent/cite.ts 도 이걸 쓴다 — 코드 펜스를 비우는 규칙이 한 곳에만 살게 한다.
  */
-function blankCode(body: string): string {
+export function blankCode(body: string): string {
   const lines = body.split("\n");
   let fenceChar: string | null = null;
   let fenceLen = 0;
@@ -126,6 +128,16 @@ export function resolveLink(from: NotePath, to: string, t: LinkTargets): NotePat
   return t.titles.get(normalizeTitle(to)) ?? (t.files.has(to) ? to : null);
 }
 
+/**
+ * `p` 를 가리키는 노트들. 깨진 링크(resolved === null)와 자기 링크(from === resolved)를
+ * 빼는 규칙은 scan.ts 의 toGraph 와 같다 — 그래프 엣지와 backlink 목록이 같은 것을
+ * 다른 모양으로 보여주는 것이므로 기준이 갈리면 안 된다.
+ */
 export function backlinksOf(p: NotePath, all: LinkRef[]): NotePath[] {
-  throw new Error("unimplemented: core/index/links.backlinksOf");
+  const from = new Set<NotePath>();
+  for (const l of all) {
+    if (l.resolved !== p || l.from === p) continue;
+    from.add(l.from);
+  }
+  return [...from].sort();
 }
