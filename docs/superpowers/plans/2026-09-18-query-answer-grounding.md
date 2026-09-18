@@ -26,6 +26,7 @@
 **Files:**
 
 - Modify: `src/core/agent/tasks/query.ts`
+- Modify: `src/cli/query.ts:44-49`
 - Test: `src/core/agent/tasks/query.test.ts`
 
 **Interfaces:**
@@ -233,24 +234,40 @@ return res.text;
 
 (i) `ask()` 의 머리 주석 "읽기 전용 툴만 받는다 — 대화 중에는 위키를 고치지 않는다" 는 그대로 둔다. `QuerySession.index` 의 주석에 "근거 대조용" 이 있으면 "backlinks 툴용" 으로 고친다 — 이제 색인을 쓰는 곳은 툴뿐이다.
 
+(j) `src/cli/query.ts` 의 `[y/N]` 안내를 바꾼다 — 그대로 두면 typecheck 가 깨진다:
+
+```ts
+    if (session.turns.length) {
+      const pages = openedPages(session.stats?.opened ?? []).length;
+      console.log(
+        `세션 로그: .piecepool/sessions/${session.id}.md · ${session.turns.length / 2}턴 · 본 페이지 ${pages}장`,
+      );
+```
+
+import 줄도 고친다:
+
+```ts
+import { ask, openedPages, type QuerySession } from "../core/agent/tasks/query.ts";
+```
+
+(`session.turns` 는 사용자·AI 가 한 쌍이라 `/ 2` 가 대화 턴 수다.)
+
 - [ ] **Step 4: 통과를 확인한다**
 
 Run: `npx vitest run src/core/agent/tasks/query.test.ts`
 Expected: PASS (10 tests)
 
-Run: `npm run typecheck`
-Expected: `src/cli/query.ts` 에서 `session.stats?.unsourced` 오류 1건 — Task 3 에서 고친다. 그 외 오류 없음. (`cite.ts` 는 아직 있으므로 `loop.ts` 는 멀쩡하다.)
+Run: `npm run typecheck && npm run lint`
+Expected: 오류 없음. (`cite.ts` 는 아직 있으므로 `loop.ts` 는 멀쩡하다.)
 
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add src/core/agent/tasks/query.ts src/core/agent/tasks/query.test.ts
+git add src/core/agent/tasks/query.ts src/core/agent/tasks/query.test.ts src/cli/query.ts
 git commit -m "refactor: 답변의 근거 대조를 빼고 화면용 참고 보고로 바꾼다
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ```
-
-(typecheck 가 CLI 한 곳에서 깨진 채 커밋한다. Task 3 이 같은 PR 에서 닫는다.)
 
 ---
 
@@ -301,7 +318,7 @@ Run: `npm run lint`
 Expected: 오류 없음.
 
 Run: `npm run typecheck`
-Expected: `src/cli/query.ts` 의 `unsourced` 오류 1건만 남는다 (Task 3).
+Expected: 오류 없음.
 
 - [ ] **Step 5: 커밋**
 
@@ -316,48 +333,13 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ---
 
-### Task 3: CLI 안내 · 프롬프트 규칙
+### Task 3: 프롬프트 규칙
 
 **Files:**
 
-- Modify: `src/cli/query.ts:44-49`
 - Modify: `src/core/prompts/query.md`
 
-**Interfaces:**
-
-- Consumes: `openedPages` (Task 1) · `session.stats.turns` · `session.stats.opened`
-
-- [ ] **Step 1: CLI 의 `[y/N]` 안내를 바꾼다**
-
-`src/cli/query.ts` 에서
-
-```ts
-    if (session.turns.length) {
-      const unsourced = session.stats?.unsourced ?? 0;
-      console.log(
-        `세션 로그: .piecepool/sessions/${session.id}.md · 근거 없는 문단 ${unsourced}개`,
-      );
-```
-
-를
-
-```ts
-    if (session.turns.length) {
-      const pages = openedPages(session.stats?.opened ?? []).length;
-      console.log(
-        `세션 로그: .piecepool/sessions/${session.id}.md · ${session.turns.length / 2}턴 · 본 페이지 ${pages}장`,
-      );
-```
-
-로 바꾸고, import 줄을 고친다:
-
-```ts
-import { ask, openedPages, type QuerySession } from "../core/agent/tasks/query.ts";
-```
-
-(`session.turns` 는 사용자·AI 가 한 쌍이라 `/ 2` 가 대화 턴 수다.)
-
-- [ ] **Step 2: `prompts/query.md` 규칙 1·2 를 고친다**
+- [ ] **Step 1: `prompts/query.md` 규칙 1·2 를 고친다**
 
 `## 규칙` 아래 `### 1.` 과 `### 2.` 절 전체를 이것으로 바꾼다 (3·4·5 는 그대로):
 
@@ -370,15 +352,15 @@ import { ask, openedPages, type QuerySession } from "../core/agent/tasks/query.t
 
 그리고 규칙 번호를 당긴다 — 옛 3 → 2, 4 → 3, 5 → 4. 절 제목만 바꾸고 내용은 그대로 둔다.
 
-- [ ] **Step 3: 검증**
+- [ ] **Step 2: 검증**
 
 Run: `npx prettier --check . && npm run lint && npm run typecheck && npm test`
-Expected: 전부 통과. typecheck 오류 0.
+Expected: 전부 통과.
 
-- [ ] **Step 4: 커밋**
+- [ ] **Step 3: 커밋**
 
 ```bash
-git add src/cli/query.ts src/core/prompts/query.md
+git add src/core/prompts/query.md
 git commit -m "feat: 답변은 위키를 먼저 찾되 위키에 매이지 않는다
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
