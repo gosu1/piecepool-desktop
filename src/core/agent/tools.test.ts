@@ -135,6 +135,18 @@ describe("backlinks", () => {
     const r = (await toolOf("backlinks").run({ path: "wiki/달리기.md" })) as { paths: string[] };
     expect(r.paths).toContain("wiki/무릎 통증.md");
   });
+
+  it("호출부가 준 색인을 쓴다 — 세션이 이미 scanVault 했으면 볼트를 두 번 읽지 않는다", async () => {
+    // 디스크와 다른 색인을 넘겨 그것을 썼는지 가른다.
+    const index = { targets: { titles: new Map(), files: new Set<string>() }, links: [] };
+    const tools = createTools(v, new Written(), { readOnly: true, index });
+    const r = (await tools
+      .find((t) => t.name === "backlinks")!
+      .run({ path: "wiki/달리기.md" })) as {
+      paths: string[];
+    };
+    expect(r.paths).toEqual([]);
+  });
 });
 
 describe("list_notes", () => {

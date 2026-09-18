@@ -126,9 +126,10 @@ export async function ask(
   o?: { onProgress?: OnProgress },
 ): Promise<string> {
   const prompt = await loadPrompt("query");
-  // 툴은 세션에 한 번만 만든다 — 툴 안에 절 색인이 캐시돼 있어
-  // 매 턴 새로 만들면 위키 전체를 다시 읽는다 (설계 §5.6).
-  session.tools ??= createTools(v, new Written(), { readOnly: true });
+  // 색인도 툴도 세션에 한 번만 만든다 — 대화 중에는 위키가 바뀌지 않는다 (설계 §5.6).
+  // 링크 색인은 근거 대조와 backlinks 툴이 같이 쓰므로 툴에 넘겨 scanVault 를 한 번만 한다.
+  const index = (session.index ??= await scanVault(v));
+  session.tools ??= createTools(v, new Written(), { readOnly: true, index });
 
   const res = await runAgent(prompt, question, session.tools, {
     onProgress: o?.onProgress,
@@ -136,10 +137,8 @@ export async function ask(
   });
 
   // 근거 대조 — 연 적 없는 절을 가리킨 링크를 뗀다.
-  // 링크 색인도 세션에 한 번만 만든다 — 대화 중에는 위키가 바뀌지 않는다 (설계 §5.6).
-  session.index ??= await scanVault(v);
   const cited = checkCitations(res.text, res.opened, (name) =>
-    resolveLink("", name, session.index!.targets),
+    resolveLink("", name, index.targets),
   );
 
   session.turns.push({ who: "사용자", text: question });
