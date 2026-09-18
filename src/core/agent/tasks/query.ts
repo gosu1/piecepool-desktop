@@ -8,7 +8,7 @@ import { loadPrompt } from "../../prompts/load.ts";
 import { resolveLink } from "../../index/links.ts";
 import { scanVault, type VaultIndex } from "../../index/scan.ts";
 import { checkCitations } from "../cite.ts";
-import { runAgent } from "../loop.ts";
+import { runAgent, type AgentResult } from "../loop.ts";
 import { createTools, type Tool } from "../tools.ts";
 import { Written } from "../written.ts";
 
@@ -23,6 +23,44 @@ export interface SessionMeta {
   usd: number | null;
   opened: string[];
   unsourced: number;
+}
+
+/**
+ * `ask()` 를 거듭 부르면 쌓이는 계기. 프론트매터는 이것을 쓴다 —
+ * 마지막 호출분만 쓰면 5턴 대화의 `usd` 가 한 턴 비용이 되고,
+ * `opened` 에서 앞 턴들이 연 절이 빠져 수확이 그 근거를 잃는다 (설계 §11.2).
+ */
+export interface SessionStats {
+  turns: number;
+  toolCalls: number;
+  hitCap: boolean;
+  tokens: { in: number; cached: number; out: number };
+  usd: number | null;
+  opened: Set<string>;
+  unsourced: number;
+}
+
+export function accumulate(
+  prev: SessionStats | undefined,
+  res: AgentResult,
+  unsourced: number,
+): SessionStats {
+  const sum = (pick: (u: AgentResult["usage"][number]) => number) =>
+    res.usage.reduce((a, u) => a + pick(u), 0);
+  const usd = res.usage.every((u) => u.usd === null) ? null : sum((u) => u.usd ?? 0);
+  return {
+    turns: (prev?.turns ?? 0) + res.turns,
+    toolCalls: (prev?.toolCalls ?? 0) + res.toolCalls,
+    hitCap: (prev?.hitCap ?? false) || res.hitCap,
+    tokens: {
+      in: (prev?.tokens.in ?? 0) + sum((u) => u.prompt),
+      cached: (prev?.tokens.cached ?? 0) + sum((u) => u.cached),
+      out: (prev?.tokens.out ?? 0) + sum((u) => u.completion),
+    },
+    usd: prev?.usd == null && usd === null ? null : (prev?.usd ?? 0) + (usd ?? 0),
+    opened: new Set([...(prev?.opened ?? []), ...res.opened]),
+    unsourced: (prev?.unsourced ?? 0) + unsourced,
+  };
 }
 
 export interface Turn {
@@ -48,6 +86,8 @@ export interface QuerySession {
    * 않는다(읽기 전용, 수확은 B3) — 설계 §5.6.
    */
   index?: VaultIndex;
+  /** 누계 계기. `ask()` 가 채운다. */
+  stats?: SessionStats;
 }
 
 /**
@@ -107,25 +147,13 @@ export async function ask(
   session.history.push({ role: "user", text: question });
   session.history.push({ role: "model", text: cited.text });
 
-  const sum = (pick: (u: (typeof res.usage)[number]) => number) =>
-    res.usage.reduce((a, u) => a + pick(u), 0);
-  const usd = res.usage.every((u) => u.usd === null) ? null : sum((u) => u.usd ?? 0);
-
+  session.stats = accumulate(session.stats, res, cited.unsourced);
   const md = buildSessionLog(
     {
       id: session.id,
       model: process.env.PIECEPOOL_LLM_MODEL ?? "kimi-k3",
-      turns: res.turns,
-      toolCalls: res.toolCalls,
-      hitCap: res.hitCap,
-      tokens: {
-        in: sum((u) => u.prompt),
-        cached: sum((u) => u.cached),
-        out: sum((u) => u.completion),
-      },
-      usd,
-      opened: [...res.opened].sort(),
-      unsourced: cited.unsourced,
+      ...session.stats,
+      opened: [...session.stats.opened].sort(),
     },
     session.turns,
   );
