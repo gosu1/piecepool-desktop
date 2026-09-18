@@ -1,12 +1,16 @@
 import { createInterface } from "node:readline/promises";
 import { openVault } from "../core/vault/open.ts";
 import { ask, type QuerySession } from "../core/agent/tasks/query.ts";
+import { localDate } from "../core/ingest/wiki.ts";
 import { log, main } from "./run.ts";
 
 function newSession(): QuerySession {
   // 콜론은 Windows 파일명에 쓸 수 없다 — 이 id 가 sessions/<id>.md 가 된다.
+  const now = new Date();
   return {
-    id: new Date().toISOString().replace(/[:.]/g, "-"),
+    id: now.toISOString().replace(/[:.]/g, "-"),
+    // id 는 UTC 라 날짜가 하루 어긋날 수 있다. 날짜는 로컬로 따로 정한다.
+    date: localDate(now),
     log: "",
     turns: [],
     history: [],

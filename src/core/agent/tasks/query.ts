@@ -16,6 +16,8 @@ import { Written } from "../written.ts";
 export interface SessionMeta {
   id: string;
   model: string;
+  /** 세션을 시작한 날 (로컬). ingest 가 출처 날짜로 읽는다 — `itemFromSource` 의 `date:` 정규식. */
+  date: string;
   turns: number;
   toolCalls: number;
   hitCap: boolean;
@@ -70,6 +72,8 @@ export interface Turn {
 
 export interface QuerySession {
   id: string;
+  /** 세션을 시작한 날 `YYYY-MM-DD` (로컬). 만드는 쪽이 한 번 정한다 — 매 턴 다시 찍으면 자정을 넘긴 대화의 날짜가 바뀐다. */
+  date: string;
   log: string;
   /** 지금까지의 턴. 로그를 다시 쓸 때 쓴다. */
   turns: Turn[];
@@ -99,6 +103,7 @@ export function buildSessionLog(meta: SessionMeta, turns: Turn[]): string {
   const out: string[] = ["---"];
   out.push(`id: ${meta.id}`);
   out.push(`model: ${meta.model}`);
+  out.push(`date: ${meta.date}`);
   out.push(`turns: ${meta.turns}`);
   out.push(`tool_calls: ${meta.toolCalls}`);
   out.push(`hit_cap: ${meta.hitCap}`);
@@ -151,6 +156,7 @@ export async function ask(
     {
       id: session.id,
       model: process.env.PIECEPOOL_LLM_MODEL ?? "kimi-k3",
+      date: session.date,
       ...session.stats,
       opened: [...session.stats.opened].sort(),
     },

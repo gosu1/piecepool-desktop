@@ -17,6 +17,7 @@ beforeEach(async () => {
 const meta = {
   id: "2026-09-18-1432",
   model: "kimi-k3",
+  date: "2026-09-18",
   turns: 2,
   toolCalls: 1,
   hitCap: false,
@@ -47,6 +48,11 @@ describe("buildSessionLog", () => {
     const md = buildSessionLog(meta, [{ who: "사용자", text: "질문" }]);
     expect(md).toContain("  - wiki/달리기.md#요약");
     expect(md).toContain("unsourced: 0");
+  });
+
+  it("세션 날짜를 date: 로 남긴다 — ingest 가 이것을 출처 날짜로 읽는다", () => {
+    const md = buildSessionLog(meta, [{ who: "사용자", text: "질문" }]);
+    expect(md).toContain("\ndate: 2026-09-18\n");
   });
 });
 

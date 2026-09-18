@@ -7,6 +7,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { openVault } from "../src/core/vault/open.ts";
 import { ask, type QuerySession } from "../src/core/agent/tasks/query.ts";
+import { localDate } from "../src/core/ingest/wiki.ts";
 import { normalizeTitle } from "../src/core/index/links.ts";
 
 type Eval = { questions: { q: string; must_open: string[] }[] };
@@ -35,6 +36,7 @@ let failed = 0;
 for (const { q, must_open } of spec.questions) {
   const session: QuerySession = {
     id: `eval-${Date.now()}`,
+    date: localDate(new Date()),
     log: "",
     turns: [],
     history: [],
