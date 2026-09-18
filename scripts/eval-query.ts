@@ -24,7 +24,7 @@ function pageOf(opened: string): string {
 }
 
 let hit = 0;
-const rows: string[] = [];
+let failed = 0;
 
 for (const { q, must_open } of spec.questions) {
   const session: QuerySession = {
@@ -33,22 +33,31 @@ for (const { q, must_open } of spec.questions) {
     turns: [],
     history: [],
   };
-  await ask(v, session, q);
-  const opened = new Set(
-    (/^opened:\n((?:\s+- .*\n)*)/m.exec(session.log)?.[1] ?? "")
-      .split("\n")
-      .map((l) => l.replace(/^\s+-\s*/, "").trim())
-      .filter(Boolean)
-      .map(pageOf),
-  );
-  const ok = must_open.every((alt) =>
-    alt.split("|").some((name) => opened.has(normalizeTitle(name))),
-  );
-  if (ok) hit++;
-  rows.push(`${ok ? "O" : "X"}  ${q}\n     연 것: ${[...opened].join(", ") || "(없음)"}`);
+  // 실비가 드는 하네스다 — 한 질문이 죽어도 이미 낸 결과는 남아야 하므로 끝날 때마다 바로 찍는다.
+  try {
+    await ask(v, session, q);
+    const opened = new Set(
+      (/^opened:\n((?:\s+- .*\n)*)/m.exec(session.log)?.[1] ?? "")
+        .split("\n")
+        .map((l) => l.replace(/^\s+-\s*/, "").trim())
+        .filter(Boolean)
+        .map(pageOf),
+    );
+    const ok = must_open.every((alt) =>
+      alt.split("|").some((name) => opened.has(normalizeTitle(name))),
+    );
+    if (ok) hit++;
+    console.log(`${ok ? "O" : "X"}  ${q}\n     연 것: ${[...opened].join(", ") || "(없음)"}`);
+  } catch (err) {
+    failed++;
+    const msg = err instanceof Error ? err.message : String(err);
+    console.log(`E  ${q}\n     실패: ${msg}`);
+  }
 }
 
-console.log(rows.join("\n"));
+// 실패는 "못 찾음" 과 다르다 — LLM/네트워크 오류일 뿐 검색 실패가 아니므로 분모에서 뺀다.
+const measured = spec.questions.length - failed;
 console.log(
-  `\n재현율 ${hit}/${spec.questions.length} (${((hit / spec.questions.length) * 100).toFixed(0)}%)`,
+  `\n재현율 ${hit}/${measured} (${measured > 0 ? ((hit / measured) * 100).toFixed(0) : "?"}%)` +
+    ` · 실패 ${failed}/${spec.questions.length}`,
 );
