@@ -1,0 +1,996 @@
+<title>B파트 파이프라인</title>
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+/>
+<style>
+  :root {
+    --bg: #f5f7f8;
+    --surface: #ffffff;
+    --ink: #1c2430;
+    --muted: #5b6672;
+    --line: #c9d1d8;
+    --b: #0f6e7a; /* B 구역 (wiki → query → harvest) */
+    --b-soft: #dceff1;
+    --a: #b7791f; /* A 구역 (ingest) */
+    --a-soft: #fbefd9;
+    --ghost: #8a96a2; /* B4 가 지운 것 */
+    --code-bg: #eef1f4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12171c;
+      --surface: #1a2129;
+      --ink: #e6ebef;
+      --muted: #97a3ae;
+      --line: #34404b;
+      --b: #4fb3bf;
+      --b-soft: #163b41;
+      --a: #e0a64b;
+      --a-soft: #3e2e14;
+      --ghost: #6c7883;
+      --code-bg: #232c35;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12171c;
+    --surface: #1a2129;
+    --ink: #e6ebef;
+    --muted: #97a3ae;
+    --line: #34404b;
+    --b: #4fb3bf;
+    --b-soft: #163b41;
+    --a: #e0a64b;
+    --a-soft: #3e2e14;
+    --ghost: #6c7883;
+    --code-bg: #232c35;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family:
+      "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui,
+      sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    padding-inline: 16px;
+    padding-block: 32px 64px;
+  }
+  main {
+    max-width: 1120px;
+    margin: 0 auto;
+    display: grid;
+    gap: 40px;
+  }
+  code,
+  .mono {
+    font-family: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 0.92em;
+  }
+  code {
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  header {
+    display: grid;
+    gap: 10px;
+    max-width: 68ch;
+  }
+  .eyebrow {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--b);
+    font-weight: 600;
+  }
+  h1 {
+    font-size: 30px;
+    font-weight: 600;
+    line-height: 1.2;
+    margin: 0;
+    text-wrap: balance;
+  }
+  header p {
+    margin: 0;
+    color: var(--muted);
+  }
+
+  figure {
+    margin: 0;
+    display: grid;
+    gap: 12px;
+  }
+  .scroll {
+    overflow-x: auto;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 16px;
+  }
+  svg {
+    display: block;
+    min-width: 900px;
+    max-width: 100%;
+    height: auto;
+    font-family: inherit;
+    color: var(--ink);
+  }
+  figcaption {
+    color: var(--muted);
+    font-size: 14px;
+    max-width: 80ch;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .sw {
+    width: 22px;
+    height: 12px;
+    border-radius: 2px;
+    border: 1.5px solid;
+  }
+  .sw.b {
+    border-color: var(--b);
+    background: var(--b-soft);
+  }
+  .sw.a {
+    border-color: var(--a);
+    background: var(--a-soft);
+    border-style: dashed;
+  }
+  .sw.g {
+    border-color: var(--ghost);
+    border-style: dashed;
+    background: transparent;
+  }
+
+  h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 12px;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 14px;
+  }
+  th,
+  td {
+    text-align: left;
+    vertical-align: top;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  th {
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  td:first-child {
+    white-space: nowrap;
+    font-weight: 600;
+  }
+  .tag {
+    display: inline-block;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 1px 7px;
+    border-radius: 3px;
+    background: var(--b-soft);
+    color: var(--b);
+  }
+  .tag.todo {
+    background: transparent;
+    border: 1px dashed var(--ghost);
+    color: var(--muted);
+  }
+  .tag.done {
+    background: var(--b);
+    color: var(--surface);
+  }
+
+  .rules {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+  .rule {
+    border-left: 3px solid var(--b);
+    padding: 2px 0 2px 14px;
+  }
+  .rule strong {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .rule p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .note {
+    font-size: 13px;
+    color: var(--muted);
+  }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">piecepool-desktop · B 구간</div>
+    <h1>위키가 답하고, 대화가 위키를 키운다</h1>
+    <p>
+      B 는 <strong>wiki → query</strong> 의 절반이다. 한 세션이 어떻게 위키를 읽고, 답을 내고,
+      로그로 남고, 사용자가 고르면 다시 위키로 돌아가는지를 한 장에 그렸다. A 의
+      <code>ingest</code> 가 어디서 끼어드는지도 함께 표시했다.
+    </p>
+  </header>
+
+  <figure>
+    <div class="scroll">
+      <svg
+        viewBox="0 0 1120 560"
+        role="img"
+        aria-label="질문이 ask 와 에이전트 루프를 거쳐 위키를 읽고 답을 내며, 세션 로그가 남고, 사용자가 y 를 고르면 harvest 가 A 의 ingest 를 불러 위키에 기록 줄을 쓰는 순환 흐름"
+      >
+        <defs>
+          <marker
+            id="arr"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="7"
+            markerHeight="7"
+            orient="auto-start-reverse"
+          >
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+          </marker>
+          <marker
+            id="arrB"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="7"
+            markerHeight="7"
+            orient="auto-start-reverse"
+          >
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--b)" />
+          </marker>
+          <marker
+            id="arrA"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="7"
+            markerHeight="7"
+            orient="auto-start-reverse"
+          >
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--a)" />
+          </marker>
+        </defs>
+
+        <!-- ===== 위 줄: 질문 → ask → 루프 → 답변 ===== -->
+
+        <!-- 사용자 -->
+        <circle cx="60" cy="112" r="11" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <path d="M40,150 a20,20 0 0 1 40,0" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <text x="60" y="176" font-size="12" text-anchor="middle" fill="currentColor">사용자</text>
+        <line
+          x1="86"
+          y1="130"
+          x2="146"
+          y2="130"
+          stroke="currentColor"
+          stroke-width="1.5"
+          marker-end="url(#arr)"
+        />
+        <text x="116" y="121" font-size="11" text-anchor="middle" fill="var(--muted)">질문</text>
+
+        <!-- ask() -->
+        <rect
+          x="150"
+          y="98"
+          width="140"
+          height="64"
+          rx="5"
+          fill="var(--b-soft)"
+          stroke="var(--b)"
+          stroke-width="1.5"
+        />
+        <text
+          x="220"
+          y="124"
+          font-size="13"
+          font-weight="600"
+          text-anchor="middle"
+          fill="currentColor"
+          font-family="IBM Plex Mono, monospace"
+        >
+          ask()
+        </text>
+        <text x="220" y="143" font-size="11" text-anchor="middle" fill="var(--muted)">
+          tasks/query.ts · 동결
+        </text>
+        <rect x="256" y="90" width="28" height="16" rx="3" fill="var(--b)" />
+        <text
+          x="270"
+          y="102"
+          font-size="10"
+          font-weight="600"
+          text-anchor="middle"
+          fill="var(--surface)"
+          font-family="IBM Plex Mono, monospace"
+        >
+          B1
+        </text>
+
+        <line
+          x1="290"
+          y1="130"
+          x2="346"
+          y2="130"
+          stroke="currentColor"
+          stroke-width="1.5"
+          marker-end="url(#arr)"
+        />
+
+        <!-- 에이전트 루프 -->
+        <rect
+          x="350"
+          y="60"
+          width="300"
+          height="140"
+          rx="6"
+          fill="var(--b-soft)"
+          stroke="var(--b)"
+          stroke-width="1.5"
+        />
+        <text
+          x="500"
+          y="84"
+          font-size="13"
+          font-weight="600"
+          text-anchor="middle"
+          fill="currentColor"
+        >
+          에이전트 루프
+          <tspan font-family="IBM Plex Mono, monospace" font-weight="500">loop.ts</tspan>
+        </text>
+        <rect x="616" y="52" width="28" height="16" rx="3" fill="var(--b)" />
+        <text
+          x="630"
+          y="64"
+          font-size="10"
+          font-weight="600"
+          text-anchor="middle"
+          fill="var(--surface)"
+          font-family="IBM Plex Mono, monospace"
+        >
+          B1
+        </text>
+
+        <rect
+          x="368"
+          y="100"
+          width="90"
+          height="34"
+          rx="4"
+          fill="var(--surface)"
+          stroke="currentColor"
+          stroke-width="1"
+        />
+        <text x="413" y="122" font-size="12" text-anchor="middle" fill="currentColor">
+          LLM (K3)
+        </text>
+        <line
+          x1="458"
+          y1="112"
+          x2="492"
+          y2="112"
+          stroke="currentColor"
+          stroke-width="1.2"
+          marker-end="url(#arr)"
+          marker-start="url(#arr)"
+        />
+        <rect
+          x="496"
+          y="100"
+          width="136"
+          height="34"
+          rx="4"
+          fill="var(--surface)"
+          stroke="currentColor"
+          stroke-width="1"
+        />
+        <text x="564" y="122" font-size="12" text-anchor="middle" fill="currentColor">
+          읽기 툴 4종 · 최대 8왕복
+        </text>
+        <text
+          x="500"
+          y="158"
+          font-size="11"
+          text-anchor="middle"
+          fill="var(--muted)"
+          font-family="IBM Plex Mono, monospace"
+        >
+          search · read_note · backlinks · list_notes
+        </text>
+        <text x="500" y="182" font-size="11" text-anchor="middle" fill="var(--muted)">
+          연 것을
+          <tspan font-family="IBM Plex Mono, monospace">opened</tspan>
+          에 모은다 (발췌·전문)
+        </text>
+
+        <!-- 루프 ↔ 위키 -->
+        <line
+          x1="564"
+          y1="200"
+          x2="564"
+          y2="286"
+          stroke="var(--b)"
+          stroke-width="1.5"
+          marker-end="url(#arrB)"
+          marker-start="url(#arrB)"
+        />
+        <text x="574" y="240" font-size="11" fill="var(--b)">읽기만</text>
+        <text x="574" y="255" font-size="11" fill="var(--muted)">대화 중엔 안 쓴다</text>
+
+        <!-- 루프 → 답변 (ghost 검문을 지나침) -->
+        <line
+          x1="650"
+          y1="130"
+          x2="756"
+          y2="130"
+          stroke="currentColor"
+          stroke-width="1.5"
+          marker-end="url(#arr)"
+        />
+        <text x="735" y="121" font-size="11" text-anchor="middle" fill="var(--muted)">그대로</text>
+        <rect
+          x="662"
+          y="14"
+          width="84"
+          height="40"
+          rx="4"
+          fill="none"
+          stroke="var(--ghost)"
+          stroke-width="1.2"
+          stroke-dasharray="4 3"
+        />
+        <text
+          x="704"
+          y="31"
+          font-size="11"
+          text-anchor="middle"
+          fill="var(--ghost)"
+          font-family="IBM Plex Mono, monospace"
+          text-decoration="line-through"
+        >
+          cite.ts
+        </text>
+        <text x="704" y="46" font-size="10" text-anchor="middle" fill="var(--ghost)">
+          근거 검문 · B4 삭제
+        </text>
+        <line
+          x1="704"
+          y1="54"
+          x2="704"
+          y2="120"
+          stroke="var(--ghost)"
+          stroke-width="1"
+          stroke-dasharray="3 3"
+        />
+
+        <!-- 답변 -->
+        <rect
+          x="760"
+          y="98"
+          width="180"
+          height="64"
+          rx="5"
+          fill="var(--surface)"
+          stroke="currentColor"
+          stroke-width="1.5"
+        />
+        <text
+          x="850"
+          y="124"
+          font-size="13"
+          font-weight="600"
+          text-anchor="middle"
+          fill="currentColor"
+        >
+          답변
+        </text>
+        <text x="850" y="143" font-size="11" text-anchor="middle" fill="var(--muted)">
+          위키 먼저, 없으면 일반 지식
+        </text>
+
+        <!-- 화면 (B2) -->
+        <rect
+          x="960"
+          y="70"
+          width="140"
+          height="120"
+          rx="5"
+          fill="none"
+          stroke="var(--ghost)"
+          stroke-width="1.2"
+          stroke-dasharray="4 3"
+        />
+        <text
+          x="1030"
+          y="92"
+          font-size="12"
+          font-weight="600"
+          text-anchor="middle"
+          fill="var(--muted)"
+        >
+          화면
+        </text>
+        <text
+          x="1030"
+          y="108"
+          font-size="10"
+          text-anchor="middle"
+          fill="var(--ghost)"
+          font-family="IBM Plex Mono, monospace"
+        >
+          B2 · 미착수
+        </text>
+        <text x="1030" y="132" font-size="11" text-anchor="middle" fill="currentColor">
+          답변 텍스트
+        </text>
+        <text
+          x="1030"
+          y="152"
+          font-size="11"
+          text-anchor="middle"
+          fill="var(--b)"
+          font-family="IBM Plex Mono, monospace"
+        >
+          참고: [[달리기]] · …
+        </text>
+        <text x="1030" y="170" font-size="10" text-anchor="middle" fill="var(--muted)">
+          지금은 CLI 가 대신 보여 준다
+        </text>
+        <line
+          x1="940"
+          y1="130"
+          x2="956"
+          y2="130"
+          stroke="currentColor"
+          stroke-width="1.5"
+          marker-end="url(#arr)"
+        />
+
+        <!-- opened → 참고 줄 (B4) -->
+        <path
+          d="M650,176 C 760,176 880,150 956,150"
+          fill="none"
+          stroke="var(--b)"
+          stroke-width="1.2"
+          stroke-dasharray="5 3"
+          marker-end="url(#arrB)"
+        />
+        <text x="800" y="192" font-size="11" text-anchor="middle" fill="var(--b)">
+          <tspan font-family="IBM Plex Mono, monospace">opened → openedPages()</tspan>
+          · 코드가 만든다, 로그엔 안 남긴다
+        </text>
+        <rect x="1000" y="196" width="28" height="16" rx="3" fill="var(--b)" />
+        <text
+          x="1014"
+          y="208"
+          font-size="10"
+          font-weight="600"
+          text-anchor="middle"
+          fill="var(--surface)"
+          font-family="IBM Plex Mono, monospace"
+        >
+          B4
+        </text>
+
+        <!-- ===== 가운데: 위키 ===== -->
+        <rect
+          x="470"
+          y="290"
+          width="190"
+          height="72"
+          rx="6"
+          fill="var(--surface)"
+          stroke="currentColor"
+          stroke-width="1.5"
+        />
+        <text
+          x="565"
+          y="316"
+          font-size="13"
+          font-weight="600"
+          text-anchor="middle"
+          fill="currentColor"
+        >
+          wiki/ · sources/
+        </text>
+        <text x="565" y="334" font-size="11" text-anchor="middle" fill="var(--muted)">
+          마크다운이 유일한 진실
+        </text>
+        <text x="565" y="350" font-size="11" text-anchor="middle" fill="var(--muted)">
+          사용자 볼트 · 별개 git
+        </text>
+
+        <!-- ===== 오른쪽 아래: 세션 로그 → y/N ===== -->
+        <line
+          x1="850"
+          y1="162"
+          x2="850"
+          y2="286"
+          stroke="currentColor"
+          stroke-width="1.5"
+          marker-end="url(#arr)"
+        />
+        <text x="860" y="230" font-size="11" fill="var(--muted)">매 턴 통째로 다시 쓴다</text>
+
+        <rect
+          x="740"
+          y="290"
+          width="220"
+          height="86"
+          rx="5"
+          fill="var(--b-soft)"
+          stroke="var(--b)"
+          stroke-width="1.5"
+        />
+        <text
+          x="850"
+          y="312"
+          font-size="12"
+          font-weight="600"
+          text-anchor="middle"
+          fill="currentColor"
+          font-family="IBM Plex Mono, monospace"
+        >
+          .piecepool/sessions/&lt;id&gt;.md
+        </text>
+        <text x="850" y="332" font-size="11" text-anchor="middle" fill="var(--muted)">
+          프론트매터: date · opened · tokens · usd
+        </text>
+        <text
+          x="850"
+          y="350"
+          font-size="11"
+          text-anchor="middle"
+          fill="var(--muted)"
+          font-family="IBM Plex Mono, monospace"
+        >
+          ## N턴 (사용자) · ## N턴 (AI)
+        </text>
+        <text x="850" y="367" font-size="10" text-anchor="middle" fill="var(--muted)">
+          수확 안 해도 남는다
+        </text>
+        <rect x="926" y="282" width="28" height="16" rx="3" fill="var(--b)" />
+        <text
+          x="940"
+          y="294"
+          font-size="10"
+          font-weight="600"
+          text-anchor="middle"
+          fill="var(--surface)"
+          font-family="IBM Plex Mono, monospace"
+        >
+          B1
+        </text>
+
+        <line
+          x1="850"
+          y1="376"
+          x2="850"
+          y2="406"
+          stroke="currentColor"
+          stroke-width="1.5"
+          marker-end="url(#arr)"
+        />
+        <text x="860" y="396" font-size="11" fill="var(--muted)">대화가 끝나면</text>
+
+        <!-- y/N 다이아몬드 -->
+        <polygon
+          points="850,410 940,452 850,494 760,452"
+          fill="var(--surface)"
+          stroke="var(--b)"
+          stroke-width="1.5"
+        />
+        <text
+          x="850"
+          y="448"
+          font-size="12"
+          font-weight="600"
+          text-anchor="middle"
+          fill="currentColor"
+        >
+          위키에 반영?
+        </text>
+        <text
+          x="850"
+          y="466"
+          font-size="11"
+          text-anchor="middle"
+          fill="var(--muted)"
+          font-family="IBM Plex Mono, monospace"
+        >
+          [y/N]
+        </text>
+        <rect x="912" y="418" width="28" height="16" rx="3" fill="var(--b)" />
+        <text
+          x="926"
+          y="430"
+          font-size="10"
+          font-weight="600"
+          text-anchor="middle"
+          fill="var(--surface)"
+          font-family="IBM Plex Mono, monospace"
+        >
+          B3
+        </text>
+
+        <line
+          x1="850"
+          y1="494"
+          x2="850"
+          y2="528"
+          stroke="var(--ghost)"
+          stroke-width="1.2"
+          stroke-dasharray="4 3"
+        />
+        <text x="850" y="546" font-size="11" text-anchor="middle" fill="var(--muted)">
+          N → 로그만 남는다. 나중에
+          <tspan font-family="IBM Plex Mono, monospace">npm run harvest</tspan>
+          로 다시
+        </text>
+
+        <!-- y → harvest() -->
+        <line
+          x1="760"
+          y1="452"
+          x2="676"
+          y2="452"
+          stroke="var(--b)"
+          stroke-width="1.5"
+          marker-end="url(#arrB)"
+        />
+        <text x="718" y="443" font-size="11" text-anchor="middle" fill="var(--b)" font-weight="600">
+          y
+        </text>
+
+        <rect
+          x="530"
+          y="424"
+          width="142"
+          height="56"
+          rx="5"
+          fill="var(--b-soft)"
+          stroke="var(--b)"
+          stroke-width="1.5"
+        />
+        <text
+          x="601"
+          y="447"
+          font-size="13"
+          font-weight="600"
+          text-anchor="middle"
+          fill="currentColor"
+          font-family="IBM Plex Mono, monospace"
+        >
+          harvest()
+        </text>
+        <text x="601" y="465" font-size="11" text-anchor="middle" fill="var(--muted)">
+          로그를 자료 하나로 본다
+        </text>
+        <rect x="638" y="416" width="28" height="16" rx="3" fill="var(--b)" />
+        <text
+          x="652"
+          y="428"
+          font-size="10"
+          font-weight="600"
+          text-anchor="middle"
+          fill="var(--surface)"
+          font-family="IBM Plex Mono, monospace"
+        >
+          B3
+        </text>
+
+        <!-- harvest → ingest (A) -->
+        <line
+          x1="530"
+          y1="452"
+          x2="486"
+          y2="452"
+          stroke="var(--a)"
+          stroke-width="1.5"
+          marker-end="url(#arrA)"
+        />
+
+        <rect
+          x="210"
+          y="404"
+          width="272"
+          height="96"
+          rx="6"
+          fill="var(--a-soft)"
+          stroke="var(--a)"
+          stroke-width="1.5"
+          stroke-dasharray="6 4"
+        />
+        <text
+          x="346"
+          y="426"
+          font-size="12"
+          font-weight="600"
+          text-anchor="middle"
+          fill="currentColor"
+        >
+          A 구역 ·
+          <tspan font-family="IBM Plex Mono, monospace" font-weight="500">ingest/</tspan>
+        </text>
+        <text
+          x="346"
+          y="446"
+          font-size="11"
+          text-anchor="middle"
+          fill="var(--muted)"
+          font-family="IBM Plex Mono, monospace"
+        >
+          ingestSource({ kind: "session" })
+        </text>
+        <text x="346" y="464" font-size="11" text-anchor="middle" fill="var(--muted)">
+          AI 는 JSON 만 낸다 · 코드가 파일을 쓴다
+        </text>
+        <text x="346" y="482" font-size="11" text-anchor="middle" fill="var(--muted)">
+          hashes 로 사용자 절은 안 덮는다
+        </text>
+
+        <!-- ingest → 위키 (쓰기) -->
+        <path
+          d="M300,404 L300,326 L466,326"
+          fill="none"
+          stroke="var(--a)"
+          stroke-width="1.5"
+          marker-end="url(#arrA)"
+        />
+        <text x="308" y="300" font-size="11" fill="var(--a)" font-weight="600">
+          쓰기 — 경로는 이것 하나
+        </text>
+        <text
+          x="308"
+          y="316"
+          font-size="10"
+          fill="var(--muted)"
+          font-family="IBM Plex Mono, monospace"
+        >
+          sources/@session-&lt;id&gt;.md
+        </text>
+        <text
+          x="308"
+          y="346"
+          font-size="10"
+          fill="var(--muted)"
+          font-family="IBM Plex Mono, monospace"
+        >
+          - 날짜 사실 ← [[@session#N턴 (AI)]] (AI)
+        </text>
+        <text x="308" y="362" font-size="10" fill="var(--muted)">세션 로그까지 커밋 1개</text>
+
+        <!-- 다음 세션 화살표 (위키 → 루프) 는 위의 양방향 화살표가 맡는다: 주석 -->
+        <text x="60" y="230" font-size="11" fill="var(--muted)">
+          다음 세션의
+          <tspan font-family="IBM Plex Mono, monospace">search</tspan>
+          는 수확된 줄도 찾는다.
+        </text>
+        <text x="60" y="246" font-size="11" fill="var(--muted)">
+          <tspan font-family="IBM Plex Mono, monospace">(AI)</tspan>
+          가 붙은 줄은 다음 정리가 근거로 안 쓴다.
+        </text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i class="sw b"></i>B 구역 (query · harvest)</span>
+      <span><i class="sw a"></i>A 구역 (ingest) — 합의 없이 안 고친다</span>
+      <span><i class="sw g"></i>지웠거나 아직 없는 것</span>
+    </div>
+    <figcaption>
+      위 줄은 한 턴이고 아래 줄은 세션의 끝이다. 위키는 가운데 한 번만 있고, 위로는 읽기만, 아래로는
+      <code>ingest</code> 를 통한 쓰기만 닿는다. B4 뒤로 답변은 검문 없이 그대로 나가고, 참고 줄은
+      코드가 <code>opened</code> 로 만들어 화면에만 붙인다.
+    </figcaption>
+  </figure>
+
+  <section>
+    <h2>B1 → B4 가 각각 그린 것</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>조각</th>
+          <th>그림에서</th>
+          <th>한 일</th>
+          <th>상태</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>B1</td>
+          <td><code>ask()</code> · 루프 · 세션 로그</td>
+          <td>
+            검색 → 툴콜 루프 → 답 → 로그. 원래는 답변마다 <code>[[페이지#절]]</code> 을 달고
+            <code>cite.ts</code> 가 연 절과 대조해 뗐다
+          </td>
+          <td><span class="tag done">PR #11 머지</span></td>
+        </tr>
+        <tr>
+          <td>B2</td>
+          <td>오른쪽 위 점선 "화면"</td>
+          <td>쿼리 탭 UI. 답변·참고 줄·[위키에 반영] 버튼이 여기 앉는다. 지금은 CLI 가 대신한다</td>
+          <td><span class="tag todo">설계만 · 미착수</span></td>
+        </tr>
+        <tr>
+          <td>B3</td>
+          <td><code>[y/N]</code> · <code>harvest()</code></td>
+          <td>
+            사용자가 고른 세션만 <code>ingest</code> 에 자료 하나로 넘긴다. 전체 정리가 세션을 자동
+            흡수하던 길은 닫았다
+          </td>
+          <td><span class="tag">이 브랜치</span></td>
+        </tr>
+        <tr>
+          <td>B4</td>
+          <td>점선 <code>cite.ts</code> · 참고 줄</td>
+          <td>
+            검문을 걷어냈다. 답은 위키를 먼저 찾되 없으면 일반 지식으로, 근거 표시는 답변이 아니라
+            위키의 <code>(AI)</code> 꼬리표가 맡는다
+          </td>
+          <td><span class="tag">이 브랜치</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="note">
+      B4 는 B2 가 아니라 B1 의 수정이다. <code>renderer/</code> · <code>ipc.ts</code> 에는 한 줄도
+      닿지 않았다.
+    </p>
+  </section>
+
+  <section>
+    <h2>그림이 지키는 세 가지</h2>
+    <div class="rules">
+      <div class="rule">
+        <strong>대화 중에는 읽기만</strong>
+        <p>루프에 쓰기 툴이 없다. "아니 그거 말고" 를 되돌릴 일이 안 생긴다.</p>
+      </div>
+      <div class="rule">
+        <strong>쓰기 경로는 <code>ingest</code> 하나</strong>
+        <p>
+          수확은 전용 프롬프트가 아니라 A 의 ingest 를 그대로 부른다. 입력이 PDF 대신 대화 로그일
+          뿐이다.
+        </p>
+      </div>
+      <div class="rule">
+        <strong>사람이 문을 지킨다</strong>
+        <p>
+          창을 닫거나 유휴가 됐다고 반영하지 않는다. <code>y</code> 를 눌러야 들어가고, 안 누른
+          로그는 남는다.
+        </p>
+      </div>
+    </div>
+  </section>
+</main>

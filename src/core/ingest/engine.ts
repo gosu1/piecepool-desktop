@@ -373,7 +373,7 @@ async function noteItem(v: Vault, path: NotePath): Promise<EngineItem> {
   return await readItem(v, path);
 }
 
-/** 볼트의 정리 대상 전부 — 노트와 `sources/` 원본과 세션 로그. 날짜순. */
+/** 볼트의 정리 대상 전부 — 노트와 `sources/` 원본. 날짜순. 세션 로그는 여기 없다 — `harvest` 만 넘긴다. */
 export async function collectItems(v: Vault, today: string, force = false): Promise<EngineItem[]> {
   const items: EngineItem[] = [];
   for (const path of await scanNotes(v)) items.push(await noteItem(v, path));

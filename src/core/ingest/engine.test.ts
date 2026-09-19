@@ -10,6 +10,7 @@ import { planRestore, restorePaths } from "../git/restore.ts";
 import type { LlmPage } from "../llm/chat.ts";
 import type { Llm } from "./engine.ts";
 import { ingestSource, syncVault } from "./sync.ts";
+import { scanSources } from "./source.ts";
 
 async function tempVault(): Promise<Vault> {
   const root = await mkdtemp(join(tmpdir(), "pp-engine-"));
@@ -222,5 +223,17 @@ describe("되돌리기와 다시 정리", () => {
     const again = await syncVault(v, { llm });
     expect(llm.calls).toBe(2);
     expect(again.commits).toHaveLength(0);
+  });
+});
+
+describe("scanSources", () => {
+  it("세션 로그는 원본 목록에 넣지 않는다 — 세션은 사용자가 고를 때만 harvest 로 반영된다", async () => {
+    const v = await tempVault();
+    await write(v.root, "sources/메모.md", NOTE);
+    await write(v.root, ".piecepool/sessions/s1.md", "## 1턴 (사용자)\n\n질문\n");
+
+    const paths = (await scanSources(v)).map((s) => s.path);
+
+    expect(paths).toEqual(["sources/메모.md"]);
   });
 });

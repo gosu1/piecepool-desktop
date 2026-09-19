@@ -1,4 +1,5 @@
 // FROZEN: 파일 전체 — A↔B 경계면 + 툴 6종 (0단계 설계 §3.4·§8)
+// 예외 둘 (2026-09-18 승인): 테스트 전용 `globToRe` export, 선택 옵션 `index?` — 경계면은 그대로다.
 import { realpath } from "node:fs/promises";
 import { relative, sep } from "node:path";
 import type { Vault } from "../../shared/types.ts";
@@ -6,7 +7,7 @@ import type { Written } from "./written.ts";
 import { readRaw } from "../vault/notes.ts";
 import { readTree } from "../vault/tree.ts";
 import { resolveInVault } from "../vault/paths.ts";
-import { flatten, scanVault } from "../index/scan.ts";
+import { flatten, scanVault, type VaultIndex } from "../index/scan.ts";
 import { backlinksOf } from "../index/links.ts";
 import { buildIndex, search, type WikiIndex } from "../index/search.ts";
 
@@ -61,15 +62,22 @@ export function globToRe(glob: string): RegExp {
  *
  * readOnly 는 쿼리 세션용이다. 대화 중에는 위키를 고치지 않고,
  * 반영은 세션 끝의 수확에서 ingest 를 통해 일어난다.
+ *
+ * index 는 호출부가 이미 만든 링크 색인이다. 없으면 backlinks 가 처음 불릴 때 만든다 —
+ * 세션이 같은 색인을 들고 있어 넘기지 않으면 볼트를 두 번 읽는다.
  */
-export function createTools(v: Vault, w: Written, o?: { readOnly?: boolean }): Tool[] {
+export function createTools(
+  v: Vault,
+  w: Written,
+  o?: { readOnly?: boolean; index?: VaultIndex },
+): Tool[] {
   if (o?.readOnly !== true) {
     throw new Error("unimplemented: core/agent/tools.createTools");
   }
 
   // 색인은 처음 쓸 때 한 번 만들어 세션 동안 재사용한다.
   let wiki: WikiIndex | null = null;
-  let links: Awaited<ReturnType<typeof scanVault>> | null = null;
+  let links: VaultIndex | null = o?.index ?? null;
 
   const tools: Tool[] = [
     {
